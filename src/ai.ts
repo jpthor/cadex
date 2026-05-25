@@ -6,8 +6,6 @@ import type {
   SelectedGeometry,
   SolidObject,
   Vector3Tuple,
-  Wing,
-  WingObject,
 } from "./types";
 
 export type AiDesignRequest = {
@@ -120,9 +118,6 @@ export function applyToolCalls(
           },
         ],
       };
-    }
-    if (call.name === "set_airfoil") {
-      next = setWingAirfoil(next, call.arguments, selectedGeometry);
     }
     if (call.name === "orient_part") {
       next = orientPart(next, call.arguments, selectedGeometry);
@@ -358,7 +353,7 @@ function createAirfoilLoftPart(
     points: [rootOrigin, tipOrigin],
     cadRole: "path_sketch",
     parentId: part.id,
-    dependsOn: [profileSketch.id],
+    dependsOn: [startPlane.id],
   });
   const operationSurface = cadReference("surface", `${prefix} loft operation`, [0, 0, 0], {
     points: [
@@ -375,6 +370,7 @@ function createAirfoilLoftPart(
     dependsOn: [profileSketch.id, pathSketch.id],
   });
   construction.push(profileSketch, pathSketch, operationSurface);
+  part.dependsOn = [operationSurface.id];
   return { construction, part };
 }
 
@@ -425,117 +421,9 @@ function airfoilLoftMesh(
   return { positions };
 }
 
-function wingFromToolArgs(args: Record<string, unknown>): WingObject {
-  const spanM = numberArg(args, "span_m");
-  const rootChordM = numberArg(args, "root_chord_m");
-  const wing: Wing = {
-    id: crypto.randomUUID(),
-    name: stringArg(args, "name") ?? "AI wing",
-    spanM,
-    rootChordM,
-    tipChordM: numberArg(args, "tip_chord_m", rootChordM),
-    sweepDeg: numberArg(args, "sweep_deg", 0),
-    dihedralDeg: numberArg(args, "dihedral_deg", 0),
-    twistDeg: numberArg(args, "twist_deg", 0),
-    airfoil: stringArg(args, "airfoil") ?? "NACA 2412",
-    symmetry: booleanArg(args, "symmetry", true),
-  };
-  return { kind: "wing", ...wing };
-}
-
-function setWingAirfoil(
-  project: CadProject,
-  args: Record<string, unknown>,
-  selectedGeometry?: SelectedGeometry | null,
-): CadProject {
-  const airfoil = stringArg(args, "airfoil");
-  if (!airfoil) throw new Error("set_airfoil is missing airfoil");
-  const cleanup = booleanArg(args, "cleanup", true);
-  const target = findTargetWing(project, args, selectedGeometry);
-  if (!target) throw new Error("No matching wing found to update airfoil");
-
-  const updatedWing: WingObject = { ...target.wing, airfoil };
-  const staleConstructionIds = new Set(
-    cleanup
-      ? project.objects
-          .filter((object): object is ReferenceGeometry => object.kind === "reference" && object.parentId === target.wing.id)
-          .map((object) => object.id)
-      : [],
-  );
-  const objectsWithoutStaleConstruction = project.objects.filter((object) => !staleConstructionIds.has(object.id));
-  const objectsWithUpdatedWing = objectsWithoutStaleConstruction.map((object) =>
-    object.id === target.wing.id ? updatedWing : object,
-  );
-  const construction = cleanup
-    ? decomposeWingIntoCadFeatures(updatedWing, { ...project, objects: objectsWithUpdatedWing })
-    : updateWingProfileSketches(objectsWithUpdatedWing, updatedWing);
-
-  return {
-    ...project,
-    objects: cleanup ? [...objectsWithUpdatedWing, ...construction] : construction,
-    timeline: [
-      ...project.timeline,
-      {
-        id: crypto.randomUUID(),
-        label: "Updated airfoil profile",
-        detail: `${target.wing.name}: ${target.wing.airfoil} -> ${airfoil}${cleanup ? ", cleaned stale construction" : ""}`,
-      },
-    ],
-  };
-}
-
-function findTargetWing(
-  project: CadProject,
-  args: Record<string, unknown>,
-  selectedGeometry?: SelectedGeometry | null,
-) {
-  const id = stringArg(args, "id") ?? selectedGeometry?.objectId;
-  const fromAirfoil = normalizeAirfoil(stringArg(args, "from_airfoil"));
-  const wings = project.objects
-    .map((object, index) => ({ object, index }))
-    .filter((entry): entry is { object: WingObject; index: number } => entry.object.kind === "wing");
-  const byId = id ? wings.find((entry) => entry.object.id === id) : undefined;
-  if (byId) return { wing: byId.object, index: byId.index };
-  if (selectedGeometry?.objectId) {
-    const selectedReference = project.objects.find(
-      (object): object is ReferenceGeometry => object.kind === "reference" && object.id === selectedGeometry.objectId,
-    );
-    const parent = selectedReference?.parentId
-      ? wings.find((entry) => entry.object.id === selectedReference.parentId)
-      : undefined;
-    if (parent) return { wing: parent.object, index: parent.index };
-  }
-  if (fromAirfoil) {
-    const byAirfoil = wings.find((entry) => normalizeAirfoil(entry.object.airfoil) === fromAirfoil);
-    if (byAirfoil) return { wing: byAirfoil.object, index: byAirfoil.index };
-  }
-  const last = wings[wings.length - 1];
-  return last ? { wing: last.object, index: last.index } : undefined;
-}
-
-function updateWingProfileSketches(objects: CadObject[], wing: WingObject) {
-  const halfSpan = wing.spanM / 2;
-  const rootOrigin: Vector3Tuple = [0, 0, wing.rootAtOrigin ? 0 : -halfSpan];
-  const rootProfile = airfoilProfilePoints(wing.airfoil, wing.rootChordM, rootOrigin);
-  return objects.map((object) => {
-    if (object.kind !== "reference" || object.parentId !== wing.id || object.cadRole !== "profile_sketch") return object;
-    return {
-      ...object,
-      name: `${wing.name.replace(/\s+/g, "_")} root ${wing.airfoil} aerofoil sketch`,
-      points: rootProfile,
-    };
-  });
-}
-
-function normalizeAirfoil(value?: string) {
-  if (!value) return undefined;
-  const digits = value.replace(/\D/g, "");
-  return digits ? `NACA${digits}` : value.replace(/\s+/g, "").toUpperCase();
-}
-
 function objectSummary(object: CadObject) {
   if (object.kind === "wing") {
-    return `wing id=${object.id} name=${object.name} airfoil=${object.airfoil} span=${object.spanM}m root=${object.rootChordM}m tip=${object.tipChordM}m rootAtOrigin=${Boolean(object.rootAtOrigin)} plane=${object.orientationPlane ?? "default"}`;
+    return `legacy airfoil loft body id=${object.id} name=${object.name} profile=${object.airfoil} length=${object.spanM}m root=${object.rootChordM}m tip=${object.tipChordM}m originAligned=${Boolean(object.rootAtOrigin)} plane=${object.orientationPlane ?? "default"}`;
   }
   if (object.kind === "solid") {
     return `body id=${object.id} name=${object.name} source=${object.source}`;
@@ -552,7 +440,7 @@ function orientPart(
   selectedGeometry?: SelectedGeometry | null,
 ): CadProject {
   const targetPlane = stringArg(args, "target_plane") ?? "XZ";
-  const anchor = stringArg(args, "anchor") ?? "wing_root_origin";
+  const anchor = stringArg(args, "anchor") ?? "profile_origin";
   if (targetPlane !== "XZ") throw new Error(`Unsupported target plane: ${targetPlane}`);
 
   const targetId = stringArg(args, "id") ?? selectedGeometry?.objectId ?? lastBodyId(project);
@@ -562,7 +450,7 @@ function orientPart(
 
   const target = project.objects.find((object) => object.id === targetId);
   if (!target || (target.kind !== "wing" && target.kind !== "mesh" && target.kind !== "solid")) {
-    throw new Error("Select a body, wing, or solid before re-orienting.");
+    throw new Error("Select a body or solid before re-orienting.");
   }
 
   const wingDelta: Vector3Tuple | undefined = target.kind === "wing" && !target.rootAtOrigin ? [0, 0, target.spanM / 2] : undefined;
@@ -725,7 +613,22 @@ function decomposeCylinderIntoCadFeatures(solid: SolidObject, spec: CylinderSpec
     parentId: solid.id,
     dependsOn: [profileSketch.id],
   });
-  return [profileSketch, pathSketch];
+  const operationSurface = cadReference("surface", `${prefix} extrude operation`, spec.origin, {
+    points: [
+      [spec.origin[0] - radius, y0, spec.origin[2]],
+      [spec.origin[0] + radius, y0, spec.origin[2]],
+      [spec.origin[0] + radius, y1, spec.origin[2]],
+      [spec.origin[0] - radius, y1, spec.origin[2]],
+      [spec.origin[0] - radius, y0, spec.origin[2]],
+    ],
+    normal: [0, 0, 1],
+    cadRole: "extrude_operation",
+    operation: "extrude profile along path",
+    parentId: solid.id,
+    dependsOn: [profileSketch.id, pathSketch.id],
+  });
+  solid.dependsOn = [operationSurface.id];
+  return [profileSketch, pathSketch, operationSurface];
 }
 
 function cylinderMeshOnXZ(origin: Vector3Tuple, lengthM: number, diameterM: number) {
@@ -814,7 +717,7 @@ function decomposeSweptProfileIntoCadFeatures(
     points: [pathStart, pathEnd],
     cadRole: "path_sketch",
     parentId: part.id,
-    dependsOn: sourceId ? [sourceId] : ["origin"],
+    dependsOn: [profilePlane.id],
   });
   const operationNode = cadReference("surface", `${prefix} ${operation} operation`, origin, {
     points: [
@@ -830,6 +733,7 @@ function decomposeSweptProfileIntoCadFeatures(
     parentId: part.id,
     dependsOn: [profileSketch.id, pathSketch.id],
   });
+  part.dependsOn = [operationNode.id];
   return [profilePlane, profileSketch, pathSketch, operationNode];
 }
 
@@ -881,70 +785,6 @@ function circleProfilePointsOnPlane(
     }
     return origin;
   });
-}
-
-function decomposeWingIntoCadFeatures(wing: WingObject, project: CadProject): ReferenceGeometry[] {
-  const halfSpan = wing.spanM / 2;
-  const rootZ = wing.rootAtOrigin ? 0 : -halfSpan;
-  const tipZ = wing.rootAtOrigin ? wing.spanM : halfSpan;
-  const rootOrigin: [number, number, number] = [0, 0, rootZ];
-  const tipOffsetX = halfSpan * Math.tan(degToRad(wing.sweepDeg));
-  const tipOffsetY = halfSpan * Math.tan(degToRad(wing.dihedralDeg));
-  const tipOrigin: [number, number, number] = [tipOffsetX, tipOffsetY, tipZ];
-  const rootProfile = airfoilProfilePoints(wing.airfoil, wing.rootChordM, rootOrigin);
-  const prefix = wing.name.replace(/\s+/g, "_");
-  const existingPlane = project.objects.find(
-    (object): object is ReferenceGeometry => object.kind === "reference" && object.referenceKind === "plane",
-  );
-
-  const construction: ReferenceGeometry[] = [];
-  let startPlaneId = existingPlane?.id;
-  if (!existingPlane) {
-    const startPlane = cadReference("plane", `${prefix} start plane`, rootOrigin, {
-      normal: [0, 0, 1],
-      sizeM: wing.rootChordM * 1.4,
-      cadRole: "construction_plane",
-      parentId: wing.id,
-      dependsOn: ["origin"],
-    });
-    startPlaneId = startPlane.id;
-    construction.push(startPlane);
-  }
-
-  const profileSketch = cadReference("line", `${prefix} root ${wing.airfoil} aerofoil sketch`, rootOrigin, {
-    points: rootProfile,
-    cadRole: "profile_sketch",
-    parentId: wing.id,
-    dependsOn: startPlaneId ? [startPlaneId] : ["origin"],
-  });
-  const pathSketch = cadReference("line", `${prefix} span path sketch`, rootOrigin, {
-    end: tipOrigin,
-    points: [rootOrigin, tipOrigin],
-    cadRole: "path_sketch",
-    parentId: wing.id,
-    dependsOn: [profileSketch.id],
-  });
-  const loftSurface = cadReference("surface", `${prefix} loft preview surface`, [0, 0, 0], {
-    points: [
-      [-wing.rootChordM * 0.25, 0, rootZ],
-      [wing.rootChordM * 0.75, 0, rootZ],
-      [tipOffsetX + wing.tipChordM * 0.75, tipOffsetY, tipZ],
-      [tipOffsetX - wing.tipChordM * 0.25, tipOffsetY, tipZ],
-      [-wing.rootChordM * 0.25, 0, rootZ],
-    ],
-    normal: [0, 1, 0],
-    cadRole: "loft_surface",
-    operation: "loft one profile along span path",
-    parentId: wing.id,
-    dependsOn: [profileSketch.id, pathSketch.id],
-  });
-
-  construction.push(
-    profileSketch,
-    pathSketch,
-    loftSurface,
-  );
-  return construction;
 }
 
 function cadReference(

@@ -66,15 +66,18 @@ impl KernelState {
         self.with(handle, |solid| solid.clone())
     }
 
+    #[allow(dead_code)]
     pub fn handles(&self) -> Result<Vec<KernelHandle>, KernelError> {
         let map = self.inner.lock().map_err(|_| KernelError::Poisoned)?;
         Ok(map.keys().cloned().collect())
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.inner.lock().map(|m| m.len()).unwrap_or(0)
     }
 
+    #[allow(dead_code)]
     pub fn clear(&self) {
         if let Ok(mut map) = self.inner.lock() {
             map.clear();

@@ -96,12 +96,12 @@ fn read_f32(slice: &[u8], at: usize) -> Result<f32, KernelError> {
 }
 
 /// Approximate the solid's axis-aligned bounding box from its vertices.
-/// Currently used by the AI inspect tool to describe a kernel solid.
+#[allow(dead_code)]
 pub fn bounding_box(state: &KernelState, handle: &KernelHandle) -> Result<[DVec3; 2], KernelError> {
     state.with(handle, |solid| solid.bounding_box())
 }
 
-/// Convenience helper used elsewhere when we want the solid centroid.
+#[allow(dead_code)]
 pub fn centroid(state: &KernelState, handle: &KernelHandle) -> Result<DVec3, KernelError> {
     let [min, max] = bounding_box(state, handle)?;
     Ok((min + max) * 0.5)

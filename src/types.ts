@@ -17,6 +17,8 @@ export type SolidObject = {
   triangleCount: number;
   positions: number[];
   normals: number[];
+  parentId?: string;
+  dependsOn?: string[];
 };
 
 export type WingObject = {
@@ -31,6 +33,8 @@ export type MeshObject = {
   triangleCount: number;
   positions: number[];
   normals: number[];
+  parentId?: string;
+  dependsOn?: string[];
 };
 
 export type ReferenceGeometryKind = "plane" | "point" | "line" | "face" | "surface";
@@ -81,6 +85,8 @@ export type Wing = {
   symmetry: boolean;
   rootAtOrigin?: boolean;
   orientationPlane?: "XZ";
+  parentId?: string;
+  dependsOn?: string[];
 };
 
 export type TimelineEvent = {

@@ -14,6 +14,9 @@ pub mod tessellate;
 pub mod transforms;
 pub mod types;
 
+#[cfg(test)]
+mod tests;
+
 pub use state::KernelState;
 #[allow(unused_imports)]
 pub use state::KernelHandle;

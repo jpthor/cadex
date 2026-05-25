@@ -128,6 +128,7 @@ pub fn create_torus(
     state.insert(solid)
 }
 
+#[allow(dead_code)]
 pub fn create_half_space(
     state: &KernelState,
     point: Vec3,

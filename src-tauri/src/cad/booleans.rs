@@ -11,10 +11,11 @@ enum Op {
 }
 
 fn run(op: Op, base: Solid, tools: &[Solid]) -> Result<Vec<Solid>, KernelError> {
+    let base_refs: [&Solid; 1] = [&base];
     Ok(match op {
-        Op::Union => base.boolean_union(tools)?,
-        Op::Subtract => base.boolean_subtract(tools)?,
-        Op::Intersect => base.boolean_intersect(tools)?,
+        Op::Union => Solid::boolean_union(base_refs, tools.iter())?,
+        Op::Subtract => Solid::boolean_subtract(base_refs, tools.iter())?,
+        Op::Intersect => Solid::boolean_intersect(base_refs, tools.iter())?,
     })
 }
 

@@ -27,6 +27,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { runLocalDesignCommand, sendOpenAiDesignMessage } from "./ai";
 import { buildMeasurementLines, meshObjectToMesh, projectToStl, referenceGeometryToObject, wingToMesh } from "./geometry";
+import { SizeWorkspace, sizeAircraftFromPrompt } from "./SizeMode";
+import type { SizeAircraft } from "./SizeMode";
 import type {
   CadObject,
   CadProject,
@@ -46,23 +48,6 @@ const projectStorageKey = "cadex.project";
 const unitOptions = ["m", "cm", "mm", "in", "ft"] as const;
 type DisplayUnit = (typeof unitOptions)[number];
 type AppMode = "design" | "size";
-type SizeAircraft = {
-  name: string;
-  payloadKg: number;
-  enduranceMin: number;
-  propulsion: "single prop" | "twin prop";
-  powertrain: "electric" | "fuel";
-  optimisation: string;
-  wingSpanM: number;
-  wingAreaM2: number;
-  chordM: number;
-  fuselageLengthM: number;
-  fuselageDiameterM: number;
-  tailSpanM: number;
-  mtowKg: number;
-  cruiseSpeedMS: number;
-  batteryWh: number;
-};
 type BrowserContextTarget = {
   canDelete?: boolean;
   canHide?: boolean;
@@ -119,6 +104,7 @@ function updateActiveCursorPlane(activeCursorPlaneRef: { current: CursorPlane },
 }
 
 export default function App() {
+  const [appMode, setAppMode] = useState<AppMode>("design");
   const [project, setProject] = useState<CadProject>(() => loadStoredProject() ?? fallbackProject());
   const [prompt, setPrompt] = useState(examplePrompt);
   const [chatLog, setChatLog] = useState([
@@ -139,6 +125,14 @@ export default function App() {
   const [hiddenBrowserItemIds, setHiddenBrowserItemIds] = useState<Set<string>>(() => new Set());
   const [selectedGeometry, setSelectedGeometry] = useState<SelectedGeometry | null>(null);
   const [status, setStatus] = useState("Ready");
+  const [sizingPrompt, setSizingPrompt] = useState(sizingExamplePrompt);
+  const [sizingLog, setSizingLog] = useState([
+    {
+      role: "assistant",
+      text: "Describe payload, propulsion, endurance, and optimisation. I will size a first-pass aircraft layout.",
+    },
+  ]);
+  const [sizingAircraft, setSizingAircraft] = useState<SizeAircraft>(() => sizeAircraftFromPrompt(sizingExamplePrompt));
 
   useEffect(() => {
     if (isTauriRuntime() && !loadStoredProject()) {
@@ -164,10 +158,6 @@ export default function App() {
     localStorage.setItem("cadex.dimensionPrecision", String(dimensionPrecision));
   }, [dimensionPrecision]);
 
-  const wings = useMemo(
-    () => project.objects.filter((object): object is WingObject => object.kind === "wing"),
-    [project.objects],
-  );
   const selectedTimelineEvent = useMemo(
     () => project.timeline.find((event) => event.id === selectedTimelineEventId),
     [project.timeline, selectedTimelineEventId],
@@ -227,6 +217,22 @@ export default function App() {
         },
       ]);
     }
+  }
+
+  function submitSizingPrompt() {
+    const text = sizingPrompt.trim();
+    if (!text) return;
+    const nextAircraft = sizeAircraftFromPrompt(text);
+    setSizingAircraft(nextAircraft);
+    setSizingLog((log) => [
+      ...log,
+      { role: "user", text },
+      {
+        role: "assistant",
+        text: `First pass sized for ${nextAircraft.payloadKg.toFixed(1)} kg payload, ${nextAircraft.propulsion}, ${nextAircraft.enduranceMin.toFixed(0)} min ${nextAircraft.optimisation}. Try ${nextAircraft.wingSpanM.toFixed(2)} m span, ${nextAircraft.wingAreaM2.toFixed(2)} m2 wing area, and about ${nextAircraft.mtowKg.toFixed(1)} kg MTOW.`,
+      },
+    ]);
+    setStatus("Sizing updated");
   }
 
   async function exportFormat(format: GeometryFormat) {
@@ -364,39 +370,56 @@ export default function App() {
         <div className="brand">
           <Plane size={22} />
           <span>Cadex</span>
+          <div className="mode-switch" aria-label="Application mode">
+            <button className={appMode === "design" ? "active" : ""} onClick={() => setAppMode("design")}>
+              Design
+            </button>
+            <button className={appMode === "size" ? "active" : ""} onClick={() => setAppMode("size")}>
+              Size
+            </button>
+          </div>
         </div>
-        <ToolButton active={activeTool === "select"} label="Select" onClick={() => setActiveTool("select")}>
-          <MousePointer2 size={18} />
-        </ToolButton>
-        <ToolButton active={activeTool === "pan"} label="Pan" onClick={() => setActiveTool("pan")}>
-          <Hand size={18} />
-        </ToolButton>
-        <ToolButton active={activeTool === "orbit"} label="Orbit" onClick={() => setActiveTool("orbit")}>
-          <Orbit size={18} />
-        </ToolButton>
-        <ToolButton active={activeTool === "zoom"} label="Zoom" onClick={() => setActiveTool("zoom")}>
-          <ZoomIn size={18} />
-        </ToolButton>
-        <ToolButton active={false} label="Zoom to fit" onClick={() => window.dispatchEvent(new Event("cadex:fit"))}>
-          <Maximize size={18} />
-        </ToolButton>
-        <div className="toolbar-divider" />
-        <FormatMenu
-          icon={<Upload size={17} />}
-          label="Import"
-          ariaLabel="Import geometry"
-          onPick={importFormat}
-        />
-        <FormatMenu
-          icon={<Download size={17} />}
-          label="Export"
-          ariaLabel="Export geometry"
-          onPick={exportFormat}
-        />
-        <button className="command-button danger" onClick={clearProject}>
-          <Trash2 size={17} />
-          Clear
-        </button>
+        {appMode === "design" ? (
+          <>
+            <ToolButton active={activeTool === "select"} label="Select" onClick={() => setActiveTool("select")}>
+              <MousePointer2 size={18} />
+            </ToolButton>
+            <ToolButton active={activeTool === "pan"} label="Pan" onClick={() => setActiveTool("pan")}>
+              <Hand size={18} />
+            </ToolButton>
+            <ToolButton active={activeTool === "orbit"} label="Orbit" onClick={() => setActiveTool("orbit")}>
+              <Orbit size={18} />
+            </ToolButton>
+            <ToolButton active={activeTool === "zoom"} label="Zoom" onClick={() => setActiveTool("zoom")}>
+              <ZoomIn size={18} />
+            </ToolButton>
+            <ToolButton active={false} label="Zoom to fit" onClick={() => window.dispatchEvent(new Event("cadex:fit"))}>
+              <Maximize size={18} />
+            </ToolButton>
+            <div className="toolbar-divider" />
+            <FormatMenu
+              icon={<Upload size={17} />}
+              label="Import"
+              ariaLabel="Import geometry"
+              onPick={importFormat}
+            />
+            <FormatMenu
+              icon={<Download size={17} />}
+              label="Export"
+              ariaLabel="Export geometry"
+              onPick={exportFormat}
+            />
+            <button className="command-button danger" onClick={clearProject}>
+              <Trash2 size={17} />
+              Clear
+            </button>
+          </>
+        ) : (
+          <div className="size-toolbar-label">
+            <Ruler size={17} />
+            Aircraft sizing canvas
+          </div>
+        )}
         <button className="command-button" onClick={() => setSettingsOpen(true)}>
           <Settings size={17} />
           Settings
@@ -404,6 +427,8 @@ export default function App() {
         <div className="status-pill">{status}</div>
       </header>
 
+      {appMode === "design" ? (
+        <>
       <main className="workspace">
         <aside className="chat-panel left-copilot">
           <PanelTitle icon={<MessageSquareText size={18} />} title="Copilot" />
@@ -469,12 +494,6 @@ export default function App() {
             onToggleVisibility={toggleBrowserVisibility}
             onUnitChange={updateProjectUnits}
           />
-          <PanelTitle icon={<Eye size={18} />} title="Inspector" />
-          {wings[0] ? (
-            <ParameterTable precision={dimensionPrecision} unit={toDisplayUnit(project.units)} wing={wings[wings.length - 1]} />
-          ) : (
-            <p className="empty-text">Select a body or feature to inspect parameters.</p>
-          )}
         </aside>
       </main>
 
@@ -503,6 +522,29 @@ export default function App() {
           </div>
         ) : null}
       </footer>
+        </>
+      ) : (
+        <>
+          <SizeWorkspace
+            aircraft={sizingAircraft}
+            log={sizingLog}
+            prompt={sizingPrompt}
+            onPromptChange={setSizingPrompt}
+            onSubmit={submitSizingPrompt}
+          />
+          <footer className="timeline size-footer">
+            <div className="timeline-title">
+              <Ruler size={17} />
+              <span>Sizing result</span>
+            </div>
+            <div className="timeline-events">
+              <span>MTOW {sizingAircraft.mtowKg.toFixed(1)} kg</span>
+              <span>Wing loading {(sizingAircraft.mtowKg / sizingAircraft.wingAreaM2).toFixed(1)} kg/m2</span>
+              <span>Energy {sizingAircraft.batteryWh.toFixed(0)} Wh</span>
+            </div>
+          </footer>
+        </>
+      )}
       {settingsOpen ? (
         <SettingsDialog
           apiKey={apiKey}
@@ -745,7 +787,7 @@ function FormatMenu({
   );
 }
 
-function PanelTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
+export function PanelTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
     <h2 className="panel-title">
       {icon}
@@ -857,7 +899,7 @@ function ProjectBrowser({
           role="tab"
           aria-selected={activeBrowserTab === "dependencies"}
         >
-          Dependencies
+          Tree
         </button>
       </div>
       {activeBrowserTab === "browser" ? (
@@ -1470,9 +1512,9 @@ function ReferenceObject({
 }
 
 type DependencyTreeNode = {
-  children: DependencyTreeNode[];
   dependencyIds: string[];
   id: string;
+  level: number;
   label: string;
   meta: string;
 };
@@ -1486,104 +1528,89 @@ function DependencyTreeView({
   onSelectItem: (id: string) => void;
   selectedBrowserItemId: string;
 }) {
-  const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(() => new Set());
-  const tree = useMemo(() => buildDependencyTree(objects), [objects]);
-
-  function toggle(id: string) {
-    setCollapsedNodeIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  const [activeTooltipNodeId, setActiveTooltipNodeId] = useState<string | null>(null);
+  const objectMap = useMemo(() => new Map(objects.map((object) => [object.id, object])), [objects]);
+  const levels = useMemo(() => buildDependencyLevels(objects), [objects]);
 
   return (
     <div className="dependency-tree">
-      <DependencyTreeNodeView
-        collapsedNodeIds={collapsedNodeIds}
-        node={tree}
-        objectMap={new Map(objects.map((object) => [object.id, object]))}
-        onSelectItem={onSelectItem}
-        selectedBrowserItemId={selectedBrowserItemId}
-        toggle={toggle}
-      />
+      <div className="dependency-levels">
+        {levels.map((level, index) => (
+          <div className="dependency-level" key={index}>
+            {level.map((node) => (
+              <DependencyTreeNodeView
+                key={node.id}
+                node={node}
+                objectMap={objectMap}
+                activeTooltipNodeId={activeTooltipNodeId}
+                onSelectItem={onSelectItem}
+                selectedBrowserItemId={selectedBrowserItemId}
+                setActiveTooltipNodeId={setActiveTooltipNodeId}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function DependencyTreeNodeView({
-  collapsedNodeIds,
-  depth = 0,
+  activeTooltipNodeId,
   node,
   objectMap,
   onSelectItem,
   selectedBrowserItemId,
-  toggle,
+  setActiveTooltipNodeId,
 }: {
-  collapsedNodeIds: Set<string>;
-  depth?: number;
+  activeTooltipNodeId: string | null;
   node: DependencyTreeNode;
   objectMap: Map<string, CadObject>;
   onSelectItem: (id: string) => void;
   selectedBrowserItemId: string;
-  toggle: (id: string) => void;
+  setActiveTooltipNodeId: (id: string | null) => void;
 }) {
-  const collapsed = collapsedNodeIds.has(node.id);
-  const hasChildren = node.children.length > 0;
-  const isObject = node.id !== "root";
+  const title = dependencyTitle(node, objectMap);
+  const tooltipVisible = activeTooltipNodeId === node.id;
   return (
-    <div className="dependency-node">
-      <div
-        className={`dependency-row selectable ${selectedBrowserItemId === node.id ? "selected" : ""}`}
-        style={{ paddingLeft: 8 + depth * 14 }}
-        onClick={() => {
-          if (isObject) onSelectItem(node.id);
-        }}
-        role="button"
-        tabIndex={0}
-      >
+    <div className="dependency-branch">
+      <div className="dependency-node-stack">
+        {node.dependencyIds.length > 0 ? (
+          <div className="dependency-dependencies" aria-label={`${node.label} dependencies`}>
+            {node.dependencyIds.map((dependencyId) => (
+              <button
+                key={dependencyId}
+                className="dependency-mini-node"
+                onClick={() => onSelectItem(dependencyId)}
+                title={`Depends on ${dependencyLabel(dependencyId, objectMap)}`}
+                aria-label={`Depends on ${dependencyLabel(dependencyId, objectMap)}`}
+                type="button"
+              >
+                <DependencyIcon id={dependencyId} object={objectMap.get(dependencyId)} />
+              </button>
+            ))}
+          </div>
+        ) : null}
         <button
-          className="dependency-toggle"
-          disabled={!hasChildren}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (hasChildren) toggle(node.id);
+          className={`dependency-node-button ${selectedBrowserItemId === node.id ? "selected" : ""}`}
+          onClick={() => {
+            setActiveTooltipNodeId(node.id);
+            onSelectItem(node.id);
           }}
-          aria-label={collapsed ? `Expand ${node.label}` : `Collapse ${node.label}`}
+          onFocus={() => setActiveTooltipNodeId(node.id)}
+          onBlur={() => setActiveTooltipNodeId(null)}
+          onMouseEnter={() => setActiveTooltipNodeId(node.id)}
+          onMouseLeave={() => setActiveTooltipNodeId(null)}
+          onPointerEnter={() => setActiveTooltipNodeId(node.id)}
+          onPointerLeave={() => setActiveTooltipNodeId(null)}
+          aria-label={title}
+          title={title}
+          type="button"
         >
-          {hasChildren ? (collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />) : <span />}
+          <DependencyIcon id={node.id} object={objectMap.get(node.id)} />
+          <span className={`dependency-tooltip ${tooltipVisible ? "visible" : ""}`} role="tooltip">{title}</span>
         </button>
-        <DependencyIcon id={node.id} object={objectMap.get(node.id)} />
-        <div>
-          <strong>{node.label}</strong>
-          <span>{node.meta}</span>
-        </div>
       </div>
-      {node.dependencyIds.length > 0 ? (
-        <div className="dependency-inputs" style={{ marginLeft: 35 + depth * 14 }}>
-          <span>depends on</span>
-          {node.dependencyIds.map((dependencyId) => (
-            <button key={dependencyId} onClick={() => onSelectItem(dependencyId)}>
-              {dependencyLabel(dependencyId, objectMap)}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {!collapsed && hasChildren
-        ? node.children.map((child) => (
-            <DependencyTreeNodeView
-              key={child.id}
-              collapsedNodeIds={collapsedNodeIds}
-              depth={depth + 1}
-              node={child}
-              objectMap={objectMap}
-              onSelectItem={onSelectItem}
-              selectedBrowserItemId={selectedBrowserItemId}
-              toggle={toggle}
-            />
-          ))
-        : null}
     </div>
   );
 }
@@ -1597,55 +1624,87 @@ function DependencyIcon({ id, object }: { id: string; object?: CadObject }) {
   return <Crosshair size={14} />;
 }
 
-function buildDependencyTree(objects: CadObject[]): DependencyTreeNode {
+function buildDependencyLevels(objects: CadObject[]): DependencyTreeNode[][] {
   const objectMap = new Map(objects.map((object) => [object.id, object]));
-  const childrenByParent = new Map<string, CadObject[]>();
-  for (const object of objects) {
-    const parentId = object.kind === "reference" ? object.parentId : undefined;
-    const key = parentId && objectMap.has(parentId) ? parentId : "origin";
-    childrenByParent.set(key, [...(childrenByParent.get(key) ?? []), object]);
-  }
-  const bodyObjects = objects.filter((object) => object.kind === "wing" || object.kind === "mesh" || object.kind === "solid");
-  for (const body of bodyObjects) {
-    if (!childrenByParent.get("origin")?.includes(body)) {
-      childrenByParent.set("origin", [...(childrenByParent.get("origin") ?? []), body]);
-    }
-  }
-  return {
-    id: "root",
-    label: "Dependency tree",
-    meta: `${objects.length} CAD node${objects.length === 1 ? "" : "s"}`,
-    dependencyIds: [],
-    children: [
-      {
-        id: "origin",
-        label: "Origin",
-        meta: "world reference",
-        dependencyIds: [],
-        children: dependencyChildren("origin", childrenByParent),
-      },
-    ],
+  const dependencyIds = new Map<string, string[]>();
+  for (const object of objects) dependencyIds.set(object.id, directDependencyIds(object, objects));
+
+  const virtualIds = [...new Set([...dependencyIds.values()].flat().filter((id) => isVirtualDependencyNode(id, objectMap)))];
+  for (const id of virtualIds) dependencyIds.set(id, id === "origin" ? [] : ["origin"]);
+
+  const levelCache = new Map<string, number>([["origin", 0]]);
+  const levelFor = (id: string, seen = new Set<string>()): number => {
+    if (id === "origin") return 0;
+    if (levelCache.has(id)) return levelCache.get(id) ?? 0;
+    if (seen.has(id)) return 1;
+    seen.add(id);
+    const deps = dependencyIds.get(id) ?? ["origin"];
+    const knownDeps = deps.filter((dep) => dep === "origin" || objectMap.has(dep) || isVirtualDependencyNode(dep, objectMap));
+    const level = knownDeps.length > 0 ? Math.max(...knownDeps.map((dep) => levelFor(dep, seen))) + 1 : 1;
+    levelCache.set(id, level);
+    return level;
   };
+
+  const nodes: DependencyTreeNode[] = [{
+    id: "origin",
+    level: 0,
+    label: "Origin",
+    meta: "world reference",
+    dependencyIds: [],
+  }];
+  for (const id of virtualIds.filter((id) => id !== "origin")) {
+    nodes.push({
+      id,
+      level: levelFor(id),
+      label: virtualDependencyLabel(id),
+      meta: "origin reference plane",
+      dependencyIds: dependencyIds.get(id) ?? ["origin"],
+    });
+  }
+  for (const object of objects) {
+    const deps = dependencyIds.get(object.id) ?? [];
+    nodes.push({
+      id: object.id,
+      level: levelFor(object.id),
+      label: object.name,
+      meta: dependencyMeta(object),
+      dependencyIds: deps,
+    });
+  }
+  const levels: DependencyTreeNode[][] = [];
+  for (const node of nodes.sort(compareDependencyNodes)) {
+    levels[node.level] = [...(levels[node.level] ?? []), node];
+  }
+  return levels.filter(Boolean);
 }
 
-function dependencyChildren(parentId: string, childrenByParent: Map<string, CadObject[]>): DependencyTreeNode[] {
-  return (childrenByParent.get(parentId) ?? []).map((object) => ({
-    id: object.id,
-    label: object.name,
-    meta: dependencyMeta(object),
-    dependencyIds: object.kind === "reference" ? object.dependsOn ?? [] : bodyDependencyIds(object, childrenByParent),
-    children: dependencyChildren(object.id, childrenByParent),
-  }));
+function directDependencyIds(object: CadObject, objects: CadObject[]) {
+  if (object.dependsOn?.length) return normalizeDependencyIds(object.dependsOn);
+  if (object.kind !== "reference") {
+    const ownedConstruction = objects.filter((candidate) => candidate.kind === "reference" && candidate.parentId === object.id);
+    const ownedIds = new Set(ownedConstruction.map((candidate) => candidate.id));
+    const dependencyInputs = new Set(ownedConstruction.flatMap((candidate) => candidate.dependsOn ?? []).filter((id) => ownedIds.has(id)));
+    const terminalConstruction = ownedConstruction.filter((candidate) => !dependencyInputs.has(candidate.id));
+    if (terminalConstruction.length > 0) return normalizeDependencyIds(terminalConstruction.map((candidate) => candidate.id));
+  }
+  return ["origin"];
 }
 
-function bodyDependencyIds(object: CadObject, childrenByParent: Map<string, CadObject[]>) {
-  if (object.kind === "reference") return [];
-  const children = childrenByParent.get(object.id) ?? [];
-  const operations = children.filter(
-    (child): child is ReferenceGeometry =>
-      child.kind === "reference" && Boolean(child.operation || child.cadRole?.includes("surface")),
-  );
-  return (operations.length ? operations : children).map((child) => child.id);
+function normalizeDependencyIds(ids: string[]) {
+  return [...new Set(ids)];
+}
+
+function compareDependencyNodes(a: DependencyTreeNode, b: DependencyTreeNode) {
+  return a.level - b.level || a.label.localeCompare(b.label);
+}
+
+function isVirtualDependencyNode(id: string, objectMap: Map<string, CadObject>) {
+  return id === "origin" || (id.startsWith("origin-plane-") && !objectMap.has(id));
+}
+
+function virtualDependencyLabel(id: string) {
+  if (id === "origin") return "Origin";
+  return `${id.replace("origin-plane-", "").toUpperCase()} origin plane`;
 }
 
 function dependencyMeta(object: CadObject) {
@@ -1658,6 +1717,13 @@ function dependencyMeta(object: CadObject) {
 function dependencyLabel(id: string, objectMap: Map<string, CadObject>) {
   if (id === "origin") return "Origin";
   return objectMap.get(id)?.name ?? id;
+}
+
+function dependencyTitle(node: DependencyTreeNode, objectMap: Map<string, CadObject>) {
+  const dependencies = node.dependencyIds.map((id) => dependencyLabel(id, objectMap));
+  const parts = [node.label, node.meta];
+  if (dependencies.length > 0) parts.push(`Depends on: ${dependencies.join(", ")}`);
+  return parts.filter(Boolean).join("\n");
 }
 
 function BrowserItemActions({
@@ -1692,28 +1758,6 @@ function BrowserItemActions({
       >
         <Trash2 size={15} />
       </button>
-    </div>
-  );
-}
-
-function ParameterTable({ precision, unit, wing }: { precision: number; unit: DisplayUnit; wing: Wing }) {
-  const rows = [
-    ["Span", formatLength(wing.spanM, unit, precision)],
-    ["Root chord", formatLength(wing.rootChordM, unit, precision)],
-    ["Tip chord", formatLength(wing.tipChordM, unit, precision)],
-    ["Sweep", `${wing.sweepDeg.toFixed(1)} deg`],
-    ["Dihedral", `${wing.dihedralDeg.toFixed(1)} deg`],
-    ["Twist", `${wing.twistDeg.toFixed(1)} deg`],
-    ["Airfoil", wing.airfoil],
-  ];
-  return (
-    <div className="parameter-table">
-      {rows.map(([label, value]) => (
-        <div key={label}>
-          <span>{label}</span>
-          <strong>{value}</strong>
-        </div>
-      ))}
     </div>
   );
 }
