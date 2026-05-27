@@ -968,7 +968,7 @@ button {
 
 .size-workspace {
   display: grid;
-  grid-template-columns: 320px minmax(520px, 1fr) 320px;
+  grid-template-columns: minmax(580px, 1fr) 320px;
   gap: 12px;
   min-height: 0;
   overflow: hidden;
@@ -976,7 +976,7 @@ button {
 }
 
 .sizing-sketch-workspace {
-  grid-template-columns: 320px minmax(580px, 1fr) 320px;
+  grid-template-columns: minmax(580px, 1fr) 320px;
 }
 
 .size-panel,
@@ -1000,9 +1000,44 @@ button {
   min-height: 0;
 }
 
-.sizing-left-panel,
 .sizing-right-panel {
   overflow-y: auto;
+}
+
+.sizing-pane-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid #263d4f;
+  border-radius: 7px;
+  background: #0d1822;
+}
+
+.sizing-pane-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #aebfcd;
+  background: transparent;
+  font-weight: 800;
+}
+
+.sizing-pane-tabs button.active {
+  color: #f8fbff;
+  border-color: #4aa5d0;
+  background: #17364c;
+}
+
+.sizing-compute-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .component-palette {
@@ -1021,6 +1056,14 @@ button {
   background: #0d1822;
 }
 
+.segmented-control.sizing-role-control[aria-label="Selected shape type"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.segmented-control.sizing-role-control[aria-label="Lifting surface role"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .segmented-control.sizing-role-control button {
   min-height: 32px;
   border: 1px solid transparent;
@@ -1034,6 +1077,19 @@ button {
   color: #f8fbff;
   border-color: #4aa5d0;
   background: #17364c;
+}
+
+.segmented-control.sizing-role-control button.part-role-button,
+.canvas-sketch-toolbar button.part-role-button {
+  color: #fecdd3;
+  border-color: rgba(251, 113, 133, 0.42);
+}
+
+.segmented-control.sizing-role-control button.part-role-button.active,
+.canvas-sketch-toolbar button.part-role-button.active {
+  color: #fff7f7;
+  border-color: #fb7185;
+  background: #7f1d1d;
 }
 
 .draft-actions {
@@ -1080,7 +1136,8 @@ button {
 
 .component-palette button,
 .compute-button,
-.delete-component-button {
+.delete-component-button,
+.delete-cancel-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1110,11 +1167,128 @@ button {
   background: #351818;
 }
 
+.delete-aircraft-confirm {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+.delete-aircraft-confirm.confirming {
+  grid-template-columns: 1fr auto;
+}
+
+.delete-aircraft-confirm.confirming .delete-component-button {
+  border-color: rgba(248, 113, 113, 0.72);
+  background: rgba(99, 25, 25, 0.92);
+}
+
+.delete-cancel-button {
+  color: #d8e7f3;
+  background: rgba(14, 28, 41, 0.72);
+}
+
 .sizing-fields,
 .component-editor,
+.aircraft-panel,
 .analysis-panel {
   display: grid;
   gap: 9px;
+}
+
+.aircraft-mass-readout {
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid rgba(125, 160, 190, 0.18);
+  border-radius: 7px;
+  background: rgba(8, 16, 24, 0.42);
+}
+
+.aircraft-mass-readout span,
+.aircraft-parameter-title {
+  color: #9fb3c4;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.aircraft-mass-readout strong {
+  color: #f8fbff;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.aircraft-parameter-title {
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+.analyse-aircraft-button {
+  min-height: 46px;
+  width: 100%;
+  border-color: rgba(95, 185, 245, 0.45);
+  background: rgba(21, 72, 105, 0.42);
+  color: #e8f6ff;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.aircraft-diagnostics {
+  display: grid;
+  gap: 7px;
+}
+
+.aircraft-diagnostic {
+  display: grid;
+  gap: 5px;
+  padding: 9px;
+  border: 1px solid rgba(125, 160, 190, 0.16);
+  border-radius: 7px;
+  background: rgba(8, 16, 24, 0.38);
+}
+
+.aircraft-diagnostic > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.aircraft-diagnostic span {
+  color: #9fb3c4;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.aircraft-diagnostic strong {
+  color: #f8fbff;
+  font-size: 12px;
+  text-align: right;
+}
+
+.aircraft-diagnostic p {
+  margin: 0;
+  color: #b9c9d7;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.aircraft-diagnostic.ok {
+  border-color: rgba(74, 222, 128, 0.22);
+}
+
+.aircraft-diagnostic.warn {
+  border-color: rgba(250, 204, 21, 0.36);
+}
+
+.aircraft-diagnostic.bad {
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
+.aircraft-diagnostic.warn strong {
+  color: #fde68a;
+}
+
+.aircraft-diagnostic.bad strong {
+  color: #fecaca;
 }
 
 .sizing-field {
@@ -1133,6 +1307,10 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
+}
+
+.shape-selector {
+  padding-bottom: 2px;
 }
 
 .sizing-field input,
@@ -1179,7 +1357,7 @@ button {
 .canvas-sketch-toolbar {
   position: absolute;
   z-index: 3;
-  top: 18px;
+  top: 58px;
   left: 18px;
   display: inline-flex;
   align-items: center;
@@ -1190,7 +1368,78 @@ button {
   background: rgba(8, 16, 24, 0.88);
 }
 
-.canvas-sketch-toolbar button {
+.canvas-view-button {
+  position: absolute;
+  z-index: 3;
+  border: 1px solid #36566b;
+  border-radius: 6px;
+  color: #e8f4fb;
+  background: rgba(8, 16, 24, 0.9);
+  font-weight: 900;
+}
+
+.canvas-view-button:hover {
+  border-color: #7dd3fc;
+  background: rgba(19, 48, 69, 0.92);
+}
+
+.canvas-view-button-top,
+.canvas-view-button-bottom {
+  left: 18px;
+  right: 18px;
+  height: 34px;
+}
+
+.canvas-view-button-top {
+  top: 14px;
+}
+
+.canvas-view-button-bottom {
+  bottom: 14px;
+}
+
+.canvas-view-button-right,
+.canvas-view-button-left {
+  top: 50%;
+  width: 96px;
+  height: 34px;
+}
+
+.canvas-view-button-right {
+  right: -31px;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+.canvas-view-button-left {
+  left: -31px;
+  transform: translateY(-50%) rotate(-90deg);
+}
+
+.canvas-guide-toggle {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #36566b;
+  border-radius: 6px;
+  color: #d7e7f2;
+  background: rgba(8, 16, 24, 0.88);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.canvas-guide-toggle.active {
+  border-color: #4aa5d0;
+  background: rgba(19, 48, 69, 0.92);
+}
+
+.canvas-sketch-toolbar button,
+.canvas-reference-menu button {
   height: 30px;
   min-width: 58px;
   border: 1px solid #36566b;
@@ -1200,10 +1449,24 @@ button {
   font-weight: 800;
 }
 
-.canvas-sketch-toolbar button.active {
+.canvas-sketch-toolbar button.active,
+.canvas-reference-menu > button.active,
+.canvas-reference-options button.active {
   color: #ffffff;
   border-color: #7dd3fc;
   background: #155070;
+}
+
+.canvas-sketch-toolbar.drawing .done-button:not(:disabled) {
+  color: #052e16;
+  border-color: #86efac;
+  background: #bbf7d0;
+}
+
+.canvas-sketch-toolbar.drawing .cancel-button:not(:disabled) {
+  color: #fff7f7;
+  border-color: #fb7185;
+  background: #991b1b;
 }
 
 .canvas-sketch-toolbar button:disabled {
@@ -1221,6 +1484,145 @@ button {
 
 .canvas-role-toggle button {
   min-width: 74px;
+}
+
+.canvas-role-toggle button.part-role-button {
+  min-width: 58px;
+}
+
+.canvas-part-type-select {
+  height: 30px;
+  min-width: 108px;
+  border: 1px solid #36566b;
+  border-radius: 5px;
+  color: #f3f8fc;
+  background: #0e1d29;
+  padding: 0 8px;
+  font-weight: 800;
+}
+
+.canvas-part-type-select:focus {
+  outline: none;
+  border-color: #7dd3fc;
+}
+
+.canvas-reference-menu {
+  position: absolute;
+  z-index: 4;
+  top: 58px;
+  right: 18px;
+}
+
+.canvas-add-menu {
+  position: relative;
+}
+
+.canvas-add-menu > button,
+.canvas-reference-menu > button {
+  min-width: 34px;
+}
+
+.canvas-add-options,
+.canvas-reference-options {
+  position: absolute;
+  top: 36px;
+  z-index: 4;
+  display: none;
+  min-width: 112px;
+  padding: 4px;
+  border: 1px solid rgba(125, 160, 190, 0.28);
+  border-radius: 7px;
+  background: #0d1822;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 35%);
+}
+
+.canvas-add-options {
+  left: 0;
+}
+
+.canvas-reference-options {
+  right: 0;
+}
+
+.canvas-add-menu:hover .canvas-add-options,
+.canvas-add-menu:focus-within .canvas-add-options,
+.canvas-add-menu.open .canvas-add-options,
+.canvas-reference-menu:hover .canvas-reference-options,
+.canvas-reference-menu:focus-within .canvas-reference-options,
+.canvas-reference-menu.open .canvas-reference-options {
+  display: grid;
+  gap: 4px;
+}
+
+.canvas-add-options button,
+.canvas-reference-options button {
+  min-width: 104px;
+  text-align: left;
+}
+
+.canvas-dimension-prompt {
+  position: absolute;
+  top: 98px;
+  right: 18px;
+  z-index: 4;
+  min-width: 132px;
+  padding: 7px 10px;
+  border: 1px solid rgba(250, 204, 21, 0.58);
+  border-radius: 6px;
+  color: #fef9c3;
+  background: rgba(24, 19, 8, 0.92);
+  font-size: 12px;
+  font-weight: 820;
+  text-align: center;
+}
+
+.canvas-dimension-entry {
+  position: absolute;
+  top: 98px;
+  right: 18px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: end;
+  gap: 6px;
+  min-width: 268px;
+  padding: 8px;
+  border: 1px solid rgba(250, 204, 21, 0.58);
+  border-radius: 7px;
+  color: #fef9c3;
+  background: rgba(13, 18, 24, 0.96);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 35%);
+}
+
+.canvas-dimension-entry label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.canvas-dimension-entry input {
+  width: 100%;
+  height: 30px;
+  border: 1px solid #36566b;
+  border-radius: 5px;
+  color: #e8f4fb;
+  background: #0c141d;
+  padding: 0 8px;
+}
+
+.canvas-dimension-entry button {
+  height: 30px;
+  border: 1px solid #36566b;
+  border-radius: 5px;
+  color: #e8f4fb;
+  background: #132635;
+  font-weight: 800;
+}
+
+.canvas-dimension-entry button:hover {
+  border-color: #facc15;
 }
 
 .sizing-centerline {
@@ -1265,11 +1667,15 @@ button {
   font-size: 12px;
 }
 
-.sizing-axes .axis-unit {
+.sizing-axes .axis-unit-options text {
   cursor: pointer;
-  fill: #86efac;
+  fill: #7390a4;
   font-size: 12px;
-  text-decoration: underline;
+}
+
+.sizing-axes .axis-unit-options text:hover,
+.sizing-axes .axis-unit-options text.active {
+  fill: #86efac;
 }
 
 .aircraft-fill {
@@ -1349,8 +1755,69 @@ button {
   cursor: pointer;
 }
 
+.analysis-markers {
+  pointer-events: none;
+}
+
+.dimension-layer {
+  pointer-events: none;
+}
+
+.dimension-lock {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.dimension-lock .dimension-hit {
+  stroke: transparent;
+  stroke-width: 14;
+  stroke-dasharray: none;
+}
+
+.dimension-lock line {
+  stroke: #facc15;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.dimension-lock circle {
+  fill: #0c141d;
+  stroke: #facc15;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.dimension-lock text {
+  fill: #fef9c3;
+  font-size: 11px;
+  font-weight: 820;
+  paint-order: stroke;
+  stroke: #07111a;
+  stroke-width: 3px;
+}
+
+.dimension-lock.selected line:not(.dimension-hit),
+.dimension-lock.selected circle {
+  stroke: #ffffff;
+  stroke-width: 2.4;
+}
+
+.dimension-lock.selected text {
+  fill: #ffffff;
+}
+
+.dimension-draft-target {
+  fill: none;
+  stroke: #facc15;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
 .sizing-shape .shape-live,
 .sizing-shape .shape-mirror,
+.sizing-shape .shape-local-mirror,
+.sizing-shape .shape-local-global-mirror,
 .sizing-shape .shape-hit {
   fill: none;
   stroke-width: 2.6;
@@ -1366,8 +1833,15 @@ button {
   stroke-width: 18;
 }
 
+.sizing-shape .shape-hit-filled {
+  fill: rgba(255, 255, 255, 0.001);
+  pointer-events: visiblePainted;
+}
+
 .sizing-shape .shape-live,
-.sizing-shape .shape-mirror {
+.sizing-shape .shape-mirror,
+.sizing-shape .shape-local-mirror,
+.sizing-shape .shape-local-global-mirror {
   pointer-events: none;
 }
 
@@ -1389,7 +1863,80 @@ button {
   stroke-dasharray: 7 7;
 }
 
-.sizing-shape.selected .shape-live {
+.sizing-shape.part .shape-live {
+  stroke: #fb7185;
+}
+
+.sizing-shape.part .shape-mirror {
+  stroke: rgba(251, 113, 133, 0.62);
+  stroke-dasharray: 7 7;
+}
+
+.sizing-shape.part-rotor .shape-live {
+  stroke: #c084fc;
+  stroke-width: 3.2;
+}
+
+.sizing-shape.part-rotor .shape-mirror {
+  stroke: rgba(192, 132, 252, 0.62);
+  stroke-width: 3.2;
+  stroke-dasharray: 7 7;
+}
+
+.sizing-shape.referenceLine .shape-live,
+.sizing-shape.draft.referenceLine .shape-live {
+  stroke: #86efac;
+  stroke-width: 1.4;
+  stroke-dasharray: 6 5;
+}
+
+.sizing-shape.referenceLine .shape-mirror,
+.sizing-shape.draft.referenceLine .shape-mirror {
+  stroke: rgba(134, 239, 172, 0.42);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 6;
+}
+
+.sizing-shape.mirrorPlane .shape-live,
+.sizing-shape.draft.mirrorPlane .shape-live {
+  stroke: #facc15;
+  stroke-width: 1.4;
+  stroke-dasharray: none;
+}
+
+.sizing-shape.mirrorPlane .shape-mirror,
+.sizing-shape.draft.mirrorPlane .shape-mirror {
+  stroke: rgba(250, 204, 21, 0.48);
+  stroke-width: 1.2;
+  stroke-dasharray: none;
+}
+
+.sizing-shape .shape-local-mirror {
+  stroke: rgba(255, 255, 255, 0.42);
+  stroke-dasharray: 4 4;
+}
+
+.sizing-shape .shape-local-global-mirror {
+  stroke: rgba(255, 255, 255, 0.24);
+  stroke-dasharray: 3 7;
+}
+
+.sizing-shape.part.part-filled .shape-live,
+.sizing-shape.part.part-filled .shape-mirror,
+.sizing-shape.part.part-filled .shape-local-mirror,
+.sizing-shape.part.part-filled .shape-local-global-mirror {
+  fill: rgba(251, 113, 133, 0.5);
+}
+
+.sizing-shape.part-rotor.part-filled .shape-live,
+.sizing-shape.part-rotor.part-filled .shape-mirror,
+.sizing-shape.part-rotor.part-filled .shape-local-mirror,
+.sizing-shape.part-rotor.part-filled .shape-local-global-mirror {
+  fill: rgba(192, 132, 252, 0.26);
+}
+
+.sizing-shape.selected .shape-live,
+.sizing-shape.selected .shape-mirror {
   stroke-width: 4;
 }
 
@@ -1414,6 +1961,34 @@ button {
 
 .sizing-shape .shape-node.corner {
   fill: #e5eef8;
+}
+
+.sizing-shape .shape-node.joined {
+  stroke: #86efac;
+}
+
+.sizing-shape .shape-node.join-source {
+  fill: #facc15;
+  stroke: #fef9c3;
+  stroke-width: 3;
+}
+
+.sizing-shape .shape-node.locked-selected {
+  fill: #7f1d1d;
+  stroke: #fecaca;
+  stroke-width: 3;
+}
+
+.sizing-shape .shape-node-selection-ring {
+  fill: none;
+  stroke: #facc15;
+  stroke-width: 2;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.sizing-shape .shape-node-selection-ring.locked {
+  stroke: #ef4444;
 }
 
 .sizing-shape .shape-node.preview {
@@ -1451,6 +2026,36 @@ button {
 .curve-toggle.spline {
   fill: rgba(134, 239, 172, 0.88);
   stroke: #86efac;
+}
+
+.airfoil-stations line {
+  stroke: rgba(125, 211, 252, 0.85);
+  stroke-dasharray: 4 5;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.airfoil-stations circle {
+  cursor: pointer;
+  fill: #38bdf8;
+  stroke: #e0f2fe;
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.airfoil-stations text {
+  fill: #bfecff;
+  font-size: 10px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: #07111a;
+  stroke-width: 3px;
+}
+
+.airfoil-stations .active circle {
+  fill: #e0f2fe;
+  stroke: #38bdf8;
+  stroke-width: 2.8;
 }
 
 .tangent-handles line {
@@ -1547,6 +2152,216 @@ button {
   color: #f8fbff;
 }
 
+.propulsion-workspace {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 12px;
+}
+
+.propulsion-panel {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(125, 160, 190, 0.18);
+  border-radius: 8px;
+  background: rgba(13, 24, 35, 0.84);
+}
+
+.propulsion-summary-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(480px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding-block: 10px;
+  overflow: visible;
+}
+
+.propulsion-summary-panel .propulsion-title {
+  min-width: 112px;
+}
+
+.propulsion-summary-panel .propulsion-readouts {
+  grid-template-columns: repeat(5, minmax(86px, 1fr));
+  min-width: 0;
+}
+
+.propulsion-optimizer {
+  display: grid;
+  grid-template-columns: 144px 116px auto auto;
+  align-items: end;
+  gap: 8px;
+  justify-self: end;
+}
+
+.propulsion-optimizer .propulsion-field {
+  min-width: 112px;
+}
+
+.propulsion-optimizer .primary-action,
+.propulsion-optimizer .secondary-action {
+  height: 34px;
+  white-space: nowrap;
+}
+
+.propulsion-optimizer .secondary-action {
+  border: 1px solid rgba(107, 224, 155, 0.34);
+  background: rgba(19, 73, 49, 0.42);
+  color: #d9fbe7;
+}
+
+.propulsion-inline-note {
+  grid-column: 3;
+  justify-self: end;
+  margin: -6px 0 0;
+  max-width: 390px;
+  color: #9fb5c7;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.propulsion-summary-panel .metric-tile {
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.propulsion-summary-panel .metric-tile span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.propulsion-summary-panel .metric-tile strong {
+  font-size: 15px;
+}
+
+.propulsion-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #e8f4fb;
+}
+
+.propulsion-title h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.propulsion-readouts,
+.propulsion-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-tile {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid rgba(125, 160, 190, 0.16);
+  border-radius: 7px;
+  background: #0c1721;
+}
+
+.metric-tile span,
+.propulsion-field span {
+  color: #9fb3c4;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.metric-tile strong {
+  color: #f8fbff;
+  font-size: 18px;
+}
+
+.propulsion-field {
+  display: grid;
+  gap: 6px;
+}
+
+.propulsion-field-wide {
+  grid-column: 1 / -1;
+}
+
+.propulsion-field div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.propulsion-field input,
+.propulsion-field select {
+  min-width: 0;
+  width: 100%;
+  height: 34px;
+  border: 1px solid #36566b;
+  border-radius: 6px;
+  color: #f3f8fc;
+  background: #0e1d29;
+  padding: 0 10px;
+}
+
+.propulsion-field em {
+  color: #8fa5b7;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.propulsion-field small {
+  color: #8fa5b7;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.propulsion-results-panel {
+  grid-column: 1 / -1;
+}
+
+.propulsion-result-groups {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.propulsion-result-group {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(125, 160, 190, 0.14);
+  border-radius: 7px;
+  background: #0c1721;
+}
+
+.propulsion-result-group h3 {
+  margin: 0 0 4px;
+  color: #dff4ff;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.propulsion-result-group > div {
+  display: grid;
+  gap: 2px;
+}
+
+.propulsion-note {
+  margin: 0;
+  color: #9fb3c4;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .analysis-metric {
   display: flex;
   justify-content: space-between;
@@ -1589,6 +2404,29 @@ button {
 
 .cop-marker circle {
   stroke: #22c55e;
+}
+
+.analysis-markers .reference-line {
+  stroke-dasharray: 6 7;
+  stroke-width: 1.4;
+}
+
+.com-reference line,
+.com-reference text {
+  stroke: #fb7185;
+}
+
+.com-reference text {
+  fill: #fecdd3;
+}
+
+.cop-reference line,
+.cop-reference text {
+  stroke: #22c55e;
+}
+
+.cop-reference text {
+  fill: #bbf7d0;
 }
 
 .size-footer span {
