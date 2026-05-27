@@ -25,10 +25,11 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { runLocalDesignCommand, sendOpenAiDesignMessage } from "./ai";
+import { isKernelBridgeAvailable, runLocalDesignCommand, sendOpenAiDesignMessage } from "./ai";
 import { buildMeasurementLines, meshObjectToMesh, projectToStl, referenceGeometryToObject, wingToMesh } from "./geometry";
-import { SizeWorkspace, sizeAircraftFromPrompt } from "./SizeMode";
-import type { SizeAircraft } from "./SizeMode";
+import { SizeWorkspace, SizingSummaryFooter, defaultSizingProject, normalizeSizingProject } from "./SizeMode";
+import type { SizingProject } from "./SizeMode";
+import { computeSizingAnalysis } from "./sizingEngine";
 import type {
   CadObject,
   CadProject,
@@ -42,12 +43,19 @@ import type {
 } from "./types";
 
 const examplePrompt = "create a 40mm diameter round solid, 120mm long, on the XZ plane";
-const sizingExamplePrompt = "payload 2kg, twin propellor plane, electric help me size for 20 min flight, cruise optimised";
 const defaultModel = "gpt-5";
 const projectStorageKey = "cadex.project";
 const unitOptions = ["m", "cm", "mm", "in", "ft"] as const;
 type DisplayUnit = (typeof unitOptions)[number];
 type AppMode = "design" | "size";
+type OpenVspSizingResult = {
+  scriptPath: string;
+  vsp3Path: string;
+  ranOpenvsp: boolean;
+  message: string;
+  stdout: string;
+  stderr: string;
+};
 type BrowserContextTarget = {
   canDelete?: boolean;
   canHide?: boolean;
@@ -104,8 +112,11 @@ function updateActiveCursorPlane(activeCursorPlaneRef: { current: CursorPlane },
 }
 
 export default function App() {
-  const [appMode, setAppMode] = useState<AppMode>("design");
+  const [appMode, setAppMode] = useState<AppMode>("size");
   const [project, setProject] = useState<CadProject>(() => loadStoredProject() ?? fallbackProject());
+  const [sizingProject, setSizingProject] = useState<SizingProject>(() =>
+    normalizeSizingProject(loadStoredProject()?.sizing),
+  );
   const [prompt, setPrompt] = useState(examplePrompt);
   const [chatLog, setChatLog] = useState([
     {
@@ -125,14 +136,6 @@ export default function App() {
   const [hiddenBrowserItemIds, setHiddenBrowserItemIds] = useState<Set<string>>(() => new Set());
   const [selectedGeometry, setSelectedGeometry] = useState<SelectedGeometry | null>(null);
   const [status, setStatus] = useState("Ready");
-  const [sizingPrompt, setSizingPrompt] = useState(sizingExamplePrompt);
-  const [sizingLog, setSizingLog] = useState([
-    {
-      role: "assistant",
-      text: "Describe payload, propulsion, endurance, and optimisation. I will size a first-pass aircraft layout.",
-    },
-  ]);
-  const [sizingAircraft, setSizingAircraft] = useState<SizeAircraft>(() => sizeAircraftFromPrompt(sizingExamplePrompt));
 
   useEffect(() => {
     if (isTauriRuntime() && !loadStoredProject()) {
@@ -170,7 +173,8 @@ export default function App() {
     setPrompt("");
     setChatLog((log) => [...log, { role: "user", text }]);
 
-    const localResult = runLocalDesignCommand(project, text, selectedGeometry);
+    const kernelAvailable = await isKernelBridgeAvailable();
+    const localResult = kernelAvailable ? undefined : runLocalDesignCommand(project, text, selectedGeometry);
     if (localResult) {
       setProject(localResult.project);
       setChatLog((log) => [...log, { role: "assistant", text: localResult.assistantText }]);
@@ -217,22 +221,6 @@ export default function App() {
         },
       ]);
     }
-  }
-
-  function submitSizingPrompt() {
-    const text = sizingPrompt.trim();
-    if (!text) return;
-    const nextAircraft = sizeAircraftFromPrompt(text);
-    setSizingAircraft(nextAircraft);
-    setSizingLog((log) => [
-      ...log,
-      { role: "user", text },
-      {
-        role: "assistant",
-        text: `First pass sized for ${nextAircraft.payloadKg.toFixed(1)} kg payload, ${nextAircraft.propulsion}, ${nextAircraft.enduranceMin.toFixed(0)} min ${nextAircraft.optimisation}. Try ${nextAircraft.wingSpanM.toFixed(2)} m span, ${nextAircraft.wingAreaM2.toFixed(2)} m2 wing area, and about ${nextAircraft.mtowKg.toFixed(1)} kg MTOW.`,
-      },
-    ]);
-    setStatus("Sizing updated");
   }
 
   async function exportFormat(format: GeometryFormat) {
@@ -356,12 +344,53 @@ export default function App() {
 
   function clearProject() {
     const emptyProject = fallbackProject();
-    setProject(emptyProject);
+    const emptySizing = defaultSizingProject();
+    setProject({ ...emptyProject, sizing: emptySizing });
+    setSizingProject(emptySizing);
     setSelectedTimelineEventId(null);
     setSelectedBrowserItemId("project");
     setSelectedGeometry(null);
     setPrompt("");
     setStatus("Project cleared");
+  }
+
+  function updateSizingProject(next: SizingProject) {
+    setSizingProject(next);
+    setProject((current) => ({ ...current, sizing: next }));
+    setStatus("Sizing updated");
+  }
+
+  async function runOpenVspSizing() {
+    if (!isTauriRuntime()) {
+      setStatus("OpenVSP analysis requires the desktop app");
+      return;
+    }
+    setStatus("Preparing OpenVSP analysis...");
+    const sizingWithAnalysis = { ...sizingProject, analysis: computeSizingAnalysis(sizingProject) };
+    setSizingProject(sizingWithAnalysis);
+    setProject((current) => ({ ...current, sizing: sizingWithAnalysis }));
+    try {
+      const result = await invoke<OpenVspSizingResult>("analyze_sizing_openvsp", {
+        request: {
+          projectName: project.name,
+          sizing: sizingWithAnalysis,
+        },
+      });
+      setStatus(result.message);
+      setProject((current) => ({
+        ...current,
+        timeline: [
+          ...current.timeline,
+          {
+            id: crypto.randomUUID(),
+            label: result.ranOpenvsp ? "OpenVSP sizing run" : "OpenVSP sizing script",
+            detail: `${result.message} ${result.scriptPath}`,
+          },
+        ],
+      }));
+    } catch (error) {
+      setStatus(`OpenVSP failed: ${friendlyError(error)}`);
+    }
   }
 
   return (
@@ -371,11 +400,11 @@ export default function App() {
           <Plane size={22} />
           <span>Cadex</span>
           <div className="mode-switch" aria-label="Application mode">
+            <button className={appMode === "size" ? "active" : ""} onClick={() => setAppMode("size")}>
+              Sizing
+            </button>
             <button className={appMode === "design" ? "active" : ""} onClick={() => setAppMode("design")}>
               Design
-            </button>
-            <button className={appMode === "size" ? "active" : ""} onClick={() => setAppMode("size")}>
-              Size
             </button>
           </div>
         </div>
@@ -526,11 +555,9 @@ export default function App() {
       ) : (
         <>
           <SizeWorkspace
-            aircraft={sizingAircraft}
-            log={sizingLog}
-            prompt={sizingPrompt}
-            onPromptChange={setSizingPrompt}
-            onSubmit={submitSizingPrompt}
+            sizing={sizingProject}
+            onChange={updateSizingProject}
+            onOpenVspAnalysis={runOpenVspSizing}
           />
           <footer className="timeline size-footer">
             <div className="timeline-title">
@@ -538,9 +565,7 @@ export default function App() {
               <span>Sizing result</span>
             </div>
             <div className="timeline-events">
-              <span>MTOW {sizingAircraft.mtowKg.toFixed(1)} kg</span>
-              <span>Wing loading {(sizingAircraft.mtowKg / sizingAircraft.wingAreaM2).toFixed(1)} kg/m2</span>
-              <span>Energy {sizingAircraft.batteryWh.toFixed(0)} Wh</span>
+              <SizingSummaryFooter analysis={sizingProject.analysis} />
             </div>
           </footer>
         </>
@@ -649,6 +674,7 @@ function loadStoredProject(): CadProject | undefined {
       units: typeof parsed.units === "string" ? parsed.units : "m",
       objects: parsed.objects as CadProject["objects"],
       timeline: parsed.timeline as CadProject["timeline"],
+      sizing: parsed.sizing,
     };
   } catch {
     return undefined;

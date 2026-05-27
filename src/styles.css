@@ -975,6 +975,10 @@ button {
   padding: 14px 12px;
 }
 
+.sizing-sketch-workspace {
+  grid-template-columns: 320px minmax(580px, 1fr) 320px;
+}
+
 .size-panel,
 .size-canvas-panel {
   min-height: 0;
@@ -996,6 +1000,159 @@ button {
   min-height: 0;
 }
 
+.sizing-left-panel,
+.sizing-right-panel {
+  overflow-y: auto;
+}
+
+.component-palette {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.segmented-control.sizing-role-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid #263d4f;
+  border-radius: 7px;
+  background: #0d1822;
+}
+
+.segmented-control.sizing-role-control button {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #aebfcd;
+  background: transparent;
+  font-weight: 800;
+}
+
+.segmented-control.sizing-role-control button.active {
+  color: #f8fbff;
+  border-color: #4aa5d0;
+  background: #17364c;
+}
+
+.draft-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.draft-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.draw-tool-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #2c5368;
+  border-radius: 7px;
+  color: #dff4ff;
+  background: #102d3d;
+}
+
+.draw-tool-status div {
+  display: grid;
+  gap: 2px;
+}
+
+.draw-tool-status strong {
+  font-size: 13px;
+}
+
+.draw-tool-status span {
+  color: #9fd5ee;
+  font-size: 12px;
+}
+
+.sizing-hint {
+  color: #9fb3c4;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.component-palette button,
+.compute-button,
+.delete-component-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  border: 1px solid #36566b;
+  border-radius: 6px;
+  color: #e8f4fb;
+  background: #132635;
+  font-weight: 700;
+}
+
+.component-palette button:hover,
+.compute-button:hover {
+  border-color: #62bde8;
+  background: #173c56;
+}
+
+.compute-button {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.delete-component-button {
+  color: #fecaca;
+  border-color: #6b3030;
+  background: #351818;
+}
+
+.sizing-fields,
+.component-editor,
+.analysis-panel {
+  display: grid;
+  gap: 9px;
+}
+
+.sizing-field {
+  display: grid;
+  gap: 5px;
+}
+
+.sizing-field > span {
+  color: #9fb3c4;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sizing-field > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.sizing-field input,
+.sizing-field select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid #2d4658;
+  border-radius: 6px;
+  color: #f8fafc;
+  background: #0d1822;
+}
+
+.sizing-field em {
+  color: #8fa4b5;
+  font-size: 12px;
+  font-style: normal;
+}
+
 .size-canvas-panel {
   display: grid;
   place-items: stretch;
@@ -1003,19 +1160,116 @@ button {
   padding: 14px;
 }
 
+.sizing-canvas-wrap {
+  position: relative;
+  min-height: 0;
+}
+
 .sizing-canvas {
   width: 100%;
   height: 100%;
   min-height: 0;
   display: block;
+  touch-action: none;
   border: 1px solid rgba(125, 160, 190, 0.18);
   border-radius: 8px;
   background: #0c141d;
 }
 
-.sizing-grid line {
+.canvas-sketch-toolbar {
+  position: absolute;
+  z-index: 3;
+  top: 18px;
+  left: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid rgba(125, 160, 190, 0.22);
+  border-radius: 7px;
+  background: rgba(8, 16, 24, 0.88);
+}
+
+.canvas-sketch-toolbar button {
+  height: 30px;
+  min-width: 58px;
+  border: 1px solid #36566b;
+  border-radius: 5px;
+  color: #e8f4fb;
+  background: #132635;
+  font-weight: 800;
+}
+
+.canvas-sketch-toolbar button.active {
+  color: #ffffff;
+  border-color: #7dd3fc;
+  background: #155070;
+}
+
+.canvas-sketch-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.canvas-role-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding-left: 6px;
+  margin-left: 2px;
+  border-left: 1px solid rgba(125, 160, 190, 0.24);
+}
+
+.canvas-role-toggle button {
+  min-width: 74px;
+}
+
+.sizing-centerline {
+  stroke: rgba(148, 163, 184, 0.42);
+  stroke-dasharray: 8 6;
+  stroke-width: 1.5;
+}
+
+.sizing-origin {
+  fill: #0c141d;
+  stroke: #facc15;
+  stroke-width: 2;
+}
+
+.sizing-grid line.minor {
+  stroke: rgba(125, 160, 190, 0.075);
+  stroke-width: 0.7;
+}
+
+.sizing-grid line.major {
   stroke: rgba(125, 160, 190, 0.16);
   stroke-width: 1;
+}
+
+.sizing-axes line {
+  stroke: rgba(226, 232, 240, 0.52);
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.sizing-axes text {
+  fill: #d7e7f2;
+  font-size: 10px;
+  font-weight: 750;
+  paint-order: stroke;
+  stroke: #07111a;
+  stroke-width: 3px;
+}
+
+.sizing-axes .axis-name {
+  fill: #facc15;
+  font-size: 12px;
+}
+
+.sizing-axes .axis-unit {
+  cursor: pointer;
+  fill: #86efac;
+  font-size: 12px;
+  text-decoration: underline;
 }
 
 .aircraft-fill {
@@ -1036,6 +1290,205 @@ button {
   stroke-width: 2.5;
 }
 
+.sizing-component {
+  cursor: pointer;
+}
+
+.sizing-component rect,
+.sizing-component circle,
+.sizing-component polygon {
+  fill: rgba(14, 165, 233, 0.03);
+  stroke: #38bdf8;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.sizing-component.fuselage rect {
+  stroke: #bae6fd;
+}
+
+.sizing-component.horizontalTail rect,
+.sizing-component.verticalTail polygon {
+  stroke: #facc15;
+}
+
+.sizing-component.payload rect {
+  stroke: #fb7185;
+}
+
+.sizing-component.battery rect {
+  stroke: #22c55e;
+}
+
+.sizing-component.motor circle {
+  stroke: #c084fc;
+}
+
+.sizing-component.prop circle {
+  stroke-dasharray: 5 5;
+}
+
+.sizing-component.selected rect,
+.sizing-component.selected circle,
+.sizing-component.selected polygon {
+  stroke: #ffffff;
+  stroke-width: 3;
+}
+
+.sizing-component text,
+.analysis-markers text {
+  fill: #d7e7f2;
+  font-size: 11px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: #07111a;
+  stroke-width: 3px;
+}
+
+.sizing-shape {
+  cursor: pointer;
+}
+
+.sizing-shape .shape-live,
+.sizing-shape .shape-mirror,
+.sizing-shape .shape-hit {
+  fill: none;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.sizing-shape .shape-hit {
+  cursor: pointer;
+  pointer-events: stroke;
+  stroke: transparent;
+  stroke-width: 18;
+}
+
+.sizing-shape .shape-live,
+.sizing-shape .shape-mirror {
+  pointer-events: none;
+}
+
+.sizing-shape.body .shape-live {
+  stroke: #f8fbff;
+}
+
+.sizing-shape.body .shape-mirror {
+  stroke: rgba(248, 251, 255, 0.62);
+  stroke-dasharray: 7 7;
+}
+
+.sizing-shape.liftingSurface .shape-live {
+  stroke: #7dd3fc;
+}
+
+.sizing-shape.liftingSurface .shape-mirror {
+  stroke: rgba(125, 211, 252, 0.62);
+  stroke-dasharray: 7 7;
+}
+
+.sizing-shape.selected .shape-live {
+  stroke-width: 4;
+}
+
+.sizing-shape.draft .shape-live,
+.sizing-shape.draft .shape-mirror {
+  stroke-width: 3;
+}
+
+.sizing-shape.draft .shape-live,
+.sizing-shape.draft .shape-mirror,
+.sizing-shape.draft .tangent-handles {
+  pointer-events: none;
+}
+
+.sizing-shape .shape-node {
+  fill: #0c141d;
+  stroke: #e5eef8;
+  stroke-width: 2;
+  cursor: grab;
+  vector-effect: non-scaling-stroke;
+}
+
+.sizing-shape .shape-node.corner {
+  fill: #e5eef8;
+}
+
+.sizing-shape .shape-node.preview {
+  fill: #7dd3fc;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.canvas-cursor-point {
+  pointer-events: none;
+}
+
+.canvas-cursor-point line {
+  stroke: rgba(134, 239, 172, 0.78);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas-cursor-point circle {
+  fill: #0c141d;
+  stroke: #86efac;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.curve-toggle {
+  cursor: pointer;
+  fill: none;
+  stroke: #86efac;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.curve-toggle.spline {
+  fill: rgba(134, 239, 172, 0.88);
+  stroke: #86efac;
+}
+
+.tangent-handles line {
+  stroke: rgba(226, 232, 240, 0.48);
+  stroke-dasharray: 4 4;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.tangent-handles circle {
+  fill: #0c141d;
+  stroke: rgba(226, 232, 240, 0.72);
+  stroke-width: 1.5;
+  cursor: grab;
+  vector-effect: non-scaling-stroke;
+}
+
+.tangent-handles.mirrored {
+  opacity: 0.55;
+}
+
+.sizing-shape text {
+  fill: #d7e7f2;
+  font-size: 11px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: #07111a;
+  stroke-width: 3px;
+}
+
+.shape-readout {
+  display: grid;
+  gap: 4px;
+  padding: 8px 0;
+  color: #9fb3c4;
+  font-size: 12px;
+}
+
 .prop-disc {
   fill: none;
   stroke: #38bdf8;
@@ -1047,6 +1500,11 @@ button {
   fill: #d7e7f2;
   font-size: 14px;
   font-weight: 700;
+}
+
+.view-label.subtle {
+  fill: #95a7b5;
+  font-size: 11px;
 }
 
 .dimension line {
@@ -1087,6 +1545,50 @@ button {
 
 .sizing-table strong {
   color: #f8fbff;
+}
+
+.analysis-metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(125, 160, 190, 0.1);
+}
+
+.analysis-metric span {
+  color: #9fb3c4;
+}
+
+.analysis-metric strong {
+  color: #f8fbff;
+  text-align: right;
+}
+
+.analysis-warnings {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.analysis-warnings span,
+.sizing-warning-text {
+  color: #fde68a;
+}
+
+.analysis-markers circle,
+.analysis-markers line {
+  fill: none;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.com-marker circle,
+.com-marker line {
+  stroke: #fb7185;
+}
+
+.cop-marker circle {
+  stroke: #22c55e;
 }
 
 .size-footer span {

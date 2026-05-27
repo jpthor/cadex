@@ -62,13 +62,14 @@ export function runLocalDesignCommand(
 }
 
 export async function sendOpenAiDesignMessage(request: AiDesignRequest): Promise<AiDesignResult> {
+  const kernelTools = await loadKernelToolCatalog();
   const response = await fetch("/api/openai/v1/responses", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${request.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(openAiRequestBody(request.model, request.message, request.project, request.selectedGeometry)),
+    body: JSON.stringify(openAiRequestBody(request.model, request.message, request.project, request.selectedGeometry, kernelTools)),
   });
 
   const payload = await response.json().catch(() => undefined);
@@ -77,9 +78,50 @@ export async function sendOpenAiDesignMessage(request: AiDesignRequest): Promise
   }
 
   const toolCalls = extractFunctionCalls(payload);
-  const project = applyToolCalls(request.project, toolCalls, request.selectedGeometry);
-  const assistantText = extractOutputText(payload) ?? "Created the requested CAD geometry.";
+  const kernelResult = kernelTools ? await applyKernelToolCalls(request.project, toolCalls, request.selectedGeometry) : undefined;
+  const project = kernelResult?.project ?? applyToolCalls(request.project, toolCalls, request.selectedGeometry);
+  const assistantText = kernelResult?.assistantText ?? extractOutputText(payload) ?? "Created the requested CAD geometry.";
   return { assistantText, project };
+}
+
+export async function isKernelBridgeAvailable() {
+  const response = await fetch("/api/cad/health").catch(() => undefined);
+  return Boolean(response?.ok);
+}
+
+async function loadKernelToolCatalog() {
+  const response = await fetch("/api/cad/tools").catch(() => undefined);
+  if (!response?.ok) return undefined;
+  const payload = await response.json().catch(() => undefined) as { tools?: unknown };
+  return Array.isArray(payload?.tools) ? payload.tools : undefined;
+}
+
+async function applyKernelToolCalls(
+  project: CadProject,
+  toolCalls: OpenAiToolCall[],
+  selectedGeometry?: SelectedGeometry | null,
+): Promise<AiDesignResult | undefined> {
+  if (toolCalls.length === 0) return undefined;
+  let next = project;
+  const messages: string[] = [];
+  for (const call of toolCalls) {
+    const response = await fetch("/api/cad/tool", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project: next,
+        name: call.name,
+        args: call.arguments,
+        selectedGeometry,
+      }),
+    });
+    const payload = await response.json().catch(() => undefined) as AiDesignResult & { error?: string } | undefined;
+    if (!response.ok) throw new Error(payload?.error ?? `CAD kernel tool ${call.name} failed`);
+    if (!payload?.project) throw new Error(`CAD kernel tool ${call.name} did not return a project`);
+    next = payload.project;
+    messages.push(`[${call.name}] ${payload.assistantText ?? "updated CAD model"}`);
+  }
+  return { project: next, assistantText: messages.join("\n") };
 }
 
 export function applyToolCalls(
@@ -126,7 +168,13 @@ export function applyToolCalls(
   return next;
 }
 
-export function openAiRequestBody(model: string, message: string, project: CadProject, selectedGeometry?: SelectedGeometry | null) {
+export function openAiRequestBody(
+  model: string,
+  message: string,
+  project: CadProject,
+  selectedGeometry?: SelectedGeometry | null,
+  toolsOverride?: unknown[],
+) {
   const selectedGeometryText = selectedGeometry
     ? `Current selected geometry: ${JSON.stringify(selectedGeometry)}. Use it as the anchor when the user says "here", "this", "selected", "on it", or asks to add a plane, point, line, face, or surface without another location.`
     : "No canvas geometry is currently selected.";
@@ -138,7 +186,7 @@ export function openAiRequestBody(model: string, message: string, project: CadPr
       {
         role: "system",
         content:
-          "You are Cadex, a generic parametric CAD copilot. For any request to design, create, build, generate, or modify geometry, call the matching CAD tool. Use SI units internally. Convert cm and mm into meters. Do not only describe geometry when a CAD tool can create it. When a selected geometry context is provided, treat it as the active CAD selection. Build concise feature trees from origin/planes/sketches/profiles/paths and operations such as loft, sweep, and extrude. Avoid named product templates; infer the needed profile, path, dimensions, and operation from the user's language.",
+          "You are Cadex, a generic parametric CAD copilot. For any request to design, create, build, generate, or modify geometry, call the matching CAD tool. Use SI units internally. Convert cm and mm into meters. Do not only describe geometry when a CAD tool can create it. When a selected geometry context is provided, treat it as the active CAD selection. Prefer kernel-backed solid tools such as create_box, create_cylinder, extrude_polygon, loft_polygons, sweep_polygon, and boolean operations. Avoid named product templates; infer the needed profile, path, dimensions, and operation from the user's language.",
       },
       {
         role: "system",
@@ -153,7 +201,7 @@ export function openAiRequestBody(model: string, message: string, project: CadPr
         content: message,
       },
     ],
-    tools: [
+    tools: toolsOverride ?? [
       {
         type: "function",
         name: "create_part",

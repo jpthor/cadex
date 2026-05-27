@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Parametric aerofoil, flying wing, and aircraft designer"
 authors = ["Cadex"]
 edition = "2021"
+default-run = "cadex"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

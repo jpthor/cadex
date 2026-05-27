@@ -4,6 +4,7 @@ export type CadProject = {
   units: string;
   objects: CadObject[];
   timeline: TimelineEvent[];
+  sizing?: unknown;
 };
 
 export type CadObject = WingObject | MeshObject | SolidObject | ReferenceGeometry;

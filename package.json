@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
+    "validate:sizing": "node --experimental-strip-types scripts/validate-sizing-engine.mjs",
     "icons": "node scripts/generate-icons.mjs && iconutil -c icns src-tauri/icons/icon.iconset -o src-tauri/icons/icon.icns",
     "preview": "vite preview --host 127.0.0.1",
     "tauri": "tauri",
