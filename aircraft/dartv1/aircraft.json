@@ -1860,7 +1860,7 @@
         "tailVolumeTarget": 0.55,
         "takeoffThrustToWeight": 1.4
       },
-      "selectedShapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
+      "selectedShapeId": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
       "shapes": [
         {
           "bodyMaterial": "carbonFibre",
@@ -2344,7 +2344,7 @@
             "tip90": 0
           },
           "label": "Wing 2",
-          "liftingSurfaceKind": "wing",
+          "liftingSurfaceKind": "tailplane",
           "massKg": 0.15,
           "points": [
             {
@@ -2492,7 +2492,7 @@
       "tailVolumeTarget": 0.55,
       "takeoffThrustToWeight": 1.4
     },
-    "selectedShapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
+    "selectedShapeId": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
     "shapes": [
       {
         "bodyMaterial": "carbonFibre",
@@ -2976,7 +2976,7 @@
           "tip90": 0
         },
         "label": "Wing 2",
-        "liftingSurfaceKind": "wing",
+        "liftingSurfaceKind": "tailplane",
         "massKg": 0.15,
         "points": [
           {
@@ -3060,5 +3060,5 @@
       "width": 900
     }
   },
-  "updatedAt": 1779971579326
+  "updatedAt": 1779971593623
 }
