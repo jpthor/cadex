@@ -1820,29 +1820,7 @@
     ],
     "sizing": {
       "activeRole": "mirrorPlane",
-      "dimensions": [
-        {
-          "id": "dimension-163d8236-b0cf-4d6c-a1a8-79118b40f838",
-          "label": "D1",
-          "labelOffset": {
-            "xM": -0.024554625135199237,
-            "yM": -0.32674734096690883
-          },
-          "targetA": {
-            "kind": "segment",
-            "segmentIndex": 1,
-            "shapeId": "liftingSurface-78881328-cb17-4a50-a4e5-f8d1c30928c0",
-            "t": 0.4140282097638188
-          },
-          "targetB": {
-            "kind": "segment",
-            "segmentIndex": 0,
-            "shapeId": "mirrorPlane-3ee5f33f-b262-492b-b1d2-327c5eb9b5c8",
-            "t": 0.8315485470111997
-          },
-          "valueM": 0.2984430759561829
-        }
-      ],
+      "dimensions": [],
       "drawMode": "spline",
       "mission": {
         "aspectRatio": 5,
@@ -1860,7 +1838,7 @@
         "tailVolumeTarget": 0.55,
         "takeoffThrustToWeight": 1.4
       },
-      "selectedShapeId": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
+      "selectedShapeId": "",
       "shapes": [
         {
           "bodyMaterial": "carbonFibre",
@@ -1958,7 +1936,7 @@
                 "t": 0.3653829187872805
               },
               "xM": 0.11312227107255168,
-              "yM": -0.5067425584713554
+              "yM": -0.5067425584713555
             },
             {
               "curveMode": "spline",
@@ -2019,7 +1997,7 @@
                 "t": 0.8863419081857618
               },
               "xM": 0.11312227107255168,
-              "yM": -0.945155893612034
+              "yM": -0.9451558936120344
             }
           ],
           "role": "liftingSurface"
@@ -2344,7 +2322,7 @@
             "tip90": 0
           },
           "label": "Wing 2",
-          "liftingSurfaceKind": "tailplane",
+          "liftingSurfaceKind": "wing",
           "massKg": 0.15,
           "points": [
             {
@@ -2452,29 +2430,7 @@
   "schemaVersion": 1,
   "sizing": {
     "activeRole": "mirrorPlane",
-    "dimensions": [
-      {
-        "id": "dimension-163d8236-b0cf-4d6c-a1a8-79118b40f838",
-        "label": "D1",
-        "labelOffset": {
-          "xM": -0.024554625135199237,
-          "yM": -0.32674734096690883
-        },
-        "targetA": {
-          "kind": "segment",
-          "segmentIndex": 1,
-          "shapeId": "liftingSurface-78881328-cb17-4a50-a4e5-f8d1c30928c0",
-          "t": 0.4140282097638188
-        },
-        "targetB": {
-          "kind": "segment",
-          "segmentIndex": 0,
-          "shapeId": "mirrorPlane-3ee5f33f-b262-492b-b1d2-327c5eb9b5c8",
-          "t": 0.8315485470111997
-        },
-        "valueM": 0.2984430759561829
-      }
-    ],
+    "dimensions": [],
     "drawMode": "spline",
     "mission": {
       "aspectRatio": 5,
@@ -2492,7 +2448,7 @@
       "tailVolumeTarget": 0.55,
       "takeoffThrustToWeight": 1.4
     },
-    "selectedShapeId": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
+    "selectedShapeId": "",
     "shapes": [
       {
         "bodyMaterial": "carbonFibre",
@@ -2590,7 +2546,7 @@
               "t": 0.3653829187872805
             },
             "xM": 0.11312227107255168,
-            "yM": -0.5067425584713554
+            "yM": -0.5067425584713555
           },
           {
             "curveMode": "spline",
@@ -2651,7 +2607,7 @@
               "t": 0.8863419081857618
             },
             "xM": 0.11312227107255168,
-            "yM": -0.945155893612034
+            "yM": -0.9451558936120344
           }
         ],
         "role": "liftingSurface"
@@ -2976,7 +2932,7 @@
           "tip90": 0
         },
         "label": "Wing 2",
-        "liftingSurfaceKind": "tailplane",
+        "liftingSurfaceKind": "wing",
         "massKg": 0.15,
         "points": [
           {
@@ -3060,5 +3016,5 @@
       "width": 900
     }
   },
-  "updatedAt": 1779971593623
+  "updatedAt": 1779971638369
 }
