@@ -1621,9 +1621,10 @@ export function dimensionTargetPoints(targetA: SizeDimensionTarget, targetB: Siz
 function dimensionLineTarget(target: SizeDimensionTarget, shapes: SizeShape[]) {
   if (target.kind !== "segment") return undefined;
   const shape = shapes.find((candidate) => candidate.id === target.shapeId);
+  if (!shape || !referenceRoles.includes(shape.role)) return undefined;
   const start = shape?.points[target.segmentIndex];
   const end = shape?.points[target.segmentIndex + 1];
-  if (!shape || !start || !end) return undefined;
+  if (!start || !end) return undefined;
   return { start, end, infinite: referenceRoles.includes(shape.role) };
 }
 
