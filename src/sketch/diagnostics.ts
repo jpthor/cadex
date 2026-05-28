@@ -129,10 +129,12 @@ export function computeTailplaneSize(shapes: SizeShape[]) {
       if (shape.role !== "liftingSurface" || shape.liftingSurfaceKind !== "tailplane") return totals;
       const stats = liftingSurfaceStats(shape, shapes);
       const multiplier = diagnosticSurfaceInstanceMultiplier(shape, shapes);
+      const bounds = shapeBounds(shape);
+      const localSpanM = Math.max(bounds.maxX - bounds.minX, 0);
       return {
         count: totals.count + multiplier,
-        areaM2: totals.areaM2 + stats.areaM2 * multiplier,
-        spanM: Math.max(totals.spanM, stats.spanM),
+        areaM2: totals.areaM2 + stats.areaM2,
+        spanM: Math.max(totals.spanM, localSpanM || stats.spanM),
       };
     },
     { count: 0, areaM2: 0, spanM: 0 },

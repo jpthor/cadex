@@ -2,7 +2,7 @@ import { Gauge } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { computeSizingAnalysis } from "../../sizing/auditedSizingEngine";
-import { fixedAircraftMotorCount, metersPerSecondPerKnot } from "../../app/constants";
+import { fixedAircraftMotorCount, fixedAircraftTailplaneCount, metersPerSecondPerKnot } from "../../app/constants";
 import type { SizingProject } from "../../sizing";
 import { defaultTurbineCount, turbineEngineOptions } from "../../sketch/constants";
 import { Metric } from "../ui/Metric";
@@ -127,7 +127,7 @@ export function SizingDashboard({
             </SizingDataGroup>
             <SizingDataGroup title="Tail">
               <Metric label="Tail area total" value={`${computedDraft.tailAreaM2.toFixed(3)} m2`} />
-              <Metric label="Tail area / empennage" value={`${computedDraft.tailAreaPerEmpennageM2.toFixed(3)} m2`} />
+              <Metric label="Tail area / tailplane" value={`${computedDraft.tailAreaPerEmpennageM2.toFixed(3)} m2`} />
               <Metric label="Tail arm" value={`${computedDraft.tailArmM.toFixed(2)} m`} />
               <Metric label="Vertical fins" value="2" />
               <Metric label="Fin area / fin" value={`${computedDraft.finAreaPerFinM2.toFixed(3)} m2`} />
@@ -159,7 +159,7 @@ export function SizingDashboard({
             <SizingDataGroup title="Assumptions">
               <Metric label="Configuration" value="electric twin-rotor tailsitter" />
               <Metric label="Build" value="carbon fibre shell / spar" />
-              <Metric label="Empennage" value="dual tail surfaces + 2 fins" />
+              <Metric label="Empennage" value={`${fixedAircraftTailplaneCount} tailplanes + 2 fins`} />
               <Metric label="Cruise L/D" value={`${computedDraft.cruiseLiftToDrag.toFixed(1)}`} />
               <Metric label="Hover figure of merit" value={`${computedDraft.hoverFigureOfMerit.toFixed(2)}`} />
               <Metric label="Structure factor" value={`${(computedDraft.structureFraction * 100).toFixed(0)}% of installed mass`} />
@@ -509,7 +509,7 @@ export function computeSizingDraft(project: SizingProject) {
   });
   const tailArmM = tailSizing.tailArmM;
   const tailAreaM2 = tailSizing.tailAreaM2;
-  const tailAreaPerEmpennageM2 = tailAreaM2 / 2;
+  const tailAreaPerEmpennageM2 = tailAreaM2 / fixedAircraftTailplaneCount;
   const tailChordM = tailSizing.tailChordM;
   const motorX = wingSpanM / 2 - rotorDiameterM / 2 - rotorInsideWingMarginM;
   const totalLengthM = wingRootDepthM + tailArmM + tailChordM;
@@ -621,7 +621,7 @@ export function sizingDraftReferenceShapes({
   wingSpanM: number;
 }): SizingProject["shapes"] {
   const halfSpan = wingSpanM / 2;
-  const tailAreaPerEmpennageM2 = tailAreaM2 / 2;
+  const tailAreaPerEmpennageM2 = tailAreaM2 / fixedAircraftTailplaneCount;
   const tailGeometry = tailGeometryForArea(tailAreaPerEmpennageM2, rotorDiameterM);
   const tailSpan = tailGeometry.spanM;
   const tailChord = tailGeometry.chordM;
@@ -751,12 +751,12 @@ function solveTailForLengthRatio({
   let tailChordM = meanChordM * 0.18;
   for (let iteration = 0; iteration < 8; iteration += 1) {
     tailAreaM2 = (tailVolumeRatio * wingAreaM2 * meanChordM) / Math.max(tailArmM, 0.1);
-    const tailAreaPerEmpennageM2 = tailAreaM2 / 2;
+    const tailAreaPerEmpennageM2 = tailAreaM2 / fixedAircraftTailplaneCount;
     tailChordM = tailGeometryForArea(tailAreaPerEmpennageM2, maxTailSpanM).chordM;
     tailArmM = Math.max(minTailArmM, targetTotalLengthM - noseContributionM - tailChordM);
   }
   tailAreaM2 = (tailVolumeRatio * wingAreaM2 * meanChordM) / Math.max(tailArmM, 0.1);
-  const tailAreaPerEmpennageM2 = tailAreaM2 / 2;
+  const tailAreaPerEmpennageM2 = tailAreaM2 / fixedAircraftTailplaneCount;
   tailChordM = tailGeometryForArea(tailAreaPerEmpennageM2, maxTailSpanM).chordM;
   return { tailAreaM2, tailArmM, tailChordM };
 }
