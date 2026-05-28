@@ -1838,7 +1838,7 @@
         "tailVolumeTarget": 0.55,
         "takeoffThrustToWeight": 1.4
       },
-      "selectedShapeId": "part-0b14ccfb-5128-43d9-bf3d-166f44868b81",
+      "selectedShapeId": "part-e73fd5e7-cc9e-4c68-aba4-f851ede38851",
       "shapes": [
         {
           "bodyMaterial": "carbonFibre",
@@ -2179,8 +2179,8 @@
               0
             ],
             "kind": "cylinder",
-            "lengthM": 0.04015064622926279,
-            "radiusM": 0.05852360942380997
+            "lengthM": 0.043263053434269394,
+            "radiusM": 0.058800232445551104
           },
           "drawMode": "line",
           "id": "part-0b14ccfb-5128-43d9-bf3d-166f44868b81",
@@ -2204,8 +2204,8 @@
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.7488354966878811,
-              "yM": -0.2653789520673373
+              "xM": 0.7491121197096222,
+              "yM": -0.263822748464834
             }
           ],
           "role": "part"
@@ -2471,9 +2471,9 @@
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 720,
-        "originX": 171.59389831623412,
-        "originY": 73.22594789502,
-        "scale": 629.0679738445209,
+        "originX": 247.2419429303796,
+        "originY": 26.093333008556613,
+        "scale": 781.1605996434838,
         "width": 900
       }
     },
@@ -2519,7 +2519,7 @@
       "tailVolumeTarget": 0.55,
       "takeoffThrustToWeight": 1.4
     },
-    "selectedShapeId": "part-0b14ccfb-5128-43d9-bf3d-166f44868b81",
+    "selectedShapeId": "part-e73fd5e7-cc9e-4c68-aba4-f851ede38851",
     "shapes": [
       {
         "bodyMaterial": "carbonFibre",
@@ -2860,8 +2860,8 @@
             0
           ],
           "kind": "cylinder",
-          "lengthM": 0.04015064622926279,
-          "radiusM": 0.05852360942380997
+          "lengthM": 0.043263053434269394,
+          "radiusM": 0.058800232445551104
         },
         "drawMode": "line",
         "id": "part-0b14ccfb-5128-43d9-bf3d-166f44868b81",
@@ -2885,8 +2885,8 @@
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.7488354966878811,
-            "yM": -0.2653789520673373
+            "xM": 0.7491121197096222,
+            "yM": -0.263822748464834
           }
         ],
         "role": "part"
@@ -3152,11 +3152,11 @@
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 720,
-      "originX": 171.59389831623412,
-      "originY": 73.22594789502,
-      "scale": 629.0679738445209,
+      "originX": 247.2419429303796,
+      "originY": 26.093333008556613,
+      "scale": 781.1605996434838,
       "width": 900
     }
   },
-  "updatedAt": 1779974560192
+  "updatedAt": 1779974581425
 }
