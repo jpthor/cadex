@@ -24,6 +24,21 @@ import {
 } from "./constants.ts";
 import type { CanvasView, CanvasViewMode, ScaleUnit, SideProjectionFrame } from "./types.ts";
 
+export const implicitMirrorShapeId = "implicit-y-axis-mirror";
+
+function implicitMirrorShape(): SizeShape {
+  return {
+    id: implicitMirrorShapeId,
+    role: "mirrorPlane",
+    label: "Y mirror",
+    drawMode: "line",
+    points: [
+      { xM: 0, yM: -1000, curveMode: "corner" },
+      { xM: 0, yM: 1000, curveMode: "corner" },
+    ],
+  };
+}
+
 export function fitCanvasView(shapes: SizeShape[], viewMode: CanvasViewMode = "top") {
   const points = shapes.flatMap((shape) => shape.points);
   if (!points.length) return baseCanvasView;
@@ -106,6 +121,13 @@ export function snapPoint(point: SizePoint, view: CanvasView, shapes: SizeShape[
 export function snapPointToGeometry(point: SizePoint, view: CanvasView, shapes: SizeShape[]) {
   const nodeThresholdM = 18 / view.scale;
   const segmentThresholdM = 16 / view.scale;
+  if (Math.abs(point.xM) <= segmentThresholdM) {
+    return {
+      ...point,
+      xM: 0,
+      snapAttachment: { kind: "segment", shapeId: implicitMirrorShapeId, segmentIndex: 0, t: (point.yM + 1000) / 2000 } as SizeSnapAttachment,
+    };
+  }
   let bestNode: { point: SizePoint; distanceM: number } | undefined;
   let bestSegment: { point: SizePoint; distanceM: number } | undefined;
 
@@ -485,14 +507,14 @@ export function partZHeightM(shape: SizeShape) {
   return Math.max(Math.min(widthM, lengthM), 0.01);
 }
 
-export function cadGeometryForShape(shape: SizeShape): SizeCadGeometry | undefined {
-  if (shape.role === "body") return cadGeometryForBody(shape);
-  if (shape.role === "liftingSurface") return cadGeometryForLiftingSurface(shape);
-  if (shape.role === "part") return cadGeometryForPart(shape);
+export function cadGeometryForShape(shape: SizeShape, shapes: SizeShape[] = []): SizeCadGeometry | undefined {
+  if (shape.role === "body") return cadGeometryForBody(shape, shapes);
+  if (shape.role === "liftingSurface") return shape.sketchViewMode === "side" ? undefined : cadGeometryForLiftingSurface(shape);
+  if (shape.role === "part") return cadGeometryForPart(shape, shapes);
   return undefined;
 }
 
-export function cadGeometryForPart(shape: SizeShape): SizeCadGeometry | undefined {
+export function cadGeometryForPart(shape: SizeShape, shapes: SizeShape[] = []): SizeCadGeometry | undefined {
   const center = topDownShapeCenter(shape);
   if (shape.partType === "motor") {
     const body = motorBodyPoints(shape.points);
@@ -524,27 +546,90 @@ export function cadGeometryForPart(shape: SizeShape): SizeCadGeometry | undefine
     };
   }
   const bounds = shapeBounds({ ...shape, points: canonicalPartPoints(shape) });
+  const centerXM = frontSectionCenterX(shape, shapes);
+  const widthM = shapeTouchesMirrorAxis(shape) ? Math.max(bounds.maxX * 2, 0.01) : Math.max(bounds.maxX - bounds.minX, 0.01);
   return {
     kind: "box",
-    centerM: [center.yM, center.xM, 0],
+    centerM: [center.yM, centerXM, 0],
     sizeM: [
       Math.max(bounds.maxY - bounds.minY, 0.01),
-      Math.max(bounds.maxX - bounds.minX, 0.01),
+      widthM,
       partZHeightM(shape),
     ],
   };
 }
 
-export function cadGeometryForBody(shape: SizeShape): SizeCadGeometry | undefined {
+export function cadGeometryForBody(shape: SizeShape, shapes: SizeShape[] = []): SizeCadGeometry | undefined {
+  const localMirrorPlane = shapes.find((candidate) => candidate.role === "mirrorPlane" && candidate.id !== shape.id && shapeTouchesMirrorPlane(shape, candidate));
+  if (localMirrorPlane) return cadRevolvedBodyAroundPlane(shape, localMirrorPlane);
   const bounds = shapeBounds(shape);
   const lengthM = Math.max(bounds.maxY - bounds.minY, 0.01);
   const radiusM = Math.max(bounds.maxX, 0.005);
   return {
     kind: "revolvedBody",
     centerM: [(bounds.minY + bounds.maxY) / 2, 0, 0],
+    axisM: [1, 0, 0],
     lengthM,
     radiusM,
+    profile: revolvedProfileAroundYAxis(shape),
   };
+}
+
+function cadRevolvedBodyAroundPlane(shape: SizeShape, plane: SizeShape): SizeCadGeometry | undefined {
+  const [start, end] = plane.points;
+  if (!start || !end) return cadGeometryForBody(shape);
+  const axisDx = end.yM - start.yM;
+  const axisDy = end.xM - start.xM;
+  const axisLength = Math.hypot(axisDx, axisDy);
+  if (axisLength <= 1e-9) return cadGeometryForBody(shape);
+  const axisSign = axisDx < 0 || (Math.abs(axisDx) <= 1e-9 && axisDy < 0) ? -1 : 1;
+  const axisXM = (axisDx / axisLength) * axisSign;
+  const axisYM = (axisDy / axisLength) * axisSign;
+  const axisM: [number, number, number] = [Math.abs(axisXM) <= 1e-12 ? 0 : axisXM, Math.abs(axisYM) <= 1e-12 ? 0 : axisYM, 0];
+  const axisStartM: [number, number, number] = [start.yM, start.xM, 0];
+  const projections = shape.points.map((point) => ((point.yM - start.yM) * axisM[0] + (point.xM - start.xM) * axisM[1]));
+  const minProjection = Math.min(...projections);
+  const maxProjection = Math.max(...projections);
+  const centerProjection = (minProjection + maxProjection) / 2;
+  const radiusM = Math.max(...shape.points.map((point) => distancePointToLine(point, start, end)), 0.005);
+  return {
+    kind: "revolvedBody",
+    centerM: [
+      axisStartM[0] + axisM[0] * centerProjection,
+      axisStartM[1] + axisM[1] * centerProjection,
+      0,
+    ],
+    axisM,
+    lengthM: Math.max(maxProjection - minProjection, 0.01),
+    radiusM,
+    profile: revolvedProfileAroundPlane(shape, plane, axisM),
+  };
+}
+
+function revolvedProfileAroundYAxis(shape: SizeShape): SizePoint[] {
+  return shape.points.map((point) => ({
+    xM: Math.abs(point.xM),
+    yM: point.yM,
+    curveMode: point.curveMode,
+    segmentInMode: point.segmentInMode,
+    segmentOutMode: point.segmentOutMode,
+    tangentIn: point.tangentIn,
+    tangentOut: point.tangentOut,
+  }));
+}
+
+function revolvedProfileAroundPlane(shape: SizeShape, plane: SizeShape, axisM: [number, number, number]): SizePoint[] {
+  const [start, end] = plane.points;
+  if (!start || !end) return revolvedProfileAroundYAxis(shape);
+  return shape.points.map((point) => ({
+    xM: distancePointToLine(point, start, end),
+    yM: start.yM + ((point.yM - start.yM) * axisM[0] + (point.xM - start.xM) * axisM[1]) * axisM[0],
+    curveMode: point.curveMode,
+    segmentInMode: point.segmentInMode,
+    segmentOutMode: point.segmentOutMode,
+    tangentIn: point.tangentIn,
+    tangentOut: point.tangentOut,
+  }));
 }
 
 export function cadGeometryForLiftingSurface(shape: SizeShape): SizeCadGeometry | undefined {
@@ -818,6 +903,7 @@ export function flattenShapeForFrontView(shape: SizeShape, progress = 1): SizeSh
 }
 
 export function projectedShape(shape: SizeShape, progress: number, shapes: SizeShape[], viewMode: CanvasViewMode): SizeShape {
+  if (shape.sketchViewMode === viewMode) return shape;
   const t = clamp(progress, 0, 1);
   const finalShape = viewMode === "side" ? sideProjectionShapeFinal(shape, shapes) : frontProjectionShape(shape, 1, shapes);
   return {
@@ -827,15 +913,8 @@ export function projectedShape(shape: SizeShape, progress: number, shapes: SizeS
 }
 
 export function sideProjectionShapeFinal(shape: SizeShape, shapes: SizeShape[]): SizeShape {
+  if (!referenceRoles.includes(shape.role)) return projectCadGeometryShape(shape, shapes, "side");
   const frame = sideProjectionFrame(shapes);
-  if (shape.role === "body") return { ...shape, points: bodySideSection(shape, 1, shapes, frame) };
-  if (shape.role === "liftingSurface") return { ...shape, points: liftingSurfaceSideSection(shape, 1, frame) };
-  if (shape.role === "part") {
-    const solvedPart = { ...shape, points: canonicalPartPoints(shape) };
-    if (shape.partType === "rotor") return { ...solvedPart, points: rotorSideSection(solvedPart, 1, shapes, frame) };
-    if (shape.partType === "motor") return { ...solvedPart, points: motorSideSection(solvedPart, 1, frame) };
-    return { ...solvedPart, points: rectangularSideSection(solvedPart, 1, partZHeightM(solvedPart), undefined, frame) };
-  }
   return flattenShapeForSideView(shape, 1, frame);
 }
 
@@ -898,36 +977,118 @@ export function smootherStep(value: number) {
 }
 
 export function frontProjectionShape(shape: SizeShape, progress: number, shapes: SizeShape[]): SizeShape {
-  if (shape.role === "body") return { ...shape, points: circularFrontSection(shape, progress, undefined, frontSectionCenterX(shape, shapes)) };
-  if (shape.role === "liftingSurface") return { ...shape, points: liftingSurfaceFrontSection(shape, progress, shapes) };
-  if (shape.role === "part") {
-    const solvedPart = { ...shape, points: canonicalPartPoints(shape) };
-    if (shape.partType === "battery") return { ...solvedPart, points: boxFrontSection(solvedPart, progress, partZHeightM(solvedPart)) };
-    if (shape.partType === "payload") return { ...solvedPart, points: boxFrontSection(solvedPart, progress, partZHeightM(solvedPart)) };
-    if (shape.partType === "motor") {
-      return { ...solvedPart, points: circularFrontSection(solvedPart, progress, motorDiameterM(solvedPart) / 2, frontSectionCenterX(solvedPart, shapes)) };
-    }
-    if (shape.partType === "rotor") {
-      return { ...solvedPart, points: circularFrontSection(solvedPart, progress, rotorDiskDiameterM(solvedPart) / 2, frontSectionCenterX(solvedPart, shapes)) };
-    }
-  }
+  if (!referenceRoles.includes(shape.role) && progress >= 1) return projectCadGeometryShape(shape, shapes, "front");
   return flattenShapeForFrontView(shape, progress);
+}
+
+export function projectCadGeometryShape(shape: SizeShape, shapes: SizeShape[], viewMode: "front" | "side"): SizeShape {
+  const geometry = cadGeometryForShape(shape, shapes);
+  if (!geometry) return { ...shape, points: [] };
+  if (geometry.kind === "box") return { ...shape, points: projectBoxCadGeometry(shape, geometry, viewMode) };
+  if (geometry.kind === "revolvedBody") return { ...shape, points: projectRevolvedBodyCadGeometry(shape, geometry, viewMode) };
+  if (geometry.kind === "liftingSurface") return { ...shape, points: projectLiftingSurfaceCadGeometry(shape, geometry, viewMode) };
+  if (geometry.kind === "cylinder" && shape.partType === "motor") {
+    return viewMode === "front"
+      ? { ...shape, points: circularFrontSection(shape, 1, geometry.radiusM, Math.max(0, geometry.centerM[1])) }
+      : { ...shape, points: rectangularSideSectionFromCad(geometry.centerM[0], geometry.lengthM, geometry.radiusM * 2, 1, sideProjectionFrame(shapes)) };
+  }
+  if (geometry.kind === "rotor" && shape.partType === "rotor") {
+    return viewMode === "front"
+      ? { ...shape, points: circularFrontSection(shape, 1, geometry.radiusM, Math.max(0, geometry.centerM[1])) }
+      : { ...shape, points: rotorSideSection({ ...shape, points: canonicalPartPoints(shape) }, 1, shapes, sideProjectionFrame(shapes)) };
+  }
+  return { ...shape, points: [] };
+}
+
+function projectBoxCadGeometry(shape: SizeShape, geometry: Extract<SizeCadGeometry, { kind: "box" }>, viewMode: "front" | "side") {
+  if (viewMode === "side") {
+    return rectangularSideSectionFromCad(geometry.centerM[0], geometry.sizeM[0], geometry.sizeM[2], 1, sideProjectionFrame([]));
+  }
+  const fullWidthM = Math.max(geometry.sizeM[1], 0.01);
+  const halfHeightM = Math.max(geometry.sizeM[2] / 2, 0.004);
+  const centerX = Math.max(0, geometry.centerM[1]);
+  const minX = shapeTouchesMirrorAxis(shape) ? 0 : Math.max(0, centerX - fullWidthM / 2);
+  const maxX = shapeTouchesMirrorAxis(shape) ? fullWidthM / 2 : centerX + fullWidthM / 2;
+  return [
+    { xM: minX, yM: halfHeightM, curveMode: "corner" as const },
+    { xM: maxX, yM: halfHeightM, curveMode: "corner" as const },
+    { xM: maxX, yM: -halfHeightM, curveMode: "corner" as const },
+    { xM: minX, yM: -halfHeightM, curveMode: "corner" as const },
+    { xM: minX, yM: halfHeightM, curveMode: "corner" as const },
+  ];
+}
+
+function projectRevolvedBodyCadGeometry(shape: SizeShape, geometry: Extract<SizeCadGeometry, { kind: "revolvedBody" }>, viewMode: "front" | "side") {
+  if (viewMode === "side") {
+    return revolvedBodySideProfileFromCad(geometry);
+  }
+  return circularFrontSection(shape, 1, geometry.radiusM, Math.max(0, geometry.centerM[1]));
+}
+
+function revolvedBodySideProfileFromCad(geometry: Extract<SizeCadGeometry, { kind: "revolvedBody" }>) {
+  const profile = geometry.profile?.length ? geometry.profile : [
+    { xM: geometry.radiusM, yM: geometry.centerM[0] - geometry.lengthM / 2 },
+    { xM: geometry.radiusM, yM: geometry.centerM[0] + geometry.lengthM / 2 },
+  ];
+  const upper = profile.map((point) => ({
+    ...point,
+    xM: Math.max(point.xM, 0),
+    yM: point.yM,
+    tangentIn: undefined,
+    tangentOut: undefined,
+  }));
+  const lower = [...profile].reverse().map((point) => ({
+    ...point,
+    xM: -Math.max(point.xM, 0),
+    yM: point.yM,
+    tangentIn: undefined,
+    tangentOut: undefined,
+  }));
+  return [...upper, ...lower, upper[0]];
+}
+
+function projectLiftingSurfaceCadGeometry(shape: SizeShape, geometry: Extract<SizeCadGeometry, { kind: "liftingSurface" }>, viewMode: "front" | "side") {
+  if (viewMode === "front") {
+    const halfSpanM = Math.max(geometry.spanM / 2, 0.025);
+    const rootX = shapeTouchesMirrorAxis(shape) ? 0 : Math.max(0, geometry.rootLeadingEdgeM[1]);
+    const tipX = rootX + halfSpanM;
+    const rootHalfHeightM = Math.max(geometry.rootChordM * airfoilThicknessRatio(geometry.airfoil) / 2, 0.003);
+    const tipHalfHeightM = Math.max(geometry.tipChordM * airfoilThicknessRatio(geometry.airfoil) / 2, 0.003);
+    const top: SizePoint[] = [];
+    const bottom: SizePoint[] = [];
+    for (let index = 0; index <= 18; index += 1) {
+      const t = index / 18;
+      const xM = lerp(rootX, tipX, t);
+      const halfHeightM = lerp(rootHalfHeightM, tipHalfHeightM, t);
+      top.push({ xM, yM: halfHeightM, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" });
+      bottom.unshift({ xM, yM: -halfHeightM, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" });
+    }
+    return [...top, ...bottom, top[0]];
+  }
+  const frame = sideProjectionFrame([]);
+  const root = airfoilSideSection(geometry.rootLeadingEdgeM[0], -geometry.rootChordM, geometry.airfoil, 1, frame, geometry.incidenceDeg, false);
+  const tip = airfoilSideSection(geometry.rootLeadingEdgeM[0], -geometry.tipChordM, geometry.airfoil, 1, frame, geometry.incidenceDeg, true);
+  return [...root, ...tip];
+}
+
+function rectangularSideSectionFromCad(centerY: number, lengthM: number, heightM: number, progress: number, frame: SideProjectionFrame) {
+  const halfLengthM = Math.max(lengthM / 2, 0.005);
+  const halfHeightM = Math.max(heightM / 2, 0.003);
+  return [
+    sideProjectedPoint(centerY - halfLengthM, -halfHeightM, progress, frame),
+    sideProjectedPoint(centerY + halfLengthM, -halfHeightM, progress, frame),
+    sideProjectedPoint(centerY + halfLengthM, halfHeightM, progress, frame),
+    sideProjectedPoint(centerY - halfLengthM, halfHeightM, progress, frame),
+    sideProjectedPoint(centerY - halfLengthM, -halfHeightM, progress, frame),
+  ];
 }
 
 export function sideProjectionShape(shape: SizeShape, progress: number, shapes: SizeShape[]): SizeShape {
   const frame = sideProjectionFrame(shapes);
   if (progress < sideCollapseProgress) return collapseShapeToSideAxis(shape, progress / sideCollapseProgress, frame);
 
-  const sectionProgress = (progress - sideCollapseProgress) / (1 - sideCollapseProgress);
-  if (shape.role === "body") return { ...shape, points: bodySideSection(shape, sectionProgress, shapes, frame) };
-  if (shape.role === "liftingSurface") return { ...shape, points: liftingSurfaceSideSection(shape, sectionProgress, frame) };
-  if (shape.role === "part") {
-    const solvedPart = { ...shape, points: canonicalPartPoints(shape) };
-    if (shape.partType === "rotor") return { ...solvedPart, points: rotorSideSection(solvedPart, sectionProgress, shapes, frame) };
-    if (shape.partType === "motor") return { ...solvedPart, points: motorSideSection(solvedPart, sectionProgress, frame) };
-    return { ...solvedPart, points: rectangularSideSection(solvedPart, sectionProgress, partZHeightM(solvedPart), undefined, frame) };
-  }
-  return flattenShapeForSideView(shape, sectionProgress, frame);
+  if (!referenceRoles.includes(shape.role)) return projectCadGeometryShape(shape, shapes, "side");
+  return flattenShapeForSideView(shape, 1, frame);
 }
 
 export function sideProjectionFrame(shapes: SizeShape[]): SideProjectionFrame {
@@ -968,7 +1129,9 @@ export function collapseShapeToSideAxis(shape: SizeShape, progress: number, fram
   };
 }
 
-export function bodySideSection(shape: SizeShape, progress: number, shapes: SizeShape[], frame: SideProjectionFrame) {
+export function bodySideSection(shape: SizeShape, progress: number, shapes: SizeShape[], frame: SideProjectionFrame): SizePoint[] {
+  const localMirrorPlane = shapes.find((candidate) => candidate.role === "mirrorPlane" && candidate.id !== shape.id && shapeTouchesMirrorPlane(shape, candidate));
+  if (localMirrorPlane) return bodySideSectionAroundPlane(shape, localMirrorPlane, progress, frame);
   const pointSets = frontPointSetsForShape(shape, shapes);
   const bounds = pointSetBounds(pointSets);
   const lengthM = Math.max(bounds.maxY - bounds.minY, 0.01);
@@ -980,6 +1143,27 @@ export function bodySideSection(shape: SizeShape, progress: number, shapes: Size
     const halfHeightM = Math.max(widthAtYForSets(pointSets, sourceY) / 2, 0.006);
     right.push(sideProjectedPoint(sourceY, halfHeightM, progress, frame));
     left.unshift(sideProjectedPoint(sourceY, -halfHeightM, progress, frame));
+  }
+  return [...right, ...left, right[0]];
+}
+
+export function bodySideSectionAroundPlane(shape: SizeShape, plane: SizeShape, progress: number, frame: SideProjectionFrame): SizePoint[] {
+  const axis = projectionAxisForLine(plane);
+  if (!axis || shape.points.length < 2) return bodySideSection({ ...shape }, progress, [], frame);
+  const projections = shape.points.map((point) => projectPointOntoAxis(point, axis));
+  const minProjection = Math.min(...projections);
+  const maxProjection = Math.max(...projections);
+  const lengthM = Math.max(maxProjection - minProjection, 0.01);
+  const right: SizePoint[] = [];
+  const left: SizePoint[] = [];
+  for (let index = 0; index <= 24; index += 1) {
+    const stationT = index / 24;
+    const projection = minProjection + lengthM * stationT;
+    const axisPoint = axisPointAtProjection(axis, projection);
+    const sourceY = axisPoint.yM;
+    const radiusM = Math.max(radiusAtAxisProjection(shape.points, axis, projection), 0.006);
+    right.push(sideProjectedPoint(sourceY, radiusM, progress, frame));
+    left.unshift(sideProjectedPoint(sourceY, -radiusM, progress, frame));
   }
   return [...right, ...left, right[0]];
 }
@@ -1164,8 +1348,8 @@ export function boxFrontSection(shape: SizeShape, progress: number, heightM = pa
   const bounds = shapeBounds(shape);
   const halfWidthM = Math.max((bounds.maxX - bounds.minX) / 2, 0.01);
   const halfHeightM = Math.max(heightM / 2, 0.004);
-  const minX = Math.max(0, centerX - halfWidthM);
-  const maxX = centerX + halfWidthM;
+  const minX = shapeTouchesMirrorAxis(shape) ? 0 : Math.max(0, centerX - halfWidthM);
+  const maxX = shapeTouchesMirrorAxis(shape) ? Math.max(bounds.maxX, 0.01) : centerX + halfWidthM;
   return [
     { xM: minX, yM: halfHeightM * progress, curveMode: "corner" as const },
     { xM: maxX, yM: halfHeightM * progress, curveMode: "corner" as const },
@@ -1223,6 +1407,7 @@ export function rotorOrPartRadius(shape: SizeShape, shapes: SizeShape[]) {
 }
 
 export function frontSectionCenterX(shape: SizeShape, shapes: SizeShape[] = []) {
+  if ((shape.role === "body" || shape.role === "part") && shapeTouchesMirrorAxis(shape)) return 0;
   const referenceCenter = referenceCenterXForShape(shape, shapes);
   if (referenceCenter !== undefined) return referenceCenter;
   if (shape.partType === "rotor") return nearestMotorCenterX(shape, shapes) ?? rotorHubCenterX(shape);
@@ -1490,6 +1675,73 @@ export function mirrorPointAcrossLine(point: SizePoint, start: SizePoint, end: S
   };
 }
 
+type ProjectionAxis = {
+  start: SizePoint;
+  unitX: number;
+  unitY: number;
+};
+
+function projectionAxisForLine(lineShape: SizeShape): ProjectionAxis | undefined {
+  const [start, end] = lineShape.points;
+  if (!start || !end) return undefined;
+  const dx = end.xM - start.xM;
+  const dy = end.yM - start.yM;
+  const length = Math.hypot(dx, dy);
+  if (length <= 1e-9) return undefined;
+  return { start, unitX: dx / length, unitY: dy / length };
+}
+
+function projectPointOntoAxis(point: SizePoint, axis: ProjectionAxis) {
+  return (point.xM - axis.start.xM) * axis.unitX + (point.yM - axis.start.yM) * axis.unitY;
+}
+
+function axisPointAtProjection(axis: ProjectionAxis, projection: number): SizePoint {
+  return {
+    xM: axis.start.xM + axis.unitX * projection,
+    yM: axis.start.yM + axis.unitY * projection,
+  };
+}
+
+function radiusAtAxisProjection(points: SizePoint[], axis: ProjectionAxis, projection: number) {
+  let radiusM = 0;
+  const thresholdM = 1e-6;
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    const next = points[(index + 1) % points.length];
+    const pointProjection = projectPointOntoAxis(point, axis);
+    const nextProjection = projectPointOntoAxis(next, axis);
+    if (Math.abs(pointProjection - projection) <= thresholdM) {
+      radiusM = Math.max(radiusM, distanceFromPointToProjectionAxis(point, axis));
+    }
+    if (Math.abs(nextProjection - projection) <= thresholdM) {
+      radiusM = Math.max(radiusM, distanceFromPointToProjectionAxis(next, axis));
+    }
+    const minProjection = Math.min(pointProjection, nextProjection);
+    const maxProjection = Math.max(pointProjection, nextProjection);
+    if (projection < minProjection - thresholdM || projection > maxProjection + thresholdM) continue;
+    const projectionRange = nextProjection - pointProjection;
+    if (Math.abs(projectionRange) <= thresholdM) {
+      radiusM = Math.max(
+        radiusM,
+        distanceFromPointToProjectionAxis(point, axis),
+        distanceFromPointToProjectionAxis(next, axis),
+      );
+      continue;
+    }
+    const t = clamp((projection - pointProjection) / projectionRange, 0, 1);
+    const sample = {
+      xM: point.xM + (next.xM - point.xM) * t,
+      yM: point.yM + (next.yM - point.yM) * t,
+    };
+    radiusM = Math.max(radiusM, distanceFromPointToProjectionAxis(sample, axis));
+  }
+  return radiusM;
+}
+
+function distanceFromPointToProjectionAxis(point: SizePoint, axis: ProjectionAxis) {
+  return Math.abs((point.xM - axis.start.xM) * axis.unitY - (point.yM - axis.start.yM) * axis.unitX);
+}
+
 export function distancePointToLine(point: SizePoint, start: SizePoint, end: SizePoint) {
   const dx = end.xM - start.xM;
   const dy = end.yM - start.yM;
@@ -1559,7 +1811,10 @@ export function closeIfNearCenterline(points: SizePoint[]) {
 
 export function moveAttachedOrFreePoint(current: SizePoint, target: SizePoint, shapes: SizeShape[]): SizePoint {
   if (current.snapAttachment?.kind === "segment") {
-    const sourceShape = shapes.find((shape) => shape.id === current.snapAttachment?.shapeId);
+    const sourceShape =
+      current.snapAttachment.shapeId === implicitMirrorShapeId
+        ? implicitMirrorShape()
+        : shapes.find((shape) => shape.id === current.snapAttachment?.shapeId);
     if (sourceShape?.points[current.snapAttachment.segmentIndex] && sourceShape.points[current.snapAttachment.segmentIndex + 1]) {
       const projection = projectPointToShapeSegment(target, sourceShape.points, current.snapAttachment.segmentIndex);
       return {
@@ -1620,7 +1875,7 @@ export function dimensionTargetPoints(targetA: SizeDimensionTarget, targetB: Siz
 
 function dimensionLineTarget(target: SizeDimensionTarget, shapes: SizeShape[]) {
   if (target.kind !== "segment") return undefined;
-  const shape = shapes.find((candidate) => candidate.id === target.shapeId);
+  const shape = target.shapeId === implicitMirrorShapeId ? implicitMirrorShape() : shapes.find((candidate) => candidate.id === target.shapeId);
   if (!shape || !referenceRoles.includes(shape.role)) return undefined;
   const start = shape?.points[target.segmentIndex];
   const end = shape?.points[target.segmentIndex + 1];
@@ -1660,7 +1915,7 @@ function cross2d(ax: number, ay: number, bx: number, by: number) {
 }
 
 export function dimensionTargetPoint(target: SizeDimensionTarget, shapes: SizeShape[]): SizePoint | undefined {
-  const shape = shapes.find((candidate) => candidate.id === target.shapeId);
+  const shape = target.shapeId === implicitMirrorShapeId ? implicitMirrorShape() : shapes.find((candidate) => candidate.id === target.shapeId);
   if (!shape) return undefined;
   if (target.kind === "node") return shape.points[target.pointIndex];
   return pointAtShapeSegmentT(shape.points, target.segmentIndex, target.t);
@@ -1906,7 +2161,7 @@ export function resolveMotorAttachedPoints(points: SizePoint[], shapes: SizeShap
 export function resolveAttachedPoint(point: SizePoint, shapes: SizeShape[]): SizePoint {
   const attachment = point.snapAttachment;
   if (!attachment) return point;
-  const sourceShape = shapes.find((shape) => shape.id === attachment.shapeId);
+  const sourceShape = attachment.shapeId === implicitMirrorShapeId ? implicitMirrorShape() : shapes.find((shape) => shape.id === attachment.shapeId);
   if (!sourceShape) return { ...point, snapAttachment: undefined };
 
   if (attachment.kind === "node") {

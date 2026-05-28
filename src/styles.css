@@ -1939,6 +1939,23 @@ button {
   stroke-width: 1.5;
 }
 
+.sizing-centerline.implicit-y-mirror {
+  stroke: rgba(250, 204, 21, 0.72);
+  stroke-dasharray: none;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.implicit-y-mirror-label {
+  fill: #fef08a;
+  font-size: 11px;
+  font-weight: 900;
+  paint-order: stroke;
+  pointer-events: none;
+  stroke: #07111a;
+  stroke-width: 3px;
+}
+
 .sizing-origin {
   fill: #0c141d;
   stroke: #facc15;
@@ -2482,6 +2499,53 @@ button {
   padding: 8px 0;
   color: #9fb3c4;
   font-size: 12px;
+}
+
+.shape-metric-card,
+.shape-geometry-readout,
+.suggested-shape-readout {
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid rgba(74, 165, 208, 0.22);
+  border-radius: 7px;
+  background: #0d1822;
+}
+
+.shape-geometry-readout {
+  border-color: rgba(125, 160, 190, 0.16);
+  background: rgba(8, 16, 24, 0.48);
+}
+
+.shape-metric-card strong,
+.shape-geometry-readout strong,
+.suggested-shape-readout strong {
+  color: #eef8ff;
+  font-size: 13px;
+}
+
+.shape-metric-card > span,
+.shape-geometry-readout > span,
+.suggested-shape-readout > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.shape-metric-card b,
+.shape-geometry-readout b,
+.suggested-shape-readout b {
+  color: #eef8ff;
+  font-weight: 800;
+  text-align: right;
+}
+
+.shape-readout-notes {
+  display: grid;
+  gap: 3px;
+  margin-top: 2px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(125, 160, 190, 0.14);
+  color: #7f96a8;
 }
 
 .prop-disc {

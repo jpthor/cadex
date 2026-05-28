@@ -2,6 +2,7 @@ import { Eye, EyeOff, Maximize2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent, WheelEvent } from "react";
 import type {
+  LiftingSurfaceKind,
   PartType,
   SizeDimension,
   SizeDimensionTarget,
@@ -20,7 +21,7 @@ import type {
   ScaleUnit,
 } from "../types";
 import { baseCanvasView, drawablePartTypes, referenceRoles } from "../constants";
-import { partTypeLabels } from "../../sizing";
+import { liftingSurfaceKindLabels, partTypeLabels } from "../../sizing";
 import {
   axisAlignedPoint,
   cloneSizePoints,
@@ -29,6 +30,7 @@ import {
   fitCanvasView,
   flattenPointForFrontView,
   fromCanvas,
+  implicitMirrorShapeId,
   isPointVisible,
   partShapePointsFromDraft,
   projectedShape,
@@ -69,6 +71,8 @@ export function SketchCanvas({
   analysis,
   onAddPoint,
   onActiveRoleChange,
+  activeLiftingSurfaceKind,
+  onActiveLiftingSurfaceKindChange,
   onActivePartTypeChange,
   onCancel,
   onDone,
@@ -120,9 +124,11 @@ export function SketchCanvas({
   analysis?: SizingAnalysis;
   onAddPoint: (point: SizePoint) => void;
   onActiveRoleChange: (role: SizeShapeRole) => void;
+  activeLiftingSurfaceKind: LiftingSurfaceKind;
+  onActiveLiftingSurfaceKindChange: (kind: LiftingSurfaceKind) => void;
   onActivePartTypeChange: (partType: PartType) => void;
   onCancel: () => void;
-  onDone: () => void;
+  onDone: (viewMode: CanvasViewMode) => void;
   onSelect: (id: string) => void;
   onSelectDimension: (id: string) => void;
   onSetDrawActive: (active: boolean) => void;
@@ -179,7 +185,9 @@ export function SketchCanvas({
     ...canvasView,
     originY: renderViewMode === "front" ? canvasView.height / 2 : canvasView.originY,
   };
-  const displayShapes = renderViewMode === "top" ? visibleShapes : visibleShapes.map((shape) => projectedShape(shape, 1, shapes, renderViewMode));
+  const displayShapes = renderViewMode === "top"
+    ? visibleShapes
+    : visibleShapes.map((shape) => (shape.sketchViewMode === renderViewMode ? shape : projectedShape(shape, 1, shapes, renderViewMode)));
   const visibleReferenceShapes = showSizingReference ? sizingReferenceShapes : [];
   const displayReferenceShapes =
     renderViewMode !== "top"
@@ -187,14 +195,15 @@ export function SketchCanvas({
       : visibleReferenceShapes;
   const renderedShapes = [...displayShapes].sort((a, b) => Number(referenceRoles.includes(b.role)) - Number(referenceRoles.includes(a.role)));
   const topDraftPoints = draftRole === "part" ? partShapePointsFromDraft(activePartType, draftPreviewPoint ? [...draftPoints, draftPreviewPoint] : draftPoints) : draftPoints;
-  const displayDraftPoints = renderViewMode !== "top" ? topDraftPoints.map((point) => flattenPointForFrontView(point, 1)) : topDraftPoints;
+  const canDrawSideLiftingSurface = drawActive && draftRole === "liftingSurface" && viewMode === "side";
+  const displayDraftPoints = renderViewMode !== "top" && !canDrawSideLiftingSurface ? topDraftPoints.map((point) => flattenPointForFrontView(point, 1)) : topDraftPoints;
   const displayDraftPreviewPoint =
     draftRole === "part"
       ? null
-      : renderViewMode !== "top" && draftPreviewPoint
+      : renderViewMode !== "top" && draftPreviewPoint && !canDrawSideLiftingSurface
         ? flattenPointForFrontView(draftPreviewPoint, 1)
         : draftPreviewPoint;
-  const canEditCanvas = viewMode === "top" && !isViewTransitioning;
+  const canEditCanvas = (viewMode === "top" || canDrawSideLiftingSurface) && !isViewTransitioning;
   const drawIsSplineTool = drawActive && !referenceRoles.includes(draftRole);
   const selectedMotorId = shapes.find((shape) => shape.id === selectedShapeId && shape.role === "part" && shape.partType === "motor")?.id ?? "";
   const dimensionPrompt = dimensionToolActive && !pendingDimension
@@ -217,8 +226,8 @@ export function SketchCanvas({
   ]);
 
   useEffect(() => {
-    if (drawActive && viewMode !== "top") transitionToView("top");
-  }, [drawActive, viewMode]);
+    if (drawActive && viewMode !== "top" && !(viewMode === "side" && draftRole === "liftingSurface")) transitionToView("top");
+  }, [draftRole, drawActive, viewMode]);
 
   function updateCanvasView(next: CanvasView | ((current: CanvasView) => CanvasView)) {
     setCanvasView((current) => {
@@ -282,6 +291,14 @@ export function SketchCanvas({
       return;
     }
     if (!drawActive) {
+      if (event.shiftKey) {
+        const point = pointFromEvent(event);
+        if (point.snapAttachment?.shapeId === implicitMirrorShapeId) {
+          event.stopPropagation();
+          onJoinToSegment(implicitMirrorShapeId, point);
+          return;
+        }
+      }
       onSelect("");
       return;
     }
@@ -477,16 +494,21 @@ export function SketchCanvas({
         <button
           className={drawIsSplineTool ? "active" : ""}
           onClick={() => {
-            if (referenceRoles.includes(draftRole)) onActiveRoleChange("body");
+            if (viewMode === "side") {
+              onActiveRoleChange("liftingSurface");
+              onActiveLiftingSurfaceKindChange("fin");
+            } else if (referenceRoles.includes(draftRole)) {
+              onActiveRoleChange("body");
+            }
             onSetDimensionToolActive(false);
-            if (viewMode !== "top") transitionToView("top");
+            if (viewMode !== "top" && viewMode !== "side") transitionToView("top");
             onSetDrawActive(!drawIsSplineTool);
             setReferenceMenuOpen(false);
           }}
         >
           Draw
         </button>
-        <button className="done-button" disabled={draftPoints.length < 2} onClick={onDone}>
+        <button className="done-button" disabled={draftPoints.length < 2} onClick={() => onDone(viewMode)}>
           Done
         </button>
         <button className="cancel-button" disabled={!draftPoints.length && !drawActive} onClick={onCancel}>
@@ -507,6 +529,7 @@ export function SketchCanvas({
               className={draftRole === "liftingSurface" ? "active" : ""}
               onClick={() => {
                 onActiveRoleChange("liftingSurface");
+                if (viewMode === "side") onActiveLiftingSurfaceKindChange("fin");
                 setReferenceMenuOpen(false);
               }}
             >
@@ -535,6 +558,20 @@ export function SketchCanvas({
                 ))}
               </select>
             ) : null}
+            {draftRole === "liftingSurface" ? (
+              <select
+                aria-label="Lifting surface type"
+                className="canvas-part-type-select"
+                value={activeLiftingSurfaceKind}
+                onChange={(event) => onActiveLiftingSurfaceKindChange(event.target.value as LiftingSurfaceKind)}
+              >
+                {Object.entries(liftingSurfaceKindLabels).map(([kind, label]) => (
+                  <option key={kind} value={kind}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -557,11 +594,14 @@ export function SketchCanvas({
         aria-label={renderViewMode === "top" ? "Top down half aircraft sketch" : `${renderViewMode} projected aircraft sizing reference`}
       >
       <SizingGrid onSetUnit={setScaleUnit} unit={scaleUnit} view={displayView} />
-      <line className="sizing-centerline" x1={displayView.originX} y1="20" x2={displayView.originX} y2={displayView.height - 28} />
+      <line className="sizing-centerline implicit-y-mirror" x1={displayView.originX} y1="20" x2={displayView.originX} y2={displayView.height - 28} />
       <circle className="sizing-origin" cx={displayView.originX} cy={displayView.originY} r="5" />
       <text className="view-label" x="28" y="42">{renderViewMode === "top" ? "Top down sketch" : `${renderViewMode[0].toUpperCase() + renderViewMode.slice(1)} projected reference`}</text>
       {isPointVisible(displayView.originX, displayView.originY, displayView) ? (
         <text className="view-label subtle" x={displayView.originX + 10} y={displayView.originY - 12}>origin</text>
+      ) : null}
+      {renderViewMode === "top" && isPointVisible(displayView.originX, 46, displayView) ? (
+        <text className="implicit-y-mirror-label" x={displayView.originX + 10} y="58">Y mirror</text>
       ) : null}
       {displayReferenceShapes.length ? (
         <g className="sizing-reference-layer">

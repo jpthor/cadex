@@ -34,7 +34,7 @@ export const auditedSizingAssumptions = {
   liftingSurfaceEffectiveness: {
     wing: 1,
     tailplane: 0.9,
-    canard: 0.85,
+    fin: 0.7,
   } satisfies Record<LiftingSurfaceKind, number>,
   rhoKgM3: 1.225,
   hoverFigureOfMerit: 0.68,
@@ -45,12 +45,12 @@ export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "m
   const lifting = project.shapes.filter((shape) => shape.role === "liftingSurface");
   const parts = project.shapes.filter((shape) => shape.role === "part");
   const liftingStats = lifting.map((shape) => liftingSurfaceStats(shape, project.shapes));
-  const bodyMass = sum(bodies.map(bodyMassEstimate));
+  const bodyMass = sum(bodies.map((shape) => bodyMassEstimate(shape, project.shapes)));
   const liftingMass = sum(lifting.map((shape) => liftingSurfaceMassEstimate(shape, project.shapes)));
   const partMass = sum(parts.map((shape) => partMassEstimate(shape, project.shapes)));
   const totalMassKg = Math.max(bodyMass + liftingMass + partMass, 0.1);
   const massItems = [
-    ...bodies.map((shape) => ({ point: shapeCentroid(shape), mass: bodyMassEstimate(shape) })),
+    ...bodies.map((shape) => ({ point: shapeCentroid(shape), mass: bodyMassEstimate(shape, project.shapes) })),
     ...lifting.map((shape) => ({ point: shapeCentroid(shape), mass: liftingSurfaceMassEstimate(shape, project.shapes) })),
     ...parts.map((shape) => ({ point: shapeCentroid(shape), mass: partMassEstimate(shape, project.shapes) })),
   ];
@@ -149,10 +149,10 @@ function shapeCentroid(shape: SizeShape): SizePoint {
   };
 }
 
-export function bodyMassEstimate(shape: SizeShape) {
+export function bodyMassEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
   const density = auditedSizingAssumptions.bodyMaterialDensityKgM3[shape.bodyMaterial ?? auditedSizingAssumptions.defaultBodyMaterial];
   const thicknessM = Math.max(shape.bodyThicknessMm ?? 1.2, 0) / 1000;
-  return bodySurfaceAreaEstimate(shape) * thicknessM * density;
+  return bodySurfaceAreaEstimate(shape, shapes) * thicknessM * density;
 }
 
 export function liftingSurfaceMassEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
@@ -275,8 +275,10 @@ function rotorDiameterPoints(shape: SizeShape, shapes: SizeShape[]) {
   return shape.points;
 }
 
-export function bodySurfaceAreaEstimate(shape: SizeShape) {
+export function bodySurfaceAreaEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
   if (shape.points.length < 3) return 0;
+  const localMirrorPlane = shapes.find((candidate) => candidate.role === "mirrorPlane" && shapeTouchesLine(shape, candidate));
+  if (localMirrorPlane) return revolvedSurfaceAreaAroundLine(shape.points, localMirrorPlane);
   if (touchesMirrorAxis(shape)) return revolvedSurfaceArea(shape.points);
   const thicknessM = Math.max(shape.bodyThicknessMm ?? 1.2, 0) / 1000;
   const halfPlanformAreaM2 = polygonArea(shape.points);
@@ -487,6 +489,17 @@ function revolvedSurfaceArea(points: SizePoint[]) {
   return points.reduce((area, point, index) => {
     const next = points[(index + 1) % points.length];
     const radiusM = (Math.abs(point.xM) + Math.abs(next.xM)) / 2;
+    const segmentLengthM = Math.hypot(next.xM - point.xM, next.yM - point.yM);
+    return area + segmentLengthM * 2 * Math.PI * radiusM;
+  }, 0);
+}
+
+function revolvedSurfaceAreaAroundLine(points: SizePoint[], lineShape: SizeShape) {
+  const [start, end] = lineShape.points;
+  if (!start || !end || points.length < 2) return 0;
+  return points.reduce((area, point, index) => {
+    const next = points[(index + 1) % points.length];
+    const radiusM = (distancePointToLine(point, start, end) + distancePointToLine(next, start, end)) / 2;
     const segmentLengthM = Math.hypot(next.xM - point.xM, next.yM - point.yM);
     return area + segmentLengthM * 2 * Math.PI * radiusM;
   }, 0);

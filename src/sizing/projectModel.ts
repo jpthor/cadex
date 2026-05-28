@@ -2,7 +2,7 @@ export type SizeShapeRole = "body" | "liftingSurface" | "part" | "referenceLine"
 export type SizeDrawMode = "line" | "spline";
 export type BodyMaterial = "aluminium" | "fibreglass" | "carbonFibre";
 export type PartType = "payload" | "battery" | "motor" | "rotor" | "electronics";
-export type LiftingSurfaceKind = "wing" | "tailplane" | "canard";
+export type LiftingSurfaceKind = "wing" | "tailplane" | "fin";
 
 export type SizePoint = {
   xM: number;
@@ -62,8 +62,10 @@ export type SizeCadGeometry =
   | {
       kind: "revolvedBody";
       centerM: [number, number, number];
+      axisM?: [number, number, number];
       lengthM: number;
       radiusM: number;
+      profile?: SizePoint[];
     }
   | {
       kind: "liftingSurface";
@@ -92,6 +94,7 @@ export type SizeShape = {
   partType?: PartType;
   rotorBladeCount?: number;
   cadGeometry?: SizeCadGeometry;
+  sketchViewMode?: "top" | "front" | "side";
 };
 
 export type SizingMission = {
@@ -193,7 +196,7 @@ export const partTypeLabels: Record<PartType, string> = {
 export const liftingSurfaceKindLabels: Record<LiftingSurfaceKind, string> = {
   wing: "Wing",
   tailplane: "Tailplane",
-  canard: "Canard",
+  fin: "Fin",
 };
 
 export function defaultSizingProject(): SizingProject {
@@ -311,6 +314,7 @@ function normalizeShape(shape: SizeShape): SizeShape {
     partType,
     rotorBladeCount: role === "part" && partType === "rotor" ? Math.max(1, Math.round(numberOr(shape.rotorBladeCount, 2))) : undefined,
     cadGeometry: normalizeCadGeometry(shape.cadGeometry),
+    sketchViewMode: normalizeSketchViewMode(shape.sketchViewMode),
   };
 }
 
@@ -341,11 +345,16 @@ function normalizeCadGeometry(value: unknown): SizeCadGeometry | undefined {
     };
   }
   if (candidate.kind === "revolvedBody" && isVec3(candidate.centerM)) {
+    const profile = Array.isArray(candidate.profile)
+      ? candidate.profile.map(normalizeProfilePoint).filter((point): point is SizePoint => Boolean(point))
+      : undefined;
     return {
       kind: "revolvedBody",
       centerM: candidate.centerM,
+      axisM: isVec3(candidate.axisM) ? candidate.axisM : undefined,
       lengthM: positiveNumber(candidate.lengthM, 0.01),
       radiusM: positiveNumber(candidate.radiusM, 0.005),
+      profile,
     };
   }
   if (candidate.kind === "liftingSurface" && isVec3(candidate.rootLeadingEdgeM)) {
@@ -364,6 +373,22 @@ function normalizeCadGeometry(value: unknown): SizeCadGeometry | undefined {
 
 function isVec3(value: unknown): value is [number, number, number] {
   return Array.isArray(value) && value.length === 3 && value.every((entry) => Number.isFinite(entry));
+}
+
+function normalizeProfilePoint(value: unknown): SizePoint | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const point = value as Partial<SizePoint>;
+  if (!Number.isFinite(point.xM) || !Number.isFinite(point.yM)) return undefined;
+  return {
+    xM: numberOr(point.xM, 0),
+    yM: numberOr(point.yM, 0),
+    curveMode: point.curveMode === "corner" ? "corner" : "spline",
+    segmentInMode: point.segmentInMode === "spline" ? "spline" : point.segmentInMode === "corner" ? "corner" : undefined,
+    segmentOutMode: point.segmentOutMode === "spline" ? "spline" : point.segmentOutMode === "corner" ? "corner" : undefined,
+    tangentIn: normalizeVector(point.tangentIn),
+    tangentOut: normalizeVector(point.tangentOut),
+    snapAttachment: normalizeSnapAttachment(point.snapAttachment),
+  };
 }
 
 function positiveNumber(value: unknown, fallback: number) {
@@ -433,7 +458,11 @@ function normalizePartType(value: unknown): PartType {
 }
 
 function normalizeLiftingSurfaceKind(value: unknown): LiftingSurfaceKind {
-  return value === "tailplane" || value === "canard" || value === "wing" ? value : "wing";
+  return value === "tailplane" || value === "fin" || value === "wing" ? value : "wing";
+}
+
+function normalizeSketchViewMode(value: unknown) {
+  return value === "front" || value === "side" || value === "top" ? value : undefined;
 }
 
 function normalizeRole(value: unknown): SizeShapeRole {

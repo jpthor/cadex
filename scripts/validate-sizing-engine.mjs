@@ -22,6 +22,7 @@ const bodyMassKg = bodySurfaceAreaM2 * thicknessM * carbonFibreDensityKgM3;
 const offsetBodyHalfAreaM2 = 0.1;
 const offsetBodyPerimeterM = 2.2;
 const offsetBodySurfaceAreaM2 = (offsetBodyHalfAreaM2 * 2 + offsetBodyPerimeterM * thicknessM) * 2;
+const localMirrorBodySurfaceAreaM2 = bodySurfaceAreaM2;
 
 const wingHalfAreaM2 = 0.2;
 const wingSurfaceAreaM2 = wingHalfAreaM2 * 2;
@@ -118,6 +119,38 @@ approx(
   }),
   offsetBodySurfaceAreaM2,
   "offset body top, bottom, side area mirrored once",
+);
+approx(
+  bodySurfaceAreaEstimate(
+    {
+      id: "local-mirror-body",
+      role: "body",
+      label: "Local mirror body",
+      drawMode: "line",
+      bodyMaterial: "carbonFibre",
+      bodyThicknessMm: 1.2,
+      points: [
+        { xM: 0.2, yM: 0.5 },
+        { xM: 0.3, yM: 0.5 },
+        { xM: 0.3, yM: -0.5 },
+        { xM: 0.2, yM: -0.5 },
+      ],
+    },
+    [
+      {
+        id: "tailboom-mirror",
+        role: "mirrorPlane",
+        label: "Tailboom mirror",
+        drawMode: "line",
+        points: [
+          { xM: 0.2, yM: 0.6 },
+          { xM: 0.2, yM: -0.6 },
+        ],
+      },
+    ],
+  ),
+  localMirrorBodySurfaceAreaM2,
+  "body touching a created mirror plane revolves around that plane",
 );
 approx(liftingSurfaceSkinAreaEstimate(project.shapes[1]), wingSurfaceAreaM2, "lifting surface mirrored skin area");
 approx(liftingSurfaceMassEstimate(project.shapes[1]), wingMassKg, "lifting surface material mass");

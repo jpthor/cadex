@@ -1838,32 +1838,67 @@
         "tailVolumeTarget": 0.55,
         "takeoffThrustToWeight": 1.4
       },
-      "selectedShapeId": "",
+      "selectedShapeId": "part-0b14ccfb-5128-43d9-bf3d-166f44868b81",
       "shapes": [
         {
           "bodyMaterial": "carbonFibre",
           "bodyThicknessMm": 1.2,
           "cadGeometry": {
+            "axisM": [
+              1,
+              0,
+              0
+            ],
             "centerM": [
-              -0.737853226252477,
+              -0.7394594811712523,
               0,
               0
             ],
             "kind": "revolvedBody",
-            "lengthM": 1.475706452504954,
+            "lengthM": 1.4781751375719523,
+            "profile": [
+              {
+                "curveMode": "spline",
+                "segmentInMode": "corner",
+                "segmentOutMode": "corner",
+                "xM": 0,
+                "yM": -0.0003719123852761186
+              },
+              {
+                "curveMode": "spline",
+                "xM": 0.11312227107255168,
+                "yM": -0.19925435443071243
+              },
+              {
+                "curveMode": "spline",
+                "xM": 0.11312227107255168,
+                "yM": -1.040804925708669
+              },
+              {
+                "curveMode": "spline",
+                "xM": 0,
+                "yM": -1.4785470499572284
+              }
+            ],
             "radiusM": 0.11312227107255168
           },
           "drawMode": "spline",
           "id": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
-          "label": "Body 1",
+          "label": "Fuselage",
           "massKg": 0.5,
           "points": [
             {
-              "curveMode": "corner",
+              "curveMode": "spline",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "implicit-y-axis-mirror",
+                "t": 0.4999998140438074
+              },
               "xM": 0,
-              "yM": 0
+              "yM": -0.0003719123852761186
             },
             {
               "curveMode": "spline",
@@ -1889,22 +1924,28 @@
             },
             {
               "curveMode": "spline",
-              "xM": 0.0028284084318690706,
-              "yM": -1.475706452504954
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "implicit-y-axis-mirror",
+                "t": 0.4992607264750214
+              },
+              "xM": 0,
+              "yM": -1.4785470499572284
             }
           ],
           "role": "body"
         },
         {
-          "airfoil": "NACA 0012",
+          "airfoil": "NACA 2412",
           "airfoilStations": {
-            "root10": "NACA 0012",
-            "tip90": "NACA 0012"
+            "root10": "NACA 2412",
+            "tip90": "NACA 2412"
           },
           "bodyMaterial": "carbonFibre",
           "bodyThicknessMm": 1.2,
           "cadGeometry": {
-            "airfoil": "NACA 0012",
+            "airfoil": "NACA 2412",
             "incidenceDeg": 0,
             "kind": "liftingSurface",
             "rootChordM": 0.6597016184300655,
@@ -1936,7 +1977,7 @@
                 "t": 0.3653829187872805
               },
               "xM": 0.11312227107255168,
-              "yM": -0.5067425584713555
+              "yM": -0.5067425584713554
             },
             {
               "curveMode": "spline",
@@ -1997,7 +2038,7 @@
                 "t": 0.8863419081857618
               },
               "xM": 0.11312227107255168,
-              "yM": -0.9451558936120344
+              "yM": -0.945155893612034
             }
           ],
           "role": "liftingSurface"
@@ -2071,20 +2112,20 @@
         {
           "cadGeometry": {
             "centerM": [
-              -0.4361179113871413,
+              -0.4294858794768905,
               0,
               0
             ],
             "kind": "box",
             "sizeM": [
-              0.344963252818071,
-              0.06234617757492214,
-              0.06234617757492214
+              0.363452349782288,
+              0.22303651873321775,
+              0.11151825936660888
             ]
           },
           "drawMode": "line",
           "id": "part-e73fd5e7-cc9e-4c68-aba4-f851ede38851",
-          "label": "Battery 1",
+          "label": "Battery",
           "massKg": 0,
           "partType": "battery",
           "points": [
@@ -2092,29 +2133,35 @@
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.0032289468406924452,
-              "yM": -0.2636362849781058
+              "xM": 0.042759289765229976,
+              "yM": -0.24901525057514423
             },
             {
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.06557512441561458,
-              "yM": -0.2636362849781058
+              "xM": 0.11151825936660888,
+              "yM": -0.24901525057514423
             },
             {
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.06557512441561458,
-              "yM": -0.6085995377961768
+              "xM": 0.11151825936660888,
+              "yM": -0.6112120543680345
             },
             {
-              "curveMode": "corner",
+              "curveMode": "spline",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.0032289468406924452,
-              "yM": -0.6085995377961768
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "implicit-y-axis-mirror",
+                "t": 0.4998761201477071
+              },
+              "xM": 0,
+              "yM": -0.24775970458574648
             }
           ],
           "role": "part"
@@ -2137,7 +2184,7 @@
           },
           "drawMode": "line",
           "id": "part-0b14ccfb-5128-43d9-bf3d-166f44868b81",
-          "label": "Motor 1",
+          "label": "Motor",
           "massKg": 0,
           "partType": "motor",
           "points": [
@@ -2200,18 +2247,42 @@
           "bodyMaterial": "carbonFibre",
           "bodyThicknessMm": 1.2,
           "cadGeometry": {
+            "axisM": [
+              1,
+              0,
+              0
+            ],
             "centerM": [
               -1.2287135355876215,
-              0,
+              0.6903118872640711,
               0
             ],
             "kind": "revolvedBody",
             "lengthM": 1.002572928824757,
-            "radiusM": 0.7200134463511801
+            "profile": [
+              {
+                "curveMode": "spline",
+                "xM": 0.02793544349576871,
+                "yM": -0.7274270711752431
+              },
+              {
+                "curveMode": "spline",
+                "xM": 0.02970155908710917,
+                "yM": -1.7299034632589383
+              },
+              {
+                "curveMode": "spline",
+                "segmentInMode": "corner",
+                "segmentOutMode": "corner",
+                "xM": 3.033918085173129e-16,
+                "yM": -1.73
+              }
+            ],
+            "radiusM": 0.02970155908710917
           },
           "drawMode": "spline",
           "id": "body-981eff62-b3e2-4c85-b3d2-ed49aaa039b9",
-          "label": "Body 2",
+          "label": "tailboom",
           "massKg": 0.5,
           "points": [
             {
@@ -2259,13 +2330,13 @@
               0
             ],
             "kind": "rotor",
-            "radiusM": 0.30413112946494825,
-            "rootChordM": 0.03345442424114431,
-            "tipChordM": 0.017031343250037103
+            "radiusM": 0.2817571048601545,
+            "rootChordM": 0.03099328153461699,
+            "tipChordM": 0.015778397872168653
           },
           "drawMode": "line",
           "id": "part-a01ec89c-3797-43ab-b9fc-6830451a430b",
-          "label": "Rotor 1",
+          "label": "Rotor",
           "massKg": 0,
           "partType": "rotor",
           "points": [
@@ -2286,7 +2357,7 @@
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.9944430167290194,
+              "xM": 0.9720689921242256,
               "yM": -0.22500191544327927
             }
           ],
@@ -2321,8 +2392,8 @@
             "root10": 0,
             "tip90": 0
           },
-          "label": "Wing 2",
-          "liftingSurfaceKind": "wing",
+          "label": "Tailplane",
+          "liftingSurfaceKind": "tailplane",
           "massKg": 0.15,
           "points": [
             {
@@ -2400,9 +2471,9 @@
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 720,
-        "originX": 322.3670209492491,
-        "originY": 192.99843906985672,
-        "scale": 331.7563626887593,
+        "originX": 171.59389831623412,
+        "originY": 73.22594789502,
+        "scale": 629.0679738445209,
         "width": 900
       }
     },
@@ -2448,32 +2519,67 @@
       "tailVolumeTarget": 0.55,
       "takeoffThrustToWeight": 1.4
     },
-    "selectedShapeId": "",
+    "selectedShapeId": "part-0b14ccfb-5128-43d9-bf3d-166f44868b81",
     "shapes": [
       {
         "bodyMaterial": "carbonFibre",
         "bodyThicknessMm": 1.2,
         "cadGeometry": {
+          "axisM": [
+            1,
+            0,
+            0
+          ],
           "centerM": [
-            -0.737853226252477,
+            -0.7394594811712523,
             0,
             0
           ],
           "kind": "revolvedBody",
-          "lengthM": 1.475706452504954,
+          "lengthM": 1.4781751375719523,
+          "profile": [
+            {
+              "curveMode": "spline",
+              "segmentInMode": "corner",
+              "segmentOutMode": "corner",
+              "xM": 0,
+              "yM": -0.0003719123852761186
+            },
+            {
+              "curveMode": "spline",
+              "xM": 0.11312227107255168,
+              "yM": -0.19925435443071243
+            },
+            {
+              "curveMode": "spline",
+              "xM": 0.11312227107255168,
+              "yM": -1.040804925708669
+            },
+            {
+              "curveMode": "spline",
+              "xM": 0,
+              "yM": -1.4785470499572284
+            }
+          ],
           "radiusM": 0.11312227107255168
         },
         "drawMode": "spline",
         "id": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
-        "label": "Body 1",
+        "label": "Fuselage",
         "massKg": 0.5,
         "points": [
           {
-            "curveMode": "corner",
+            "curveMode": "spline",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "implicit-y-axis-mirror",
+              "t": 0.4999998140438074
+            },
             "xM": 0,
-            "yM": 0
+            "yM": -0.0003719123852761186
           },
           {
             "curveMode": "spline",
@@ -2499,22 +2605,28 @@
           },
           {
             "curveMode": "spline",
-            "xM": 0.0028284084318690706,
-            "yM": -1.475706452504954
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "implicit-y-axis-mirror",
+              "t": 0.4992607264750214
+            },
+            "xM": 0,
+            "yM": -1.4785470499572284
           }
         ],
         "role": "body"
       },
       {
-        "airfoil": "NACA 0012",
+        "airfoil": "NACA 2412",
         "airfoilStations": {
-          "root10": "NACA 0012",
-          "tip90": "NACA 0012"
+          "root10": "NACA 2412",
+          "tip90": "NACA 2412"
         },
         "bodyMaterial": "carbonFibre",
         "bodyThicknessMm": 1.2,
         "cadGeometry": {
-          "airfoil": "NACA 0012",
+          "airfoil": "NACA 2412",
           "incidenceDeg": 0,
           "kind": "liftingSurface",
           "rootChordM": 0.6597016184300655,
@@ -2546,7 +2658,7 @@
               "t": 0.3653829187872805
             },
             "xM": 0.11312227107255168,
-            "yM": -0.5067425584713555
+            "yM": -0.5067425584713554
           },
           {
             "curveMode": "spline",
@@ -2607,7 +2719,7 @@
               "t": 0.8863419081857618
             },
             "xM": 0.11312227107255168,
-            "yM": -0.9451558936120344
+            "yM": -0.945155893612034
           }
         ],
         "role": "liftingSurface"
@@ -2681,20 +2793,20 @@
       {
         "cadGeometry": {
           "centerM": [
-            -0.4361179113871413,
+            -0.4294858794768905,
             0,
             0
           ],
           "kind": "box",
           "sizeM": [
-            0.344963252818071,
-            0.06234617757492214,
-            0.06234617757492214
+            0.363452349782288,
+            0.22303651873321775,
+            0.11151825936660888
           ]
         },
         "drawMode": "line",
         "id": "part-e73fd5e7-cc9e-4c68-aba4-f851ede38851",
-        "label": "Battery 1",
+        "label": "Battery",
         "massKg": 0,
         "partType": "battery",
         "points": [
@@ -2702,29 +2814,35 @@
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.0032289468406924452,
-            "yM": -0.2636362849781058
+            "xM": 0.042759289765229976,
+            "yM": -0.24901525057514423
           },
           {
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.06557512441561458,
-            "yM": -0.2636362849781058
+            "xM": 0.11151825936660888,
+            "yM": -0.24901525057514423
           },
           {
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.06557512441561458,
-            "yM": -0.6085995377961768
+            "xM": 0.11151825936660888,
+            "yM": -0.6112120543680345
           },
           {
-            "curveMode": "corner",
+            "curveMode": "spline",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.0032289468406924452,
-            "yM": -0.6085995377961768
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "implicit-y-axis-mirror",
+              "t": 0.4998761201477071
+            },
+            "xM": 0,
+            "yM": -0.24775970458574648
           }
         ],
         "role": "part"
@@ -2747,7 +2865,7 @@
         },
         "drawMode": "line",
         "id": "part-0b14ccfb-5128-43d9-bf3d-166f44868b81",
-        "label": "Motor 1",
+        "label": "Motor",
         "massKg": 0,
         "partType": "motor",
         "points": [
@@ -2810,18 +2928,42 @@
         "bodyMaterial": "carbonFibre",
         "bodyThicknessMm": 1.2,
         "cadGeometry": {
+          "axisM": [
+            1,
+            0,
+            0
+          ],
           "centerM": [
             -1.2287135355876215,
-            0,
+            0.6903118872640711,
             0
           ],
           "kind": "revolvedBody",
           "lengthM": 1.002572928824757,
-          "radiusM": 0.7200134463511801
+          "profile": [
+            {
+              "curveMode": "spline",
+              "xM": 0.02793544349576871,
+              "yM": -0.7274270711752431
+            },
+            {
+              "curveMode": "spline",
+              "xM": 0.02970155908710917,
+              "yM": -1.7299034632589383
+            },
+            {
+              "curveMode": "spline",
+              "segmentInMode": "corner",
+              "segmentOutMode": "corner",
+              "xM": 3.033918085173129e-16,
+              "yM": -1.73
+            }
+          ],
+          "radiusM": 0.02970155908710917
         },
         "drawMode": "spline",
         "id": "body-981eff62-b3e2-4c85-b3d2-ed49aaa039b9",
-        "label": "Body 2",
+        "label": "tailboom",
         "massKg": 0.5,
         "points": [
           {
@@ -2869,13 +3011,13 @@
             0
           ],
           "kind": "rotor",
-          "radiusM": 0.30413112946494825,
-          "rootChordM": 0.03345442424114431,
-          "tipChordM": 0.017031343250037103
+          "radiusM": 0.2817571048601545,
+          "rootChordM": 0.03099328153461699,
+          "tipChordM": 0.015778397872168653
         },
         "drawMode": "line",
         "id": "part-a01ec89c-3797-43ab-b9fc-6830451a430b",
-        "label": "Rotor 1",
+        "label": "Rotor",
         "massKg": 0,
         "partType": "rotor",
         "points": [
@@ -2896,7 +3038,7 @@
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.9944430167290194,
+            "xM": 0.9720689921242256,
             "yM": -0.22500191544327927
           }
         ],
@@ -2931,8 +3073,8 @@
           "root10": 0,
           "tip90": 0
         },
-        "label": "Wing 2",
-        "liftingSurfaceKind": "wing",
+        "label": "Tailplane",
+        "liftingSurfaceKind": "tailplane",
         "massKg": 0.15,
         "points": [
           {
@@ -3010,11 +3152,11 @@
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 720,
-      "originX": 322.3670209492491,
-      "originY": 192.99843906985672,
-      "scale": 331.7563626887593,
+      "originX": 171.59389831623412,
+      "originY": 73.22594789502,
+      "scale": 629.0679738445209,
       "width": 900
     }
   },
-  "updatedAt": 1779971638369
+  "updatedAt": 1779974560192
 }

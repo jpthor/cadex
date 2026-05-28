@@ -65,6 +65,7 @@ export function ShapeEditor({
   activeAirfoilStation,
   mirrorPlanes,
   shape,
+  suggestedRows = [],
   onActiveAirfoilStationChange,
   onChange,
   onDelete,
@@ -72,6 +73,7 @@ export function ShapeEditor({
   activeAirfoilStation: AirfoilStation;
   mirrorPlanes: SizeShape[];
   shape: SizeShape;
+  suggestedRows?: Array<{ label: string; value: string }>;
   onActiveAirfoilStationChange: (station: AirfoilStation) => void;
   onChange: (patch: Partial<SizeShape>) => void;
   onDelete: () => void;
@@ -83,7 +85,7 @@ export function ShapeEditor({
   const motorCount = shape.partType === "motor" && partTouchesMirrorAxis(shape) ? 1 : 2;
   const motorVolumeM3 = shape.partType === "motor" ? motorVolumeEstimate(shape) : 0;
   const motorMassKg = shape.partType === "motor" ? motorMassEstimate(shape) : 0;
-  const cadGeometry = cadGeometryForShape(shape);
+  const cadGeometry = cadGeometryForShape(shape, mirrorPlanes);
   const liftingStats = shape.role === "liftingSurface" ? liftingSurfaceStats(shape, mirrorPlanes) : undefined;
   const drawnLiftingAreaM2 = shape.role === "liftingSurface" ? polygonAreaM2(shape.points) : 0;
   const drawnLiftingSpanM = shape.role === "liftingSurface" ? Math.max(bounds.maxX - bounds.minX, 0) : 0;
@@ -219,8 +221,8 @@ export function ShapeEditor({
             onChange={(bodyThicknessMm) => onChange({ bodyThicknessMm })}
           />
           <div className="shape-readout">
-            <span>Planform skin area {bodySurfaceAreaEstimate(shape).toFixed(3)} m2</span>
-            <span>Body mass {bodyMassEstimate(shape).toFixed(3)} kg</span>
+            <span>Planform skin area {bodySurfaceAreaEstimate(shape, mirrorPlanes).toFixed(3)} m2</span>
+            <span>Body mass {bodyMassEstimate(shape, mirrorPlanes).toFixed(3)} kg</span>
           </div>
         </>
       ) : referenceRoles.includes(shape.role) ? (
@@ -229,66 +231,124 @@ export function ShapeEditor({
         </div>
       ) : (
         <>
-          <div className="shape-readout">
-            <span>Part {partTypeLabels[shape.partType ?? "payload"]}</span>
-          </div>
           {shape.partType === "battery" ? (
-            <div className="shape-readout">
-              <span>{partTouchesMirrorAxis(shape) ? "1 centerline battery, mirrored from Y axis" : "2 mirrored batteries"}</span>
-              <span>Plan area {batteryPlanformAreaEstimate(shape).toFixed(4)} m2</span>
-              <span>Inferred thickness {(inferredBatteryThicknessM(shape) * 1000).toFixed(0)} mm</span>
-              <span>Volume {(batteryVolumeEstimate(shape) * 1000).toFixed(2)} L</span>
-              <span>Battery mass {batteryMassEstimate(shape).toFixed(3)} kg</span>
-              <span>LiPo density 1.70 kg/L</span>
-            </div>
+            <ReadoutCard
+              title="Current battery"
+              rows={[
+                { label: "Plan area", value: `${batteryPlanformAreaEstimate(shape).toFixed(4)} m2` },
+                { label: "Thickness", value: `${(inferredBatteryThicknessM(shape) * 1000).toFixed(0)} mm` },
+                { label: "Volume", value: `${(batteryVolumeEstimate(shape) * 1000).toFixed(2)} L` },
+                { label: "Mass", value: `${batteryMassEstimate(shape).toFixed(3)} kg` },
+              ]}
+              notes={[partTouchesMirrorAxis(shape) ? "1 centerline battery, mirrored from Y axis" : "2 mirrored batteries", "LiPo density 1.70 kg/L"]}
+            />
           ) : shape.partType === "motor" ? (
-            <div className="shape-readout">
-              <span>Diameter {(motorDiameter * 1000).toFixed(0)} mm</span>
-              <span>Length {(motorLength * 1000).toFixed(0)} mm</span>
-              <span>Depth {(motorDepth * 1000).toFixed(0)} mm</span>
-              <span>Volume {(motorVolumeM3 * 1000).toFixed(2)} L</span>
-              <span>Mass / motor {(motorMassKg / Math.max(motorCount, 1)).toFixed(3)} kg</span>
-              <span>Total motor mass {motorMassKg.toFixed(3)} kg</span>
-              <span>Motor density 3.20 kg/L</span>
-              {cadGeometry?.kind === "cylinder" ? <span>Axis follows motor length</span> : null}
-            </div>
+            <ReadoutCard
+              title="Current motor"
+              rows={[
+                { label: "Diameter", value: `${(motorDiameter * 1000).toFixed(0)} mm` },
+                { label: "Length", value: `${(motorLength * 1000).toFixed(0)} mm` },
+                { label: "Depth", value: `${(motorDepth * 1000).toFixed(0)} mm` },
+                { label: "Volume", value: `${(motorVolumeM3 * 1000).toFixed(2)} L` },
+                { label: "Mass / motor", value: `${(motorMassKg / Math.max(motorCount, 1)).toFixed(3)} kg` },
+                { label: "Total mass", value: `${motorMassKg.toFixed(3)} kg` },
+              ]}
+              notes={["Motor density 3.20 kg/L", ...(cadGeometry?.kind === "cylinder" ? ["Axis follows motor length"] : [])]}
+            />
           ) : shape.partType === "rotor" ? (
             <>
-              <div className="shape-readout">
-                <span>Diameter {(rotorDiameterEstimate(shape, mirrorPlanes) * 1000).toFixed(0)} mm</span>
-                <span>{rotorInstanceCount(shape, mirrorPlanes)} physical rotors after mirrors</span>
-                <span>Blade count {Math.max(1, Math.round(shape.rotorBladeCount ?? 2))} from Sizing</span>
-              </div>
-              <div className="shape-readout">
-                <span>Carbon fibre volume {(rotorVolumePerRotorEstimate(shape, mirrorPlanes) * 1000).toFixed(3)} L / rotor</span>
-                <span>Mass / rotor {rotorMassPerRotorEstimate(shape, mirrorPlanes).toFixed(3)} kg</span>
-                <span>Carbon fibre density 1.60 kg/L</span>
-                <span>Total rotor mass {rotorTotalMassEstimate(shape, mirrorPlanes).toFixed(3)} kg</span>
-              </div>
+              <ReadoutCard
+                title="Current rotor"
+                rows={[
+                  { label: "Diameter", value: `${(rotorDiameterEstimate(shape, mirrorPlanes) * 1000).toFixed(0)} mm` },
+                  { label: "Blade count", value: `${Math.max(1, Math.round(shape.rotorBladeCount ?? 2))}` },
+                  { label: "Physical count", value: `${rotorInstanceCount(shape, mirrorPlanes)}` },
+                  { label: "Volume / rotor", value: `${(rotorVolumePerRotorEstimate(shape, mirrorPlanes) * 1000).toFixed(3)} L` },
+                  { label: "Mass / rotor", value: `${rotorMassPerRotorEstimate(shape, mirrorPlanes).toFixed(3)} kg` },
+                  { label: "Total mass", value: `${rotorTotalMassEstimate(shape, mirrorPlanes).toFixed(3)} kg` },
+                ]}
+                notes={["Carbon fibre density 1.60 kg/L"]}
+              />
             </>
           ) : (
             <NumberField label="Mass" suffix="kg" value={shape.massKg ?? 0} onChange={(massKg) => onChange({ massKg })} />
           )}
         </>
       )}
-      <div className="shape-readout">
-        <span>{shape.points.length} points</span>
+      <div className="shape-readout shape-geometry-readout">
+        <strong>Geometry</strong>
+        <span>
+          <span>Points</span>
+          <b>{shape.points.length}</b>
+        </span>
         {shape.partType === "motor" ? (
           <>
-            <span>{motorCount} physical motor{motorCount === 1 ? "" : "s"} after mirror</span>
-            <span>{motorLength.toFixed(2)} m axis length</span>
+            <span>
+              <span>Physical motors</span>
+              <b>{motorCount}</b>
+            </span>
+            <span>
+              <span>Axis length</span>
+              <b>{motorLength.toFixed(2)} m</b>
+            </span>
           </>
         ) : (
           <>
-            <span>{(bounds.maxX * 2).toFixed(2)} m mirrored width</span>
-            <span>{(bounds.maxY - bounds.minY).toFixed(2)} m length</span>
+            <span>
+              <span>Mirrored width</span>
+              <b>{(bounds.maxX * 2).toFixed(2)} m</b>
+            </span>
+            <span>
+              <span>Length</span>
+              <b>{(bounds.maxY - bounds.minY).toFixed(2)} m</b>
+            </span>
           </>
         )}
       </div>
+      {suggestedRows.length ? (
+        <div className="shape-readout suggested-shape-readout">
+          <strong>Suggested params</strong>
+          {suggestedRows.map((row) => (
+            <span key={row.label}>
+              <span>{row.label}</span>
+              <b>{row.value}</b>
+            </span>
+          ))}
+        </div>
+      ) : null}
       <button className="delete-component-button" onClick={onDelete}>
         <Trash2 size={15} />
         Delete shape
       </button>
+    </div>
+  );
+}
+
+function ReadoutCard({
+  notes = [],
+  rows,
+  title,
+}: {
+  notes?: string[];
+  rows: Array<{ label: string; value: string }>;
+  title: string;
+}) {
+  return (
+    <div className="shape-readout shape-metric-card">
+      <strong>{title}</strong>
+      {rows.map((row) => (
+        <span key={row.label}>
+          <span>{row.label}</span>
+          <b>{row.value}</b>
+        </span>
+      ))}
+      {notes.length ? (
+        <div className="shape-readout-notes">
+          {notes.map((note) => (
+            <span key={note}>{note}</span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
