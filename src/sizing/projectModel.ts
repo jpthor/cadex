@@ -29,12 +29,51 @@ export type SizeDimension = {
   targetA: SizeDimensionTarget;
   targetB: SizeDimensionTarget;
   valueM: number;
+  labelOffset?: SizeVector;
 };
 
 export type SizeVector = {
   xM: number;
   yM: number;
 };
+
+export type SizeCadGeometry =
+  | {
+      kind: "box";
+      centerM: [number, number, number];
+      sizeM: [number, number, number];
+    }
+  | {
+      kind: "cylinder";
+      centerM: [number, number, number];
+      axisM: [number, number, number];
+      radiusM: number;
+      lengthM: number;
+    }
+  | {
+      kind: "rotor";
+      centerM: [number, number, number];
+      axisM: [number, number, number];
+      radiusM: number;
+      bladeCount: number;
+      rootChordM: number;
+      tipChordM: number;
+    }
+  | {
+      kind: "revolvedBody";
+      centerM: [number, number, number];
+      lengthM: number;
+      radiusM: number;
+    }
+  | {
+      kind: "liftingSurface";
+      rootLeadingEdgeM: [number, number, number];
+      spanM: number;
+      rootChordM: number;
+      tipChordM: number;
+      airfoil: string;
+      incidenceDeg: number;
+    };
 
 export type SizeShape = {
   id: string;
@@ -52,9 +91,12 @@ export type SizeShape = {
   bodyThicknessMm?: number;
   partType?: PartType;
   rotorBladeCount?: number;
+  cadGeometry?: SizeCadGeometry;
 };
 
 export type SizingMission = {
+  aspectRatio: number;
+  lengthRatio: number;
   payloadKg: number;
   takeoffThrustToWeight: number;
   cruiseSpeedMS: number;
@@ -91,6 +133,7 @@ export type SizingProject = {
   shapes: SizeShape[];
   sizingReferenceShapes?: SizeShape[];
   showSizingReference?: boolean;
+  sketchCanvasView?: SizingCanvasView;
   selectedShapeId: string;
   activeRole: SizeShapeRole;
   drawMode: SizeDrawMode;
@@ -100,7 +143,17 @@ export type SizingProject = {
   dimensions?: SizeDimension[];
 };
 
+export type SizingCanvasView = {
+  width: number;
+  height: number;
+  originX: number;
+  originY: number;
+  scale: number;
+};
+
 const defaultMission: SizingMission = {
+  aspectRatio: 2.8,
+  lengthRatio: 0.8,
   payloadKg: 2,
   takeoffThrustToWeight: 1.4,
   cruiseSpeedMS: 17,
@@ -112,7 +165,7 @@ const defaultMission: SizingMission = {
   tailVolumeTarget: 0.55,
   batteryEnergyDensityWhKg: 190,
   motorCount: 2,
-  rotorBladeCount: 2,
+  rotorBladeCount: 4,
 };
 
 export const roleLabels: Record<SizeShapeRole, string> = {
@@ -153,6 +206,7 @@ export function defaultSizingProject(): SizingProject {
     dimensions: [],
     sizingReferenceShapes: [],
     showSizingReference: true,
+    sketchCanvasView: undefined,
   };
 }
 
@@ -168,10 +222,13 @@ export function normalizeSizingProject(input: unknown): SizingProject {
       ? candidate.sizingReferenceShapes.map(normalizeShape).filter((shape) => shape.points.length >= 2)
       : [],
     showSizingReference: candidate.showSizingReference ?? true,
+    sketchCanvasView: normalizeCanvasView(candidate.sketchCanvasView),
     selectedShapeId: shapes.some((shape) => shape.id === candidate.selectedShapeId) ? candidate.selectedShapeId ?? "" : shapes[0]?.id ?? "",
     activeRole: normalizeRole(candidate.activeRole),
     drawMode: candidate.drawMode === "spline" ? "spline" : "line",
     mission: {
+      aspectRatio: clampNumber(candidate.mission?.aspectRatio, 2.8, 2.2, 12),
+      lengthRatio: clampNumber(candidate.mission?.lengthRatio, 0.8, 0.45, 2),
       payloadKg: numberOr(candidate.mission?.payloadKg, 2),
       takeoffThrustToWeight: numberOr(candidate.mission?.takeoffThrustToWeight, 1.4),
       cruiseSpeedMS: normalizeCruiseSpeedMS(candidate.mission?.cruiseSpeedMS),
@@ -187,6 +244,21 @@ export function normalizeSizingProject(input: unknown): SizingProject {
     },
     analysis: candidate.analysis,
     dimensions: Array.isArray(candidate.dimensions) ? candidate.dimensions.map(normalizeDimension).filter(Boolean) as SizeDimension[] : [],
+  };
+}
+
+function normalizeCanvasView(value: unknown): SizingCanvasView | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<SizingCanvasView>;
+  const width = positiveNumber(candidate.width, 900);
+  const height = positiveNumber(candidate.height, 720);
+  const scale = positiveNumber(candidate.scale, 190);
+  return {
+    width,
+    height,
+    originX: numberOr(candidate.originX, width / 2),
+    originY: numberOr(candidate.originY, height * 0.1),
+    scale,
   };
 }
 
@@ -238,7 +310,64 @@ function normalizeShape(shape: SizeShape): SizeShape {
     bodyThicknessMm: role === "body" || role === "liftingSurface" ? optionalNumber(shape.bodyThicknessMm) : undefined,
     partType,
     rotorBladeCount: role === "part" && partType === "rotor" ? Math.max(1, Math.round(numberOr(shape.rotorBladeCount, 2))) : undefined,
+    cadGeometry: normalizeCadGeometry(shape.cadGeometry),
   };
+}
+
+function normalizeCadGeometry(value: unknown): SizeCadGeometry | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<SizeCadGeometry>;
+  if (candidate.kind === "box" && isVec3(candidate.centerM) && isVec3(candidate.sizeM)) {
+    return { kind: "box", centerM: candidate.centerM, sizeM: candidate.sizeM };
+  }
+  if (candidate.kind === "cylinder" && isVec3(candidate.centerM) && isVec3(candidate.axisM)) {
+    return {
+      kind: "cylinder",
+      centerM: candidate.centerM,
+      axisM: candidate.axisM,
+      radiusM: positiveNumber(candidate.radiusM, 0.01),
+      lengthM: positiveNumber(candidate.lengthM, 0.01),
+    };
+  }
+  if (candidate.kind === "rotor" && isVec3(candidate.centerM) && isVec3(candidate.axisM)) {
+    return {
+      kind: "rotor",
+      centerM: candidate.centerM,
+      axisM: candidate.axisM,
+      radiusM: positiveNumber(candidate.radiusM, 0.01),
+      bladeCount: Math.max(1, Math.round(numberOr(candidate.bladeCount, 2))),
+      rootChordM: positiveNumber(candidate.rootChordM, 0.008),
+      tipChordM: positiveNumber(candidate.tipChordM, 0.004),
+    };
+  }
+  if (candidate.kind === "revolvedBody" && isVec3(candidate.centerM)) {
+    return {
+      kind: "revolvedBody",
+      centerM: candidate.centerM,
+      lengthM: positiveNumber(candidate.lengthM, 0.01),
+      radiusM: positiveNumber(candidate.radiusM, 0.005),
+    };
+  }
+  if (candidate.kind === "liftingSurface" && isVec3(candidate.rootLeadingEdgeM)) {
+    return {
+      kind: "liftingSurface",
+      rootLeadingEdgeM: candidate.rootLeadingEdgeM,
+      spanM: positiveNumber(candidate.spanM, 0.05),
+      rootChordM: positiveNumber(candidate.rootChordM, 0.05),
+      tipChordM: positiveNumber(candidate.tipChordM, 0.05),
+      airfoil: typeof candidate.airfoil === "string" ? candidate.airfoil : "NACA 0012",
+      incidenceDeg: numberOr(candidate.incidenceDeg, 0),
+    };
+  }
+  return undefined;
+}
+
+function isVec3(value: unknown): value is [number, number, number] {
+  return Array.isArray(value) && value.length === 3 && value.every((entry) => Number.isFinite(entry));
+}
+
+function positiveNumber(value: unknown, fallback: number) {
+  return Math.max(numberOr(value, fallback), fallback);
 }
 
 function normalizeRotorSpanPoints(points: SizePoint[]) {
@@ -275,6 +404,10 @@ function normalizeRotorPoint(point: Pick<SizePoint, "xM" | "yM"> & Partial<SizeP
 
 function numberOr(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function clampNumber(value: unknown, fallback: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, numberOr(value, fallback)));
 }
 
 function normalizeCruiseSpeedMS(value: unknown) {
@@ -349,6 +482,7 @@ function normalizeDimension(value: unknown): SizeDimension | undefined {
     targetA,
     targetB,
     valueM,
+    labelOffset: normalizeVector(candidate.labelOffset),
   };
 }
 

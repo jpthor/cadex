@@ -3,14 +3,11 @@ import {
   bodyMaterialLabels,
   liftingSurfaceKindLabels,
   partTypeLabels,
-  roleLabels,
 } from "../../sizing";
 import type {
   BodyMaterial,
   LiftingSurfaceKind,
-  PartType,
   SizeShape,
-  SizeShapeRole,
   SizingProject,
 } from "../../sizing";
 import { airfoilOptions } from "../constants";
@@ -22,12 +19,9 @@ import {
   bodyMassEstimate,
   bodySurfaceAreaEstimate,
   inferredBatteryThicknessM,
-  inferredMotorDepthM,
   liftingSurfaceMassEstimate,
   liftingSurfaceSkinAreaEstimate,
-  motorMassEstimate,
-  motorPlanformAreaEstimate,
-  motorVolumeEstimate,
+  liftingSurfaceStats,
   rotorDiameterEstimate,
   rotorInstanceCount,
   rotorMassPerRotorEstimate,
@@ -37,6 +31,7 @@ import {
 } from "../../sizing/auditedSizingEngine";
 import { partTouchesMirrorAxis } from "../diagnostics";
 import { referenceRoles } from "../constants";
+import { cadGeometryForShape, motorDepthM, motorDiameterM, motorLengthM } from "../geometry";
 import { NumberField, SketchPanelTitle } from "./shared";
 export function ShapeSelector({
   selectedShapeId,
@@ -78,58 +73,27 @@ export function ShapeEditor({
   onDelete: () => void;
 }) {
   const bounds = shapeBounds(shape);
+  const motorDiameter = shape.partType === "motor" ? motorDiameterM(shape) : 0;
+  const motorLength = shape.partType === "motor" ? motorLengthM(shape) : 0;
+  const motorDepth = shape.partType === "motor" ? motorDepthM(shape) : 0;
+  const motorCount = shape.partType === "motor" && partTouchesMirrorAxis(shape) ? 1 : 2;
+  const motorVolumeM3 = shape.partType === "motor" ? Math.PI * (motorDiameter / 2) ** 2 * motorLength * motorCount : 0;
+  const motorMassKg = motorVolumeM3 * 3200;
+  const cadGeometry = cadGeometryForShape(shape);
+  const liftingStats = shape.role === "liftingSurface" ? liftingSurfaceStats(shape, mirrorPlanes) : undefined;
+  const drawnLiftingAreaM2 = shape.role === "liftingSurface" ? polygonAreaM2(shape.points) : 0;
+  const liftingAreaScope =
+    shape.role === "liftingSurface"
+      ? liftingStats && Math.abs(liftingStats.areaM2 - drawnLiftingAreaM2) <= 0.001
+        ? "Drawn area only"
+        : "Effective aircraft area after mirrors"
+      : "";
   return (
     <div className="component-editor">
       <label className="sizing-field">
         <span>Label</span>
         <input value={shape.label} onChange={(event) => onChange({ label: event.target.value })} />
       </label>
-      <div className="segmented-control sizing-role-control" aria-label="Selected shape type">
-        <button
-          className={shape.role === "body" ? "active" : ""}
-          onClick={() => onChange({ role: "body", airfoil: undefined, liftingSurfaceKind: undefined, airfoilStations: undefined, partType: undefined })}
-        >
-          Body
-        </button>
-        <button
-          className={shape.role === "liftingSurface" ? "active" : ""}
-          onClick={() =>
-            onChange({
-              role: "liftingSurface",
-              airfoil: shape.airfoil ?? "NACA 0012",
-              liftingSurfaceKind: shape.liftingSurfaceKind ?? "wing",
-              airfoilStations: shape.airfoilStations ?? { root10: shape.airfoil ?? "NACA 0012", tip90: shape.airfoil ?? "NACA 0012" },
-              incidenceDeg: shape.incidenceDeg ?? 0,
-              incidenceStationsDeg: shape.incidenceStationsDeg ?? {
-                root10: shape.incidenceDeg ?? 0,
-                tip90: shape.incidenceDeg ?? 0,
-              },
-              bodyMaterial: shape.bodyMaterial ?? "carbonFibre",
-              bodyThicknessMm: shape.bodyThicknessMm ?? 1.2,
-              partType: undefined,
-            })
-          }
-        >
-          Lifting surface
-        </button>
-        <button
-          className={`part-role-button ${shape.role === "part" ? "active" : ""}`}
-          onClick={() =>
-            onChange({
-              role: "part",
-              airfoil: undefined,
-              liftingSurfaceKind: undefined,
-              airfoilStations: undefined,
-              incidenceDeg: undefined,
-              incidenceStationsDeg: undefined,
-              partType: shape.partType ?? "payload",
-              massKg: shape.massKg ?? 0,
-            })
-          }
-        >
-          Part
-        </button>
-      </div>
       {shape.role === "liftingSurface" ? (
         <>
           <div className="segmented-control sizing-role-control" aria-label="Lifting surface role">
@@ -218,8 +182,10 @@ export function ShapeEditor({
             onChange={(bodyThicknessMm) => onChange({ bodyThicknessMm })}
           />
           <div className="shape-readout">
-            <span>Planform skin area {liftingSurfaceSkinAreaEstimate(shape).toFixed(3)} m2</span>
-            <span>Surface mass {liftingSurfaceMassEstimate(shape).toFixed(3)} kg</span>
+            <span>Drawn planform area {drawnLiftingAreaM2.toFixed(3)} m2</span>
+            {liftingStats ? <span>{liftingAreaScope} {liftingStats.areaM2.toFixed(3)} m2</span> : null}
+            <span>Skin area used for mass {liftingSurfaceSkinAreaEstimate(shape, mirrorPlanes).toFixed(3)} m2</span>
+            <span>Surface mass {liftingSurfaceMassEstimate(shape, mirrorPlanes).toFixed(3)} kg</span>
           </div>
         </>
       ) : shape.role === "body" ? (
@@ -255,16 +221,9 @@ export function ShapeEditor({
         </div>
       ) : (
         <>
-          <label className="sizing-field">
-            <span>Part</span>
-            <select value={shape.partType ?? "payload"} onChange={(event) => onChange({ partType: event.target.value as PartType })}>
-              {Object.entries(partTypeLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="shape-readout">
+            <span>Part {partTypeLabels[shape.partType ?? "payload"]}</span>
+          </div>
           {shape.partType === "battery" ? (
             <div className="shape-readout">
               <span>{partTouchesMirrorAxis(shape) ? "1 centerline battery, mirrored from Y axis" : "2 mirrored batteries"}</span>
@@ -276,25 +235,21 @@ export function ShapeEditor({
             </div>
           ) : shape.partType === "motor" ? (
             <div className="shape-readout">
-              <span>Plan area {motorPlanformAreaEstimate(shape).toFixed(4)} m2</span>
-              <span>Inferred depth {(inferredMotorDepthM(shape) * 1000).toFixed(0)} mm</span>
-              <span>Volume {(motorVolumeEstimate(shape) * 1000).toFixed(2)} L</span>
-              <span>Motor mass {motorMassEstimate(shape).toFixed(3)} kg</span>
+              <span>Diameter {(motorDiameter * 1000).toFixed(0)} mm</span>
+              <span>Length {(motorLength * 1000).toFixed(0)} mm</span>
+              <span>Depth {(motorDepth * 1000).toFixed(0)} mm</span>
+              <span>Volume {(motorVolumeM3 * 1000).toFixed(2)} L</span>
+              <span>Motor mass {motorMassKg.toFixed(3)} kg</span>
               <span>Motor density 3.20 kg/L</span>
+              {cadGeometry?.kind === "cylinder" ? <span>Axis follows motor length</span> : null}
             </div>
           ) : shape.partType === "rotor" ? (
             <>
               <div className="shape-readout">
-                <span>Diameter {rotorDiameterEstimate(shape, mirrorPlanes).toFixed(3)} m</span>
+                <span>Diameter {(rotorDiameterEstimate(shape, mirrorPlanes) * 1000).toFixed(0)} mm</span>
                 <span>{rotorInstanceCount(shape, mirrorPlanes)} physical rotors after mirrors</span>
+                <span>Blade count {Math.max(1, Math.round(shape.rotorBladeCount ?? 2))} from Sizing</span>
               </div>
-              <NumberField
-                label="Blade count"
-                suffix=""
-                value={shape.rotorBladeCount ?? 2}
-                step={1}
-                onChange={(rotorBladeCount) => onChange({ rotorBladeCount: Math.max(1, Math.round(rotorBladeCount)) })}
-              />
               <div className="shape-readout">
                 <span>Carbon fibre volume {(rotorVolumePerRotorEstimate(shape, mirrorPlanes) * 1000).toFixed(3)} L / rotor</span>
                 <span>Mass / rotor {rotorMassPerRotorEstimate(shape, mirrorPlanes).toFixed(3)} kg</span>
@@ -309,8 +264,17 @@ export function ShapeEditor({
       )}
       <div className="shape-readout">
         <span>{shape.points.length} points</span>
-        <span>{(bounds.maxX * 2).toFixed(2)} m mirrored width</span>
-        <span>{(bounds.maxY - bounds.minY).toFixed(2)} m length</span>
+        {shape.partType === "motor" ? (
+          <>
+            <span>{motorCount} physical motor{motorCount === 1 ? "" : "s"} after mirror</span>
+            <span>{motorLength.toFixed(2)} m axis length</span>
+          </>
+        ) : (
+          <>
+            <span>{(bounds.maxX * 2).toFixed(2)} m mirrored width</span>
+            <span>{(bounds.maxY - bounds.minY).toFixed(2)} m length</span>
+          </>
+        )}
       </div>
       <button className="delete-component-button" onClick={onDelete}>
         <Trash2 size={15} />
@@ -318,4 +282,15 @@ export function ShapeEditor({
       </button>
     </div>
   );
+}
+
+function polygonAreaM2(points: SizeShape["points"]) {
+  if (points.length < 3) return 0;
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    area += current.xM * next.yM - next.xM * current.yM;
+  }
+  return Math.abs(area) / 2;
 }

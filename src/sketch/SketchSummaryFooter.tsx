@@ -4,7 +4,7 @@ export function SketchSummaryFooter({ analysis }: { analysis?: SizingAnalysis })
   if (!analysis) {
     return (
       <>
-        <span>Run Compute</span>
+        <span>Live sizing</span>
         <span>CoM, CoP, inertia, geometry</span>
       </>
     );

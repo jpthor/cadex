@@ -1223,6 +1223,35 @@ button {
   font-size: 12px;
 }
 
+.suggested-dimensions-panel {
+  gap: 10px;
+}
+
+.suggested-source-label {
+  margin: -2px 0 0;
+  color: #94a9b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.suggested-dimension-card {
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid rgba(74, 165, 208, 0.22);
+  border-radius: 7px;
+  background: #0d1822;
+}
+
+.suggested-dimension-card h3 {
+  margin: 0;
+  overflow: hidden;
+  color: #eef8ff;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .engine-compute-spec strong {
   color: #eaf8ff;
   font-size: 13px;
@@ -1558,6 +1587,28 @@ button {
   background: #0c141d;
 }
 
+.sizing-canvas .view-label,
+.sizing-canvas .dimension-layer,
+.sizing-canvas .analysis-markers,
+.sizing-canvas .shape-label,
+.sizing-canvas .shape-node,
+.sizing-canvas .curve-toggle,
+.sizing-canvas .tangent-handle,
+.sizing-canvas .airfoil-station-marker {
+  transition: opacity 160ms ease;
+}
+
+.sizing-canvas.view-transitioning .view-label,
+.sizing-canvas.view-transitioning .dimension-layer,
+.sizing-canvas.view-transitioning .analysis-markers,
+.sizing-canvas.view-transitioning .shape-label,
+.sizing-canvas.view-transitioning .shape-node,
+.sizing-canvas.view-transitioning .curve-toggle,
+.sizing-canvas.view-transitioning .tangent-handle,
+.sizing-canvas.view-transitioning .airfoil-station-marker {
+  opacity: 0.24;
+}
+
 .canvas-sketch-toolbar {
   position: absolute;
   z-index: 3;
@@ -1620,9 +1671,9 @@ button {
 }
 
 .canvas-guide-toggle,
-.canvas-sizing-reference-toggle {
+.canvas-sizing-reference-toggle,
+.canvas-zoom-fit-button {
   position: absolute;
-  right: 18px;
   bottom: 18px;
   z-index: 3;
   display: inline-flex;
@@ -1638,8 +1689,26 @@ button {
   font-weight: 800;
 }
 
+.canvas-guide-toggle,
+.canvas-sizing-reference-toggle {
+  right: 18px;
+}
+
 .canvas-sizing-reference-toggle {
   right: 110px;
+}
+
+.canvas-zoom-fit-button {
+  left: 18px;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.canvas-zoom-fit-button:hover {
+  border-color: #7dd3fc;
+  background: rgba(19, 48, 69, 0.92);
 }
 
 .canvas-guide-toggle.active,
@@ -1749,6 +1818,7 @@ button {
   z-index: 4;
   top: 58px;
   right: 18px;
+  padding-bottom: 8px;
 }
 
 .canvas-add-menu {
@@ -1763,7 +1833,7 @@ button {
 .canvas-add-options,
 .canvas-reference-options {
   position: absolute;
-  top: 36px;
+  top: calc(100% - 8px);
   z-index: 4;
   display: none;
   min-width: 112px;
@@ -2030,9 +2100,12 @@ button {
   fill: #fef9c3;
   font-size: 11px;
   font-weight: 820;
+  cursor: move;
+  pointer-events: all;
   paint-order: stroke;
   stroke: #07111a;
   stroke-width: 3px;
+  user-select: none;
 }
 
 .dimension-lock.selected line:not(.dimension-hit),
@@ -2052,10 +2125,31 @@ button {
   vector-effect: non-scaling-stroke;
 }
 
+.live-dimension-layer {
+  pointer-events: none;
+}
+
+.live-dimension-layer rect {
+  fill: rgba(7, 17, 26, 0.82);
+  stroke: rgba(125, 211, 252, 0.78);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.live-dimension-layer text {
+  fill: #dbeafe;
+  font-size: 11px;
+  font-weight: 820;
+  paint-order: stroke;
+  stroke: #07111a;
+  stroke-width: 3px;
+}
+
 .sizing-shape .shape-live,
 .sizing-shape .shape-mirror,
 .sizing-shape .shape-local-mirror,
 .sizing-shape .shape-local-global-mirror,
+.sizing-shape .shape-axis,
 .sizing-shape .shape-hit {
   fill: none;
   stroke-width: 2.6;
@@ -2079,7 +2173,8 @@ button {
 .sizing-shape .shape-live,
 .sizing-shape .shape-mirror,
 .sizing-shape .shape-local-mirror,
-.sizing-shape .shape-local-global-mirror {
+.sizing-shape .shape-local-global-mirror,
+.sizing-shape .shape-axis {
   pointer-events: none;
 }
 
@@ -2108,6 +2203,17 @@ button {
 .sizing-shape.part .shape-mirror {
   stroke: rgba(251, 113, 133, 0.62);
   stroke-dasharray: 7 7;
+}
+
+.sizing-shape.part-motor .shape-axis {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.86);
+  stroke-width: 1.5;
+  stroke-dasharray: 8 5;
+}
+
+.sizing-shape.part-motor .shape-axis-mirror {
+  stroke: rgba(255, 255, 255, 0.45);
 }
 
 .sizing-shape.part-rotor .shape-live {
@@ -2391,16 +2497,18 @@ button {
 }
 
 .sizing-dashboard {
+  grid-row: 2 / 4;
   display: grid;
   grid-template-columns: repeat(3, minmax(240px, 1fr));
+  align-content: start;
   gap: 12px;
   min-height: 0;
   overflow: auto;
-  padding: 14px 12px;
+  padding: 14px 12px 72px;
 }
 
 .sizing-dashboard-panel {
-  min-height: 0;
+  min-height: fit-content;
   display: grid;
   align-content: start;
   gap: 10px;
@@ -2418,7 +2526,7 @@ button {
 
 .sizing-dashboard-engine {
   grid-column: 1 / -1;
-  grid-template-columns: minmax(240px, 1.25fr) minmax(150px, 0.75fr) repeat(3, minmax(150px, 1fr)) minmax(190px, 1.1fr);
+  grid-template-columns: minmax(240px, 1.25fr) minmax(150px, 0.75fr) repeat(4, minmax(150px, 1fr));
   align-items: end;
 }
 
@@ -2449,15 +2557,13 @@ button {
   grid-column: 1 / -1;
 }
 
-.sizing-dashboard-requirements {
-  grid-row: span 2;
-}
-
 .sizing-dashboard-data {
   grid-column: span 2;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
   gap: 12px;
+  max-height: none;
+  overflow: visible;
 }
 
 .sizing-dashboard-data h2,
@@ -2512,118 +2618,6 @@ button {
 .sizing-dashboard-data .analysis-metric strong {
   text-align: right;
   white-space: nowrap;
-}
-
-.sizing-preview {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding-top: 4px;
-}
-
-.sizing-preview-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.sizing-preview-header h3 {
-  margin: 0;
-  color: #dff4ff;
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: 0;
-}
-
-.sizing-preview-header span {
-  color: #8aa0b4;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.sizing-preview svg {
-  width: 100%;
-  min-height: 300px;
-  max-height: 430px;
-  border: 1px solid rgba(125, 160, 190, 0.16);
-  border-radius: 7px;
-  background: #07111b;
-}
-
-.sizing-preview-grid line {
-  stroke: rgba(125, 160, 190, 0.12);
-  stroke-width: 1;
-}
-
-.sizing-preview-wing {
-  fill: rgba(87, 197, 255, 0.18);
-  stroke: #6fd3ff;
-  stroke-width: 2.5;
-}
-
-.sizing-preview-tail {
-  fill: rgba(87, 197, 255, 0.12);
-  stroke: #8adfff;
-  stroke-width: 2;
-}
-
-.sizing-preview-body {
-  fill: rgba(241, 245, 249, 0.16);
-  stroke: #f8fafc;
-  stroke-width: 2.4;
-}
-
-.sizing-preview-boom {
-  stroke: rgba(248, 250, 252, 0.72);
-  stroke-width: 2.2;
-}
-
-.sizing-preview-fin {
-  fill: rgba(34, 197, 94, 0.22);
-  stroke: #86efac;
-  stroke-width: 2;
-}
-
-.sizing-preview-rotor {
-  opacity: 0.94;
-}
-
-.sizing-preview-rotor-blade {
-  stroke: rgba(216, 180, 254, 0.96);
-  stroke-linecap: round;
-  stroke-width: 2;
-  filter: drop-shadow(0 0 3px rgba(168, 85, 247, 0.4));
-}
-
-.sizing-preview-motor {
-  fill: #d8b4fe;
-  stroke: #f5d0fe;
-  stroke-width: 1.5;
-}
-
-.sizing-preview-centerline {
-  stroke: rgba(250, 204, 21, 0.6);
-  stroke-dasharray: 6 6;
-  stroke-width: 1.4;
-}
-
-.sizing-preview-dim line {
-  marker-end: url("#sizing-preview-arrow");
-  stroke: #facc15;
-  stroke-width: 1.5;
-}
-
-.sizing-preview-dim text,
-.sizing-preview-note {
-  fill: #fde68a;
-  paint-order: stroke;
-  stroke: #07111b;
-  stroke-width: 4px;
-  stroke-linejoin: round;
-  font-size: 12px;
-  font-weight: 850;
 }
 
 .sizing-dashboard-wide {

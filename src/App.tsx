@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { isKernelBridgeAvailable, runLocalDesignCommand } from "./ai";
 import {
+  appModeStorageKey,
   defaultModel,
   defaultPropulsionTabState,
   examplePrompt,
@@ -74,8 +75,15 @@ function formatSelectedContext(selectedGeometry: SelectedGeometry | null) {
   return `${name} (${selectedGeometry.type})`;
 }
 
+function loadStoredAppMode(): AppMode {
+  const storedMode = localStorage.getItem(appModeStorageKey);
+  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "propulsion" || storedMode === "design"
+    ? storedMode
+    : "sizing";
+}
+
 export default function App() {
-  const [appMode, setAppMode] = useState<AppMode>("sizing");
+  const [appMode, setAppMode] = useState<AppMode>(() => loadStoredAppMode());
   const [project, setProject] = useState<CadProject>(() => loadStoredProject() ?? fallbackProject());
   const [sizingProject, setSizingProject] = useState<SizingProject>(() =>
     normalizeSizingProject(loadStoredProject()?.sizing),
@@ -107,6 +115,10 @@ export default function App() {
   const saveTimerRef = useRef<number | undefined>(undefined);
   const lastSavedStateRef = useRef("");
   const loadedAircraftProjectIdRef = useRef("");
+
+  useEffect(() => {
+    localStorage.setItem(appModeStorageKey, appMode);
+  }, [appMode]);
 
   useEffect(() => {
     if (isTauriRuntime() && !loadStoredProject()) {
@@ -671,18 +683,8 @@ export default function App() {
           <SizingDashboard
             analysis={liveSizingAnalysis}
             project={sizingProject}
-            onOpenSketch={() => setAppMode("sketch")}
             onProjectChange={updateSizingProject}
           />
-          <footer className="timeline size-footer">
-            <div className="timeline-title">
-              <Gauge size={17} />
-              <span>Sizing overview</span>
-            </div>
-            <div className="timeline-events">
-              <SketchSummaryFooter analysis={liveSizingAnalysis} />
-            </div>
-          </footer>
         </>
       ) : appMode === "propulsion" ? (
         <>

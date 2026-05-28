@@ -136,8 +136,8 @@ approx(
       { xM: 0.2, yM: 0.1 },
     ],
   }),
-  0.6,
-  "motor mass from inferred mirrored motor volume",
+  Math.PI * Math.pow(0.05 / 2, 2) * 0.05 * 2 * 3200,
+  "motor mass from X diameter and Y length",
 );
 approx(
   motorMassEstimate({
@@ -154,8 +154,8 @@ approx(
       { xM: 0.2, yM: 0.1 },
     ],
   }),
-  0.6,
-  "motor mass ignores stale manual mass and uses inferred volume",
+  Math.PI * Math.pow(0.05 / 2, 2) * 0.05 * 2 * 3200,
+  "motor mass ignores stale manual mass and uses X diameter/Y length volume",
 );
 approx(
   motorMassEstimate({
@@ -169,8 +169,8 @@ approx(
       { xM: 0.25, yM: 0.15 },
     ],
   }),
-  Math.PI * Math.pow(0.05 / 2, 2) * 2 * 0.0375 * 3200,
-  "line motor mass from H/V diameter and inferred depth",
+  Math.PI * Math.pow(0.1 / 2, 2) * 2 * 0.02 * 3200,
+  "center-axis motor fallback mass from radial X handle and minimum Y length",
 );
 const rotorShape = {
   id: "rotor",
@@ -185,7 +185,8 @@ const rotorShape = {
     { xM: 0.5, yM: 0.1 },
   ],
 };
-const rotorMassPerRotorKg = 2 * (0.3 / 2) * 0.92 * ((0.3 * 0.055 + 0.3 * 0.028) / 2) * 0.0009 * 1600;
+const rotorDiameterM = 0.6;
+const rotorMassPerRotorKg = 2 * (rotorDiameterM / 2) * 0.92 * ((rotorDiameterM * 0.055 + rotorDiameterM * 0.028) / 2) * (rotorDiameterM * 0.003) * 1600;
 approx(rotorMassPerRotorEstimate(rotorShape), rotorMassPerRotorKg, "carbon fibre rotor mass per rotor");
 approx(rotorTotalMassEstimate(rotorShape), rotorMassPerRotorKg * 2, "off-axis rotor mirrors across origin");
 approx(rotorTotalMassEstimate({ ...rotorShape, massKg: 0 }), rotorMassPerRotorKg * 2, "rotor total ignores stale manual zero mass");
@@ -269,6 +270,28 @@ const expectedLocalMirroredTailCop =
   (0.05 * wingSurfaceAreaM2 + (-0.68 - 0.08 * 0.25) * localMirroredTailArea * tailEffectiveness) /
   (wingSurfaceAreaM2 + localMirroredTailArea * tailEffectiveness);
 approx(localMirroredTailAnalysis.cop.yM, expectedLocalMirroredTailCop, "local mirrored tailplane contributes doubled aerodynamic area");
+
+const distantMirrorPlaneTail = {
+  mission: project.mission,
+  shapes: [
+    {
+      id: "short-mirror",
+      role: "mirrorPlane",
+      label: "Short mirror",
+      drawMode: "line",
+      points: [
+        { xM: 0.25, yM: 0.4 },
+        { xM: 0.25, yM: 0.6 },
+      ],
+    },
+    localMirroredTailProject.shapes[2],
+  ],
+};
+approx(
+  liftingSurfaceSkinAreaEstimate(distantMirrorPlaneTail.shapes[1], distantMirrorPlaneTail.shapes),
+  0.25 * 0.08 * 2,
+  "local mirror only applies when geometry touches the drawn mirror segment",
+);
 
 const canardProject = {
   mission: project.mission,

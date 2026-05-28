@@ -14,16 +14,19 @@ import { referenceRoles } from "../constants";
 import type { AirfoilStation, CanvasView, DimensionDraft, JoinPointSelection } from "../types";
 import {
   closedPathForPoints,
+  canonicalPartPoints,
   dimensionTargetPoint,
   halfMoonPath,
   isFillablePartShape,
   mirrorPoints,
   mirrorPointsAcrossPlane,
+  motorFootprintPointsFromSpan,
   motorSpanPoints,
   nearestSegmentTarget,
   pathForPoints,
   pointFromShapeEvent,
   pointFromShapePointerEvent,
+  pointsTouchMirrorAxis,
   rotorFlarePointsFromSpan,
   rotorSpanPoints,
   shapeTouchesMirrorPlane,
@@ -32,18 +35,36 @@ import {
   toCanvas,
   trimDimensionValue,
 } from "../geometry";
-export function ReferenceShape({ shape, view }: { shape: SizeShape; view: CanvasView }) {
+export function ReferenceShape({
+  projected = false,
+  shape,
+  showOriginMirror = true,
+  view,
+}: {
+  projected?: boolean;
+  shape: SizeShape;
+  showOriginMirror?: boolean;
+  view: CanvasView;
+}) {
+  const canonicalPoints = projected ? shape.points : canonicalPartPoints(shape);
   const renderPoints =
-    shape.partType === "rotor" ? rotorFlarePointsFromSpan(shape.points) : shape.partType === "motor" ? motorSpanPoints(shape.points) : shape.points;
+    projected
+      ? canonicalPoints
+      : shape.partType === "rotor"
+        ? rotorFlarePointsFromSpan(canonicalPoints)
+        : shape.partType === "motor"
+          ? motorFootprintPointsFromSpan(canonicalPoints)
+          : canonicalPoints;
   const shouldFill = isFillablePartShape({ ...shape, points: renderPoints });
   const path = shouldFill ? closedPathForPoints(renderPoints, view) : pathForPoints(renderPoints, view);
-  const mirroredPath = shouldFill ? closedPathForPoints(mirrorPoints(renderPoints), view) : pathForPoints(mirrorPoints(renderPoints), view);
+  const shouldRenderOriginMirror = showOriginMirror && !referenceRoles.includes(shape.role);
+  const mirroredPath = shouldRenderOriginMirror ? (shouldFill ? closedPathForPoints(mirrorPoints(renderPoints), view) : pathForPoints(mirrorPoints(renderPoints), view)) : "";
   const labelPoint = renderPoints[Math.max(0, Math.floor(renderPoints.length / 2))];
   const labelCanvasPoint = labelPoint ? toCanvas(labelPoint, view) : { x: 0, y: 0 };
   return (
     <g className={`sizing-reference-shape ${shape.role} ${shape.partType ? `part-${shape.partType}` : ""}`}>
       <path d={path} />
-      <path d={mirroredPath} />
+      {shouldRenderOriginMirror ? <path d={mirroredPath} /> : null}
       <text x={labelCanvasPoint.x + 8} y={labelCanvasPoint.y - 8}>{shape.label}</text>
     </g>
   );
@@ -103,22 +124,50 @@ export function SketchShape({
   onDeletePoint: (index: number) => void;
 }) {
   const lastNodeTapRef = useRef<{ index: number; time: number; x: number; y: number } | null>(null);
+  const armedInsertShapeRef = useRef<string | null>(null);
   const suppressClickAfterDeleteRef = useRef(false);
+  const projected = readOnly;
+  const canonicalPoints = projected ? shape.points : canonicalPartPoints(shape);
   const renderPoints =
-    shape.partType === "rotor" ? rotorFlarePointsFromSpan(shape.points) : shape.partType === "motor" ? motorSpanPoints(shape.points) : shape.points;
-  const mirrored = mirrorPoints(renderPoints);
-  const nodePoints = shape.partType === "rotor" ? rotorSpanPoints(shape.points) : shape.partType === "motor" ? motorSpanPoints(shape.points) : shape.points;
+    projected
+      ? canonicalPoints
+      : shape.partType === "rotor"
+        ? rotorFlarePointsFromSpan(canonicalPoints)
+        : shape.partType === "motor"
+          ? motorFootprintPointsFromSpan(canonicalPoints)
+          : canonicalPoints;
+  const nodePoints = projected
+    ? canonicalPoints
+    : shape.partType === "rotor"
+      ? rotorSpanPoints(canonicalPoints)
+      : shape.partType === "motor"
+        ? motorSpanPoints(canonicalPoints)
+        : canonicalPoints;
   const localMirrorPlanes = shouldUseLocalMirror(shape)
     ? mirrorPlanes.filter((plane) => plane.id !== shape.id && shapeTouchesMirrorPlane(shape, plane))
     : [];
   const localMirrorSets = localMirrorPlanes.map((plane) => mirrorPointsAcrossPlane(renderPoints, plane));
+  const shouldRenderOriginMirror = showOriginMirror && !referenceRoles.includes(shape.role);
+  const mirrored = mirrorPoints(renderPoints);
   const partClass = shape.role === "part" ? `part-${shape.partType ?? "payload"}` : "";
   const className = `sizing-shape ${shape.role} ${partClass} ${selected ? "selected" : ""}`;
   const labelPoint = toCanvas(nodePoints[Math.max(0, Math.floor(nodePoints.length / 2))] ?? renderPoints[0], view);
   const shouldFill = isFillablePartShape({ ...shape, points: renderPoints });
-  const showsCurveControls = shape.partType !== "rotor";
+  const isTypedPart = shape.role === "part";
+  const showsCurveControls = !isTypedPart;
   const livePath = shouldFill ? closedPathForPoints(renderPoints, view) : pathForPoints(renderPoints, view);
-  const mirrorPath = showOriginMirror ? (shouldFill ? closedPathForPoints(mirrored, view) : pathForPoints(mirrored, view)) : "";
+  const mirrorPath = shouldRenderOriginMirror ? (shouldFill ? closedPathForPoints(mirrored, view) : pathForPoints(mirrored, view)) : "";
+  const motorAxisPoints = shape.partType === "motor" ? motorAxisLinePoints(projected, canonicalPoints, renderPoints) : [];
+  const motorAxisPath = motorAxisPoints.length ? pathForPoints(motorAxisPoints, view) : "";
+  const motorAxisMirrorPath = shouldRenderOriginMirror && motorAxisPoints.length ? pathForPoints(mirrorPoints(motorAxisPoints), view) : "";
+  const nodeEntries = nodePoints.map((point, pointIndex) => ({ point, pointIndex }));
+  const visibleNodeEntries =
+    shape.partType === "motor" && !projected && nodeEntries.length >= 2
+      ? [
+          { point: nodeEntries[0].point, pointIndex: 0 },
+          { point: motorRightDragPoint(canonicalPoints), pointIndex: 1 },
+        ]
+      : nodeEntries;
   return (
     <g
       className={`${className} ${shouldFill ? "part-filled" : ""}`}
@@ -133,10 +182,17 @@ export function SketchShape({
         if (selectedMotorId && shape.id !== selectedMotorId && (event.target as Element).closest(".shape-hit, .shape-node")) {
           return;
         }
-        if (shape.partType !== "rotor" && !readOnly && selected && (event.target as Element).closest(".shape-hit")) {
+        if (!isTypedPart && !readOnly && selected && (event.target as Element).closest(".shape-hit")) {
+          if (armedInsertShapeRef.current !== shape.id) {
+            armedInsertShapeRef.current = shape.id;
+            onSelect();
+            return;
+          }
+          armedInsertShapeRef.current = null;
           onInsertPoint(pointFromShapeEvent(event, view));
           return;
         }
+        armedInsertShapeRef.current = (event.target as Element).closest(".shape-hit") && !isTypedPart && !readOnly ? shape.id : null;
         onSelect();
       }}
     >
@@ -173,16 +229,18 @@ export function SketchShape({
           onBeginLineDrag(event);
         }}
       />
-      {showOriginMirror ? <path className="shape-hit shape-hit-mirror" d={mirrorPath} /> : null}
+      {shouldRenderOriginMirror ? <path className="shape-hit shape-hit-mirror" d={mirrorPath} /> : null}
       <path className="shape-live" d={livePath} />
+      {motorAxisPath ? <path className="shape-axis" d={motorAxisPath} /> : null}
       {localMirrorSets.map((points, index) => (
         <path className="shape-local-mirror" d={shouldFill ? closedPathForPoints(points, view) : pathForPoints(points, view)} key={`local-${index}`} />
       ))}
-      {showOriginMirror ? <path className="shape-mirror" d={mirrorPath} /> : null}
+      {shouldRenderOriginMirror ? <path className="shape-mirror" d={mirrorPath} /> : null}
+      {motorAxisMirrorPath ? <path className="shape-axis shape-axis-mirror" d={motorAxisMirrorPath} /> : null}
       {localMirrorSets.map((points, index) => {
         const globalPoints = mirrorPoints(points);
         return (
-          showOriginMirror ? (
+          shouldRenderOriginMirror ? (
             <path
               className="shape-local-global-mirror"
               d={shouldFill ? closedPathForPoints(globalPoints, view) : pathForPoints(globalPoints, view)}
@@ -192,7 +250,7 @@ export function SketchShape({
         );
       })}
       {showsCurveControls && selected && !readOnly && !referenceRoles.includes(shape.role) ? <TangencyHandles onBeginDrag={onBeginTangentDrag} points={shape.points} view={view} /> : null}
-      {showsCurveControls && showOriginMirror && selected && !readOnly && !referenceRoles.includes(shape.role) ? <TangencyHandles mirrored points={mirrorPoints(shape.points)} view={view} /> : null}
+      {showsCurveControls && shouldRenderOriginMirror && selected && !readOnly && !referenceRoles.includes(shape.role) ? <TangencyHandles mirrored points={mirrorPoints(shape.points)} view={view} /> : null}
       {selected && !readOnly && shape.role === "liftingSurface" ? (
         <AirfoilStations
           activeStation={activeAirfoilStation}
@@ -201,14 +259,14 @@ export function SketchShape({
           view={view}
         />
       ) : null}
-      {!readOnly ? nodePoints.map((point, index) => {
+      {!readOnly ? visibleNodeEntries.map(({ point, pointIndex }) => {
         const canvasPoint = toCanvas(point, view);
-        const isSelectedNode = joinSourcePoint?.pointIndex === index;
+        const isSelectedNode = joinSourcePoint?.pointIndex === pointIndex;
         const isSelectedLockedNode = isSelectedNode && Boolean(point.snapAttachment);
         return (
-          <g key={`${shape.id}-${index}`}>
+          <g key={`${shape.id}-${pointIndex}`}>
             {showsCurveControls && selected && !readOnly && !referenceRoles.includes(shape.role) ? (
-              <NodeCurveControls index={index} onSetSegmentMode={onSetSegmentMode} point={point} points={shape.points} view={view} />
+              <NodeCurveControls index={pointIndex} onSetSegmentMode={onSetSegmentMode} point={point} points={shape.points} view={view} />
             ) : null}
             {isSelectedNode ? (
               <circle className={`shape-node-selection-ring ${isSelectedLockedNode ? "locked" : ""}`} cx={canvasPoint.x} cy={canvasPoint.y} r="8" />
@@ -223,49 +281,49 @@ export function SketchShape({
                 event.stopPropagation();
                 if (event.shiftKey) return;
                 if (selectedMotorId && shape.id !== selectedMotorId) return;
-                if (shape.partType !== "rotor" && !readOnly && event.detail >= 2) {
-                  onDeletePoint(index);
+                if (!isTypedPart && !readOnly && event.detail >= 2) {
+                  onDeletePoint(pointIndex);
                   return;
                 }
-                onSelectPoint(index);
+                onSelectPoint(pointIndex);
               }}
               onPointerDown={(event) => {
                 if (drawActive || readOnly) return;
                 event.stopPropagation();
                 if (event.shiftKey) {
-                  onJoinToPoint(index);
+                  onJoinToPoint(pointIndex);
                   return;
                 }
                 if (dimensionToolActive) {
-                  onSelectDimensionTarget({ kind: "node", shapeId: shape.id, pointIndex: index });
+                  onSelectDimensionTarget({ kind: "node", shapeId: shape.id, pointIndex });
                   return;
                 }
                 if (selectedMotorId && shape.id !== selectedMotorId) {
-                  onJoinToPoint(index);
+                  onJoinToPoint(pointIndex);
                   return;
                 }
                 const now = Date.now();
                 const lastTap = lastNodeTapRef.current;
                 const isTrackpadDoubleTap =
-                  lastTap?.index === index &&
+                  lastTap?.index === pointIndex &&
                   now - lastTap.time < 520 &&
                   Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y) < 14;
-                lastNodeTapRef.current = { index, time: now, x: event.clientX, y: event.clientY };
-                if (shape.partType !== "rotor" && (event.detail >= 2 || isTrackpadDoubleTap)) {
+                lastNodeTapRef.current = { index: pointIndex, time: now, x: event.clientX, y: event.clientY };
+                if (!isTypedPart && (event.detail >= 2 || isTrackpadDoubleTap)) {
                   lastNodeTapRef.current = null;
                   suppressClickAfterDeleteRef.current = true;
                   window.setTimeout(() => {
                     suppressClickAfterDeleteRef.current = false;
                   }, 300);
-                  onDeletePoint(index);
+                  onDeletePoint(pointIndex);
                   return;
                 }
-                onSelectPoint(index);
-                onBeginDrag(index, event);
+                onSelectPoint(pointIndex);
+                onBeginDrag(pointIndex, event);
               }}
               onDoubleClick={(event) => {
                 event.stopPropagation();
-                if (shape.partType !== "rotor") onDeletePoint(index);
+                if (!isTypedPart) onDeletePoint(pointIndex);
               }}
               r="4"
             />
@@ -275,6 +333,30 @@ export function SketchShape({
       <text x={labelPoint.x + 8} y={labelPoint.y - 8 + labelYOffset}>{shape.label}</text>
     </g>
   );
+}
+
+function motorAxisLinePoints(projected: boolean, canonicalPoints: SizePoint[], renderPoints: SizePoint[]) {
+  if (renderPoints.length < 2) return [];
+  const xs = renderPoints.map((point) => point.xM);
+  const ys = renderPoints.map((point) => point.yM);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const origin = projected ? undefined : motorSpanPoints(canonicalPoints)[0];
+  const centerX = origin?.xM ?? (minX + maxX) / 2;
+  return [
+    { xM: centerX, yM: minY, curveMode: "corner" as const },
+    { xM: centerX, yM: maxY, curveMode: "corner" as const },
+  ];
+}
+
+function motorRightDragPoint(points: SizePoint[]): SizePoint {
+  return motorSpanPoints(points)[1] ?? {
+    xM: 0,
+    yM: 0,
+    curveMode: "corner" as const,
+  };
 }
 
 export function DraftShape({
@@ -306,16 +388,17 @@ export function DraftShape({
     role === "part" && partType === "rotor"
       ? rotorFlarePointsFromSpan(displayPoints)
       : role === "part" && partType === "motor"
-        ? motorSpanPoints(displayPoints)
+        ? motorFootprintPointsFromSpan(displayPoints)
         : displayPoints;
   const renderPath = role === "part" && renderPoints.length >= 3 ? closedPathForPoints(renderPoints, view) : pathForPoints(renderPoints, view);
-  const mirrorPath = role === "part" && renderPoints.length >= 3 ? closedPathForPoints(mirrorPoints(renderPoints), view) : pathForPoints(mirrorPoints(renderPoints), view);
+  const shouldRenderMirror = !referenceRoles.includes(role);
+  const mirrorPath = shouldRenderMirror ? (role === "part" && renderPoints.length >= 3 ? closedPathForPoints(mirrorPoints(renderPoints), view) : pathForPoints(mirrorPoints(renderPoints), view)) : "";
   return (
     <g className={className}>
       <path className="shape-live" d={renderPath} />
-      <path className="shape-mirror" d={mirrorPath} />
+      {shouldRenderMirror ? <path className="shape-mirror" d={mirrorPath} /> : null}
       {showSplineControls ? <TangencyHandles onBeginDrag={onBeginTangentDrag} points={displayPoints} view={view} /> : null}
-      {showSplineControls ? <TangencyHandles mirrored points={mirrorPoints(displayPoints)} view={view} /> : null}
+      {showSplineControls && shouldRenderMirror ? <TangencyHandles mirrored points={mirrorPoints(displayPoints)} view={view} /> : null}
       {showNodes ? points.map((point, index) => {
         const canvasPoint = toCanvas(point, view);
         return (
@@ -547,6 +630,7 @@ export function AnalysisMarkers({ analysis, view }: { analysis: SizingAnalysis; 
 export function DimensionLayer({
   dimensionDraft,
   dimensions,
+  onBeginDimensionDrag,
   onSelectDimension,
   selectedDimensionId,
   shapes,
@@ -554,6 +638,7 @@ export function DimensionLayer({
 }: {
   dimensionDraft: DimensionDraft;
   dimensions: SizeDimension[];
+  onBeginDimensionDrag: (id: string, event: PointerEvent<SVGTextElement>) => void;
   onSelectDimension: (id: string) => void;
   selectedDimensionId: string | null;
   shapes: SizeShape[];
@@ -568,8 +653,11 @@ export function DimensionLayer({
         if (!start || !end) return null;
         const startCanvas = toCanvas(start, view);
         const endCanvas = toCanvas(end, view);
-        const midX = (startCanvas.x + endCanvas.x) / 2;
-        const midY = (startCanvas.y + endCanvas.y) / 2;
+        const midPoint = {
+          xM: (start.xM + end.xM) / 2 + (dimension.labelOffset?.xM ?? 0),
+          yM: (start.yM + end.yM) / 2 + (dimension.labelOffset?.yM ?? 0),
+        };
+        const labelPoint = toCanvas(midPoint, view);
         const selected = dimension.id === selectedDimensionId;
         return (
           <g
@@ -584,7 +672,18 @@ export function DimensionLayer({
             <line x1={startCanvas.x} y1={startCanvas.y} x2={endCanvas.x} y2={endCanvas.y} />
             <circle cx={startCanvas.x} cy={startCanvas.y} r="3" />
             <circle cx={endCanvas.x} cy={endCanvas.y} r="3" />
-            <text x={midX + 8} y={midY - 8}>{`${dimension.label} ${trimDimensionValue(dimension.valueM)} m`}</text>
+            <text
+              className="dimension-label"
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onSelectDimension(dimension.id);
+                onBeginDimensionDrag(dimension.id, event);
+              }}
+              x={labelPoint.x}
+              y={labelPoint.y}
+            >
+              {`${dimension.label} ${trimDimensionValue(dimension.valueM)} m`}
+            </text>
           </g>
         );
       })}

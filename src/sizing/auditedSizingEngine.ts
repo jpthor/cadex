@@ -198,36 +198,35 @@ export function motorMassEstimate(shape: SizeShape) {
 }
 
 export function motorVolumeEstimate(shape: SizeShape) {
-  return motorPlanformAreaEstimate(shape) * inferredMotorDepthM(shape);
+  return motorPlanformAreaEstimate(shape) * motorLengthEstimateM(shape);
 }
 
 export function motorPlanformAreaEstimate(shape: SizeShape) {
-  if (shape.points.length === 2) {
-    const diameterM = Math.max(distance(shape.points[0], shape.points[1]), 0);
-    const mirroredCount = touchesMirrorAxis(shape) ? 1 : 2;
-    return Math.PI * Math.pow(diameterM / 2, 2) * mirroredCount;
-  }
-  if (shape.points.length < 3) return 0;
-  return polygonArea(shape.points) * 2;
+  const diameterM = motorDiameterEstimateM(shape);
+  const mirroredCount = touchesMirrorAxis(shape) ? 1 : 2;
+  return Math.PI * Math.pow(diameterM / 2, 2) * mirroredCount;
 }
 
 export function inferredMotorDepthM(shape: SizeShape) {
-  if (shape.points.length === 2) {
-    return clamp(
-      distance(shape.points[0], shape.points[1]) * auditedSizingAssumptions.motorDepthFractionOfSmallerDimension,
-      auditedSizingAssumptions.motorDepthClampM.min,
-      auditedSizingAssumptions.motorDepthClampM.max,
-    );
+  return motorLengthEstimateM(shape);
+}
+
+export function motorDiameterEstimateM(shape: SizeShape) {
+  if (shape.partType === "motor" && shape.points.length === 2) {
+    const [origin, handle] = shape.points;
+    if (origin && handle) return Math.max(Math.abs(handle.xM - origin.xM) * 2, 0.01);
   }
   const bounds = shapeBounds(shape);
-  const widthM = Math.max(bounds.maxX * 2, 0);
-  const lengthM = Math.max(bounds.maxY - bounds.minY, 0);
-  const smallerDimensionM = Math.min(widthM || lengthM, lengthM || widthM);
-  return clamp(
-    smallerDimensionM * auditedSizingAssumptions.motorDepthFractionOfSmallerDimension,
-    auditedSizingAssumptions.motorDepthClampM.min,
-    auditedSizingAssumptions.motorDepthClampM.max,
-  );
+  return Math.max(bounds.maxX - bounds.minX, 0.01);
+}
+
+export function motorLengthEstimateM(shape: SizeShape) {
+  if (shape.partType === "motor" && shape.points.length === 2) {
+    const [origin, handle] = shape.points;
+    if (origin && handle) return Math.max(Math.abs(handle.yM - origin.yM) * 2, 0.02);
+  }
+  const bounds = shapeBounds(shape);
+  return Math.max(bounds.maxY - bounds.minY, 0.02);
 }
 
 export function rotorTotalMassEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
@@ -262,15 +261,11 @@ export function rotorInstanceCount(shape: SizeShape, shapes: SizeShape[] = []) {
 }
 
 export function rotorDiameterEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
+  if (shape.points.length < 2) return 0;
+  if (shape.points.length === 2) return distance(shape.points[0], shape.points[1]) * 2;
   const points = rotorDiameterPoints(shape, shapes);
-  if (points.length < 2) return 0;
-  let diameter = 0;
-  for (let index = 0; index < points.length; index += 1) {
-    for (let nextIndex = index + 1; nextIndex < points.length; nextIndex += 1) {
-      diameter = Math.max(diameter, distance(points[index], points[nextIndex]));
-    }
-  }
-  return diameter;
+  const bounds = shapeBounds({ ...shape, points });
+  return Math.max(bounds.maxX - bounds.minX, bounds.maxX * 2);
 }
 
 function rotorDiameterPoints(shape: SizeShape, shapes: SizeShape[]) {
@@ -504,7 +499,8 @@ function touchesMirrorAxis(shape: SizeShape) {
 function shapeTouchesLine(shape: SizeShape, lineShape: SizeShape) {
   const [start, end] = lineShape.points;
   if (!start || !end) return false;
-  return shape.points.some((point) => distancePointToLine(point, start, end) <= auditedSizingAssumptions.mirrorAxisTouchToleranceM);
+  const thresholdM = auditedSizingAssumptions.mirrorAxisTouchToleranceM;
+  return shape.points.some((point) => distancePointToSegment(point, start, end) <= thresholdM) || shapeSegments(shape.points).some(([a, b]) => segmentsTouch(a, b, start, end, thresholdM));
 }
 
 function mirrorAcrossLine(points: SizePoint[], lineShape: SizeShape) {
@@ -536,6 +532,61 @@ function distancePointToLine(point: SizePoint, start: SizePoint, end: SizePoint)
   const length = Math.hypot(dx, dy);
   if (length <= 1e-9) return distance(point, start);
   return Math.abs(dy * point.xM - dx * point.yM + end.xM * start.yM - end.yM * start.xM) / length;
+}
+
+function distancePointToSegment(point: SizePoint, start: SizePoint, end: SizePoint) {
+  const dx = end.xM - start.xM;
+  const dy = end.yM - start.yM;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 1e-9) return distance(point, start);
+  const t = clamp(((point.xM - start.xM) * dx + (point.yM - start.yM) * dy) / lengthSquared, 0, 1);
+  return distance(point, { xM: start.xM + dx * t, yM: start.yM + dy * t });
+}
+
+function shapeSegments(points: SizePoint[]) {
+  const segments: Array<[SizePoint, SizePoint]> = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    segments.push([points[index], points[index + 1]]);
+  }
+  if (points.length > 2) segments.push([points[points.length - 1], points[0]]);
+  return segments;
+}
+
+function segmentsTouch(a: SizePoint, b: SizePoint, c: SizePoint, d: SizePoint, thresholdM: number) {
+  if (segmentsIntersect(a, b, c, d)) return true;
+  return (
+    distancePointToSegment(a, c, d) <= thresholdM ||
+    distancePointToSegment(b, c, d) <= thresholdM ||
+    distancePointToSegment(c, a, b) <= thresholdM ||
+    distancePointToSegment(d, a, b) <= thresholdM
+  );
+}
+
+function segmentsIntersect(a: SizePoint, b: SizePoint, c: SizePoint, d: SizePoint) {
+  const epsilon = 1e-9;
+  const abC = orientation(a, b, c);
+  const abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a);
+  const cdB = orientation(c, d, b);
+  if (Math.abs(abC) <= epsilon && pointWithinSegment(c, a, b)) return true;
+  if (Math.abs(abD) <= epsilon && pointWithinSegment(d, a, b)) return true;
+  if (Math.abs(cdA) <= epsilon && pointWithinSegment(a, c, d)) return true;
+  if (Math.abs(cdB) <= epsilon && pointWithinSegment(b, c, d)) return true;
+  return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0);
+}
+
+function orientation(a: SizePoint, b: SizePoint, c: SizePoint) {
+  return (b.xM - a.xM) * (c.yM - a.yM) - (b.yM - a.yM) * (c.xM - a.xM);
+}
+
+function pointWithinSegment(point: SizePoint, start: SizePoint, end: SizePoint) {
+  const epsilon = 1e-9;
+  return (
+    point.xM >= Math.min(start.xM, end.xM) - epsilon &&
+    point.xM <= Math.max(start.xM, end.xM) + epsilon &&
+    point.yM >= Math.min(start.yM, end.yM) - epsilon &&
+    point.yM <= Math.max(start.yM, end.yM) + epsilon
+  );
 }
 
 function distance(a: SizePoint, b: SizePoint) {

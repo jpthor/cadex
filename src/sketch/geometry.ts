@@ -5,23 +5,24 @@ import type {
   SizeDimensionTarget,
   SizePoint,
   SizeShape,
+  SizeCadGeometry,
   SizeSnapAttachment,
   SizingProject,
-} from "../sizing";
+} from "../sizing/index.ts";
 import {
   inferredBatteryThicknessM,
   inferredMotorDepthM,
   rotorDiameterEstimate,
   shapeBounds,
-} from "../sizing/auditedSizingEngine";
+} from "../sizing/auditedSizingEngine.ts";
 import {
   airfoilOptions,
   baseCanvasView,
   mirrorAxisTouchToleranceM,
   referenceRoles,
   sideCollapseProgress,
-} from "./constants";
-import type { CanvasView, CanvasViewMode, ScaleUnit, SideProjectionFrame } from "./types";
+} from "./constants.ts";
+import type { CanvasView, CanvasViewMode, ScaleUnit, SideProjectionFrame } from "./types.ts";
 
 export function fitCanvasView(shapes: SizeShape[], viewMode: CanvasViewMode = "top") {
   const points = shapes.flatMap((shape) => shape.points);
@@ -343,6 +344,10 @@ export function pathForPoints(points: SizePoint[], view: CanvasView) {
     const point = points[index];
     const previous = canvasPoints[index - 1];
     const current = canvasPoints[index];
+    if ((point as SizePoint & { pathBreak?: boolean }).pathBreak) {
+      path += ` M ${current.x} ${current.y}`;
+      continue;
+    }
     const segmentMode = previousPoint.segmentOutMode ?? point.segmentInMode ?? "corner";
     if (segmentMode !== "spline") {
       path += ` L ${current.x} ${current.y}`;
@@ -394,7 +399,10 @@ export function partShapePointsFromDraft(partType: PartType, points: SizePoint[]
 }
 
 export function motorPointsFromDraft(start: SizePoint, end: SizePoint) {
-  return motorSpanFromDraft(start, end);
+  return [
+    cleanPartDraftPoint(start),
+    cleanPartDraftPoint(end),
+  ];
 }
 
 export function motorSpanFromDraft(start: SizePoint, end: SizePoint) {
@@ -404,23 +412,168 @@ export function motorSpanFromDraft(start: SizePoint, end: SizePoint) {
   ];
 }
 
+export function motorBodyPoints(points: SizePoint[]) {
+  if (points.length < 2) return points.map(cleanPartDraftPoint);
+  const [origin, handle] = motorSpanPoints(points);
+  if (!origin || !handle) return points.map(cleanPartDraftPoint);
+  const halfDiameterM = Math.max(Math.abs(handle.xM - origin.xM), 0.005);
+  const halfLengthM = Math.max(Math.abs(handle.yM - origin.yM), 0.01);
+  return rectanglePointsFromDraft(
+    cleanPartDraftPoint({ xM: Math.max(0, origin.xM - halfDiameterM), yM: origin.yM - halfLengthM }),
+    cleanPartDraftPoint({ xM: origin.xM + halfDiameterM, yM: origin.yM + halfLengthM }),
+  );
+}
+
 export function motorSpanPoints(points: SizePoint[]) {
   if (points.length < 2) return points.map(cleanPartDraftPoint);
-  if (points.length > 2) {
-    const xs = points.map((point) => Math.abs(point.xM));
-    const ys = points.map((point) => point.yM);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-    const horizontal = maxX - minX >= maxY - minY;
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    return horizontal
-      ? [cleanPartDraftPoint({ xM: minX, yM: centerY }), cleanPartDraftPoint({ xM: maxX, yM: centerY })]
-      : [cleanPartDraftPoint({ xM: centerX, yM: minY }), cleanPartDraftPoint({ xM: centerX, yM: maxY })];
+  if (points.length === 2) return points.map(cleanPartDraftPoint);
+  const bounds = pointBounds(points);
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  return [
+    cleanPartDraftPoint({ xM: centerX, yM: centerY }),
+    cleanPartDraftPoint({ xM: bounds.maxX, yM: bounds.maxY }),
+  ];
+}
+
+export function motorFootprintPointsFromSpan(points: SizePoint[]) {
+  return motorBodyPoints(points);
+}
+
+export function motorLengthM(shape: SizeShape) {
+  const [origin, handle] = motorSpanPoints(shape.points);
+  if (!origin || !handle) return 0.02;
+  return Math.max(Math.abs(handle.yM - origin.yM) * 2, 0.02);
+}
+
+export function motorDiameterM(shape: SizeShape) {
+  const [origin, handle] = motorSpanPoints(shape.points);
+  if (!origin || !handle) return 0.01;
+  return Math.max(Math.abs(handle.xM - origin.xM) * 2, 0.01);
+}
+
+export function motorDepthM(shape: SizeShape) {
+  return motorLengthM(shape);
+}
+
+export function pointBounds(points: SizePoint[]) {
+  const xs = points.map((point) => Math.abs(point.xM));
+  const ys = points.map((point) => point.yM);
+  if (!xs.length || !ys.length) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
+}
+
+export function rotorDiskDiameterM(shape: SizeShape) {
+  const span = rotorSpanPoints(shape.points);
+  if (span.length < 2) return 0.01;
+  return Math.max(distanceBetweenPoints(span[0], span[1]) * 2, 0.01);
+}
+
+export function partZHeightM(shape: SizeShape) {
+  if (shape.partType === "battery" || shape.partType === "payload") return rectangularPartHeightFromTopView(shape);
+  if (shape.partType === "motor") return motorDiameterM(shape);
+  if (shape.partType === "rotor") return rotorDiskDiameterM(shape);
+  if (shape.partType === "electronics") return rectangularPartHeightFromTopView(shape);
+  const bounds = shapeBounds(shape);
+  const widthM = Math.max(bounds.maxX - bounds.minX, 0.01);
+  const lengthM = Math.max(bounds.maxY - bounds.minY, 0.01);
+  return Math.max(Math.min(widthM, lengthM), 0.01);
+}
+
+export function cadGeometryForShape(shape: SizeShape): SizeCadGeometry | undefined {
+  if (shape.role === "body") return cadGeometryForBody(shape);
+  if (shape.role === "liftingSurface") return cadGeometryForLiftingSurface(shape);
+  if (shape.role === "part") return cadGeometryForPart(shape);
+  return undefined;
+}
+
+export function cadGeometryForPart(shape: SizeShape): SizeCadGeometry | undefined {
+  const center = topDownShapeCenter(shape);
+  if (shape.partType === "motor") {
+    const body = motorBodyPoints(shape.points);
+    const origin = motorSpanPoints(shape.points)[0];
+    if (body.length < 3) return undefined;
+    const bounds = pointBounds(body);
+    const lengthM = motorLengthM(shape);
+    return {
+      kind: "cylinder",
+      centerM: [origin?.yM ?? (bounds.minY + bounds.maxY) / 2, origin?.xM ?? (bounds.minX + bounds.maxX) / 2, 0],
+      axisM: [bounds.maxY >= bounds.minY ? 1 : -1, 0, 0],
+      radiusM: motorDiameterM(shape) / 2,
+      lengthM,
+    };
   }
-  return motorSpanFromDraft(points[0], points[1]);
+  if (shape.partType === "rotor") {
+    const span = rotorSpanPoints(shape.points);
+    if (span.length < 2) return undefined;
+    const [hub, tip] = span;
+    const radiusM = rotorDiskDiameterM(shape) / 2;
+    return {
+      kind: "rotor",
+      centerM: [hub.yM, hub.xM, 0],
+      axisM: normalizedVspAxisFromTopPoints(hub, tip),
+      radiusM,
+      bladeCount: Math.max(1, Math.round(shape.rotorBladeCount ?? 2)),
+      rootChordM: Math.max(radiusM * 2 * 0.055, 0.008),
+      tipChordM: Math.max(radiusM * 2 * 0.028, 0.004),
+    };
+  }
+  const bounds = shapeBounds({ ...shape, points: canonicalPartPoints(shape) });
+  return {
+    kind: "box",
+    centerM: [center.yM, center.xM, 0],
+    sizeM: [
+      Math.max(bounds.maxY - bounds.minY, 0.01),
+      Math.max(bounds.maxX - bounds.minX, 0.01),
+      partZHeightM(shape),
+    ],
+  };
+}
+
+export function cadGeometryForBody(shape: SizeShape): SizeCadGeometry | undefined {
+  const bounds = shapeBounds(shape);
+  const lengthM = Math.max(bounds.maxY - bounds.minY, 0.01);
+  const radiusM = Math.max(bounds.maxX, 0.005);
+  return {
+    kind: "revolvedBody",
+    centerM: [(bounds.minY + bounds.maxY) / 2, 0, 0],
+    lengthM,
+    radiusM,
+  };
+}
+
+export function cadGeometryForLiftingSurface(shape: SizeShape): SizeCadGeometry | undefined {
+  const bounds = shapeBounds(shape);
+  const spanM = Math.max(bounds.maxX * 2, 0.05);
+  const rootChordM = Math.max(chordLengthAtX(shape.points, 0), bounds.maxY - bounds.minY, 0.05);
+  const tipChordM = Math.max(chordLengthAtX(shape.points, bounds.maxX), rootChordM, 0.05);
+  return {
+    kind: "liftingSurface",
+    rootLeadingEdgeM: [bounds.maxY, 0, 0],
+    spanM,
+    rootChordM,
+    tipChordM,
+    airfoil: shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012",
+    incidenceDeg: shape.incidenceStationsDeg?.root10 ?? shape.incidenceDeg ?? 0,
+  };
+}
+
+export function normalizedVspAxisFromTopPoints(start: SizePoint, end: SizePoint): [number, number, number] {
+  const x = end.yM - start.yM;
+  const y = end.xM - start.xM;
+  const length = Math.hypot(x, y);
+  if (length <= 1e-9) return [1, 0, 0];
+  return [x / length, y / length, 0];
+}
+
+export function rectangularPartHeightFromTopView(shape: SizeShape) {
+  const bounds = shapeBounds(shape);
+  return Math.max(bounds.maxX - bounds.minX, 0.01);
 }
 
 export function rectanglePointsFromDraft(start: SizePoint, end: SizePoint) {
@@ -431,6 +584,46 @@ export function rectanglePointsFromDraft(start: SizePoint, end: SizePoint) {
     cleanPartDraftPoint(end),
     cleanPartDraftPoint({ xM: start.xM, yM: end.yM }),
   ];
+}
+
+export function squarePointsFromDraft(start: SizePoint, end: SizePoint) {
+  const dx = end.xM - start.xM;
+  const dy = end.yM - start.yM;
+  const side = Math.max(Math.abs(dx), Math.abs(dy), 0.01);
+  const nextEnd = {
+    ...end,
+    xM: Math.max(0, start.xM + Math.sign(dx || 1) * side),
+    yM: start.yM + Math.sign(dy || 1) * side,
+  };
+  return rectanglePointsFromDraft(start, cleanPartDraftPoint(nextEnd));
+}
+
+export function canonicalPartPoints(shape: SizeShape) {
+  if (shape.role !== "part") return shape.points;
+  if (shape.partType === "rotor") return rotorSpanPoints(shape.points);
+  if (shape.partType === "motor") return motorSpanPoints(shape.points);
+  if (shape.points.length < 2) return shape.points.map(cleanPartDraftPoint);
+  const bounds = shapeBounds(shape);
+  const start = cleanPartDraftPoint({ xM: bounds.minX, yM: bounds.minY });
+  const end = cleanPartDraftPoint({ xM: bounds.maxX, yM: bounds.maxY });
+  if (shape.partType === "battery" || shape.partType === "payload") return rectanglePointsFromDraft(start, end);
+  return shape.points.map(cleanPartDraftPoint);
+}
+
+export function moveConstrainedPartPoint(shape: SizeShape, pointIndex: number, target: SizePoint) {
+  if (shape.partType === "rotor") return moveRotorEndpoint(shape.points, pointIndex, target);
+  if (shape.partType === "motor") return updateMotorPoint(shape.points, pointIndex, target);
+  if (shape.partType !== "battery" && shape.partType !== "payload") {
+    return shape.points.map((point, index) => (index === pointIndex ? cleanPartDraftPoint(target) : point));
+  }
+  const points = canonicalPartPoints(shape);
+  if (points.length < 4) return partShapePointsFromDraft(shape.partType, [points[0] ?? target, target]);
+  const opposite = points[(pointIndex + 2) % 4] ?? points[0];
+  const start = cleanPartDraftPoint(opposite);
+  const end = cleanPartDraftPoint(target);
+  const rectangle = rectanglePointsFromDraft(start, end);
+  const indexMap = [2, 3, 0, 1];
+  return indexMap.map((index) => rectangle[index] ?? rectangle[0]).filter(Boolean);
 }
 
 export function rotorSpanFromDraft(start: SizePoint, end: SizePoint) {
@@ -477,18 +670,31 @@ export function rotorFlarePointsFromDraft(start: SizePoint, end: SizePoint) {
   const midHalfWidth = Math.max(length * 0.05, 0.008);
   const tipHalfWidth = Math.max(length * 0.025, 0.004);
   const rootInset = length * 0.08;
-  const mid = { xM: start.xM + dx * 0.58, yM: start.yM + dy * 0.58 };
-  const rootCenter = { xM: start.xM + ux * rootInset, yM: start.yM + uy * rootInset };
-  const addOffset = (point: SizePoint | { xM: number; yM: number }, halfWidth: number, side: 1 | -1) =>
-    cleanPartDraftPoint({ xM: point.xM + px * halfWidth * side, yM: point.yM + py * halfWidth * side });
-  return [
-    addOffset(rootCenter, rootHalfWidth, 1),
-    addOffset(mid, midHalfWidth, 1),
-    addOffset(end, tipHalfWidth, 1),
-    addOffset(end, tipHalfWidth, -1),
-    addOffset(mid, midHalfWidth, -1),
-    addOffset(rootCenter, rootHalfWidth, -1),
-  ];
+  const point = (xM: number, yM: number): SizePoint => ({
+    xM,
+    yM,
+    curveMode: "corner",
+    segmentInMode: "corner",
+    segmentOutMode: "corner",
+  });
+  const addOffset = (base: SizePoint | { xM: number; yM: number }, halfWidth: number, side: 1 | -1) =>
+    point(base.xM + px * halfWidth * side, base.yM + py * halfWidth * side);
+  const bladeSide = (direction: 1 | -1) => {
+    const rootCenter = { xM: start.xM + ux * rootInset * direction, yM: start.yM + uy * rootInset * direction };
+    const mid = { xM: start.xM + dx * 0.58 * direction, yM: start.yM + dy * 0.58 * direction };
+    const tip = { xM: start.xM + dx * direction, yM: start.yM + dy * direction };
+    return [
+      addOffset(rootCenter, rootHalfWidth, direction),
+      addOffset(mid, midHalfWidth, direction),
+      addOffset(tip, tipHalfWidth, direction),
+      addOffset(tip, tipHalfWidth, -direction as 1 | -1),
+      addOffset(mid, midHalfWidth, -direction as 1 | -1),
+      addOffset(rootCenter, rootHalfWidth, -direction as 1 | -1),
+    ];
+  };
+  const forwardBlade = bladeSide(1);
+  const aftBlade = bladeSide(-1);
+  return [...forwardBlade, ...aftBlade, forwardBlade[0]];
 }
 
 export function moveRotorEndpoint(points: SizePoint[], index: number, target: SizePoint) {
@@ -527,17 +733,32 @@ export function updateShapePointForJoin(shape: SizeShape, pointIndex: number, jo
 }
 
 export function motorLockPointIndices(shape: SizeShape) {
-  return [0, 1].filter((index) => index < motorSpanPoints(shape.points).length);
+  return [1].filter((index) => index < motorBodyPoints(shape.points).length);
 }
 
 export function updateMotorPoint(points: SizePoint[], pointIndex: number, target: SizePoint) {
-  if (points.length < 2) return points.map((point, index) => (index === pointIndex ? cleanPartDraftPoint(target) : point));
-  const next = motorSpanPoints(points);
-  const otherIndex = pointIndex === 0 ? 1 : 0;
-  const anchor = next[otherIndex];
-  const moved = hvLockedPoint(anchor, target);
-  next[pointIndex] = cleanPartDraftPoint({ ...moved, snapAttachment: target.snapAttachment });
-  return next;
+  const controls = motorSpanPoints(points);
+  if (controls.length < 2) return points.map((point, index) => (index === pointIndex ? cleanPartDraftPoint(target) : point));
+  const origin = controls[0];
+  const handle = controls[1];
+  if (!origin || !handle) return controls;
+  if (pointIndex === 0) {
+    const nextOrigin = cleanPartDraftPoint(target);
+    const dx = nextOrigin.xM - origin.xM;
+    const dy = nextOrigin.yM - origin.yM;
+    return [
+      nextOrigin,
+      cleanPartDraftPoint({ ...handle, xM: Math.max(0, handle.xM + dx), yM: handle.yM + dy }),
+    ];
+  }
+  return [
+    origin,
+    cleanPartDraftPoint({
+      ...target,
+      xM: Math.max(origin.xM + 0.005, Math.abs(target.xM)),
+      snapAttachment: target.snapAttachment,
+    }),
+  ];
 }
 
 export function hvLockedPoint(anchor: SizePoint, target: SizePoint) {
@@ -597,16 +818,98 @@ export function flattenShapeForFrontView(shape: SizeShape, progress = 1): SizeSh
 }
 
 export function projectedShape(shape: SizeShape, progress: number, shapes: SizeShape[], viewMode: CanvasViewMode): SizeShape {
-  if (viewMode === "side") return sideProjectionShape(shape, progress, shapes);
-  return frontProjectionShape(shape, progress, shapes);
+  const t = clamp(progress, 0, 1);
+  const finalShape = viewMode === "side" ? sideProjectionShapeFinal(shape, shapes) : frontProjectionShape(shape, 1, shapes);
+  return {
+    ...finalShape,
+    points: morphProjectedPoints(shape, finalShape.points, t, shapes, viewMode),
+  };
+}
+
+export function sideProjectionShapeFinal(shape: SizeShape, shapes: SizeShape[]): SizeShape {
+  const frame = sideProjectionFrame(shapes);
+  if (shape.role === "body") return { ...shape, points: bodySideSection(shape, 1, shapes, frame) };
+  if (shape.role === "liftingSurface") return { ...shape, points: liftingSurfaceSideSection(shape, 1, frame) };
+  if (shape.role === "part") {
+    const solvedPart = { ...shape, points: canonicalPartPoints(shape) };
+    if (shape.partType === "rotor") return { ...solvedPart, points: rotorSideSection(solvedPart, 1, shapes, frame) };
+    if (shape.partType === "motor") return { ...solvedPart, points: motorSideSection(solvedPart, 1, frame) };
+    return { ...solvedPart, points: rectangularSideSection(solvedPart, 1, partZHeightM(solvedPart), undefined, frame) };
+  }
+  return flattenShapeForSideView(shape, 1, frame);
+}
+
+export function morphProjectedPoints(
+  sourceShape: SizeShape,
+  finalPoints: SizePoint[],
+  progress: number,
+  shapes: SizeShape[],
+  viewMode: CanvasViewMode,
+) {
+  if (!finalPoints.length) return finalPoints;
+  const sourcePoints = projectionSourcePoints(sourceShape);
+  if (!sourcePoints.length) return finalPoints;
+  const frame = viewMode === "side" ? sideProjectionFrame(shapes) : undefined;
+  const collapseT = smootherStep(clamp(progress / sideCollapseProgress, 0, 1));
+  const expandT = smootherStep(clamp((progress - sideCollapseProgress * 0.45) / (1 - sideCollapseProgress * 0.45), 0, 1));
+
+  return finalPoints.map((finalPoint, index) => {
+    const sourcePoint = sourcePointAtProjectionIndex(sourcePoints, index, finalPoints.length);
+    if (viewMode === "side" && frame) {
+      const sourceY = (sourcePoint.yM - frame.baselineY) * frame.longitudinalSign;
+      const collapsedX = lerp(sourcePoint.xM, 0, collapseT);
+      return {
+        ...finalPoint,
+        xM: lerp(collapsedX, finalPoint.xM, expandT),
+        yM: lerp(sourceY, finalPoint.yM, progress),
+        tangentIn: undefined,
+        tangentOut: undefined,
+      };
+    }
+    return {
+      ...finalPoint,
+      xM: lerp(sourcePoint.xM, finalPoint.xM, progress),
+      yM: lerp(sourcePoint.yM, finalPoint.yM, progress),
+      tangentIn: undefined,
+      tangentOut: undefined,
+    };
+  });
+}
+
+export function projectionSourcePoints(shape: SizeShape) {
+  if (shape.role === "part") {
+    if (shape.partType === "motor") return motorFootprintPointsFromSpan(shape.points);
+    if (shape.partType === "rotor") return rotorFlarePointsFromSpan(shape.points);
+    return canonicalPartPoints(shape);
+  }
+  return shape.points;
+}
+
+export function sourcePointAtProjectionIndex(points: SizePoint[], index: number, targetLength: number) {
+  if (!points.length) return { xM: 0, yM: 0 };
+  if (points.length === 1 || targetLength <= 1) return points[0];
+  const sourceIndex = Math.round((index / (targetLength - 1)) * (points.length - 1));
+  return points[clamp(sourceIndex, 0, points.length - 1)] ?? points[0];
+}
+
+export function smootherStep(value: number) {
+  const t = clamp(value, 0, 1);
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
 export function frontProjectionShape(shape: SizeShape, progress: number, shapes: SizeShape[]): SizeShape {
   if (shape.role === "body") return { ...shape, points: circularFrontSection(shape, progress, undefined, frontSectionCenterX(shape, shapes)) };
   if (shape.role === "liftingSurface") return { ...shape, points: liftingSurfaceFrontSection(shape, progress, shapes) };
   if (shape.role === "part") {
-    if (shape.partType === "battery") return { ...shape, points: squareFrontSection(shape, progress) };
-    if (shape.partType === "motor" || shape.partType === "rotor") return { ...shape, points: circularFrontSection(shape, progress, rotorOrPartRadius(shape, shapes), frontSectionCenterX(shape, shapes)) };
+    const solvedPart = { ...shape, points: canonicalPartPoints(shape) };
+    if (shape.partType === "battery") return { ...solvedPart, points: boxFrontSection(solvedPart, progress, partZHeightM(solvedPart)) };
+    if (shape.partType === "payload") return { ...solvedPart, points: boxFrontSection(solvedPart, progress, partZHeightM(solvedPart)) };
+    if (shape.partType === "motor") {
+      return { ...solvedPart, points: circularFrontSection(solvedPart, progress, motorDiameterM(solvedPart) / 2, frontSectionCenterX(solvedPart, shapes)) };
+    }
+    if (shape.partType === "rotor") {
+      return { ...solvedPart, points: circularFrontSection(solvedPart, progress, rotorDiskDiameterM(solvedPart) / 2, frontSectionCenterX(solvedPart, shapes)) };
+    }
   }
   return flattenShapeForFrontView(shape, progress);
 }
@@ -619,23 +922,18 @@ export function sideProjectionShape(shape: SizeShape, progress: number, shapes: 
   if (shape.role === "body") return { ...shape, points: bodySideSection(shape, sectionProgress, shapes, frame) };
   if (shape.role === "liftingSurface") return { ...shape, points: liftingSurfaceSideSection(shape, sectionProgress, frame) };
   if (shape.role === "part") {
-    if (shape.partType === "rotor") return { ...shape, points: rotorSideSection(shape, sectionProgress, shapes, frame) };
-    if (shape.partType === "motor") return { ...shape, points: motorSideSection(shape, sectionProgress, frame) };
-    return { ...shape, points: rectangularSideSection(shape, sectionProgress, sidePartHalfHeight(shape), undefined, frame) };
+    const solvedPart = { ...shape, points: canonicalPartPoints(shape) };
+    if (shape.partType === "rotor") return { ...solvedPart, points: rotorSideSection(solvedPart, sectionProgress, shapes, frame) };
+    if (shape.partType === "motor") return { ...solvedPart, points: motorSideSection(solvedPart, sectionProgress, frame) };
+    return { ...solvedPart, points: rectangularSideSection(solvedPart, sectionProgress, partZHeightM(solvedPart), undefined, frame) };
   }
   return flattenShapeForSideView(shape, sectionProgress, frame);
 }
 
 export function sideProjectionFrame(shapes: SizeShape[]): SideProjectionFrame {
-  const aircraftPoints = shapes
-    .filter((shape) => !referenceRoles.includes(shape.role))
-    .flatMap((shape) => shape.points);
-  const ys = aircraftPoints.length ? aircraftPoints.map((point) => point.yM) : shapes.flatMap((shape) => shape.points.map((point) => point.yM));
-  const minY = Math.min(0, ...ys);
-  const maxY = Math.max(0, ...ys);
   return {
     baselineY: 0,
-    longitudinalSign: Math.abs(minY) > Math.abs(maxY) ? 1 : -1,
+    longitudinalSign: 1,
   };
 }
 
@@ -688,28 +986,58 @@ export function bodySideSection(shape: SizeShape, progress: number, shapes: Size
 
 export function liftingSurfaceSideSection(shape: SizeShape, progress: number, frame: SideProjectionFrame) {
   const bounds = shapeBounds(shape);
-  const leadingY = Math.abs(bounds.minY) <= Math.abs(bounds.maxY) ? bounds.minY : bounds.maxY;
-  const trailingY = leadingY === bounds.minY ? bounds.maxY : bounds.minY;
-  const chordM = trailingY - leadingY;
-  const thicknessRatio = airfoilThicknessRatioAtStation(shape, 0);
-  return airfoilSideSection(leadingY, chordM, thicknessRatio, progress, frame);
+  const stations = [
+    { t: 0.1, airfoil: shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012", incidenceDeg: shape.incidenceStationsDeg?.root10 ?? shape.incidenceDeg ?? 0 },
+    { t: 0.9, airfoil: shape.airfoilStations?.tip90 ?? shape.airfoil ?? "NACA 0012", incidenceDeg: shape.incidenceStationsDeg?.tip90 ?? shape.incidenceDeg ?? 0 },
+  ];
+  return stations.flatMap((station, index) => {
+    const stationX = bounds.minX + (bounds.maxX - bounds.minX) * station.t;
+    const extents = chordExtentsAtX(shape.points, stationX) ?? { minY: bounds.minY, maxY: bounds.maxY };
+    const leadingY = extents.maxY;
+    const chordM = extents.minY - extents.maxY;
+    return airfoilSideSection(leadingY, chordM, station.airfoil, progress, frame, station.incidenceDeg, index > 0);
+  });
 }
 
 export function motorSideSection(shape: SizeShape, progress: number, frame: SideProjectionFrame) {
-  return rectangularSideSection(shape, progress, Math.max(frontSectionRadius(shape) * 2, 0.01), inferredMotorDepthM(shape), frame);
+  return rectangularSideSection(shape, progress, motorDiameterM(shape), motorLengthM(shape), frame);
 }
 
 export function rotorSideSection(shape: SizeShape, progress: number, shapes: SizeShape[], frame: SideProjectionFrame) {
   const center = nearestMotorCenterY(shape, shapes) ?? topDownShapeCenter(shape).yM;
-  const diameterM = Math.max(rotorDiameterEstimate(shape, shapes), 0.01);
-  const halfDepthM = 0.006;
-  return [
-    sideProjectedPoint(center - halfDepthM, -diameterM / 2, progress, frame),
-    sideProjectedPoint(center + halfDepthM, -diameterM / 2, progress, frame),
-    sideProjectedPoint(center + halfDepthM, diameterM / 2, progress, frame),
-    sideProjectedPoint(center - halfDepthM, diameterM / 2, progress, frame),
-    sideProjectedPoint(center - halfDepthM, -diameterM / 2, progress, frame),
-  ];
+  const diameterM = rotorDiskDiameterM(shape);
+  const radiusM = diameterM / 2;
+  const rootChordM = Math.max(diameterM * 0.055, 0.008);
+  const tipChordM = Math.max(diameterM * 0.028, 0.004);
+  const rootInsetM = radiusM * 0.08;
+  const bladeLengthM = Math.max(radiusM - rootInsetM, 0.01);
+  const blade = rotorBladeSidePoints(center, rootInsetM, bladeLengthM, rootChordM, tipChordM, progress, frame, 1);
+  const mirrorBlade = rotorBladeSidePoints(center, rootInsetM, bladeLengthM, rootChordM, tipChordM, progress, frame, -1);
+  return [...blade, ...mirrorBlade];
+}
+
+export function rotorBladeSidePoints(
+  centerY: number,
+  rootInsetM: number,
+  bladeLengthM: number,
+  rootChordM: number,
+  tipChordM: number,
+  progress: number,
+  frame: SideProjectionFrame,
+  side: 1 | -1,
+) {
+  const samples = 10;
+  const leading: SizePoint[] = [];
+  const trailing: SizePoint[] = [];
+  for (let index = 0; index <= samples; index += 1) {
+    const t = index / samples;
+    const spanHeightM = side * (rootInsetM + bladeLengthM * t);
+    const chordM = lerp(rootChordM, tipChordM, t);
+    const stationCenterY = centerY + chordM * 0.18;
+    leading.push(sideProjectedPoint(stationCenterY - chordM * 0.5, spanHeightM, progress, frame));
+    trailing.unshift(sideProjectedPoint(stationCenterY + chordM * 0.5, spanHeightM, progress, frame));
+  }
+  return [...leading, ...trailing, leading[0]];
 }
 
 export function rectangularSideSection(shape: SizeShape, progress: number, heightM: number, overrideLengthM?: number, frame: SideProjectionFrame = { baselineY: 0, longitudinalSign: 1 }) {
@@ -727,12 +1055,7 @@ export function rectangularSideSection(shape: SizeShape, progress: number, heigh
 }
 
 export function sidePartHalfHeight(shape: SizeShape) {
-  if (shape.partType === "battery") {
-    const bounds = shapeBounds(shape);
-    return Math.max(bounds.maxX * 2, bounds.maxY - bounds.minY, 0.01);
-  }
-  if (shape.partType === "electronics") return Math.max(inferredBatteryThicknessM(shape) * 0.67, 0.008);
-  return Math.max(frontSectionRadius(shape) * 2, 0.01);
+  return partZHeightM(shape);
 }
 
 export function sideProjectedPoint(lengthM: number, heightM: number, progress: number, frame: SideProjectionFrame): SizePoint {
@@ -745,20 +1068,50 @@ export function sideProjectedPoint(lengthM: number, heightM: number, progress: n
   };
 }
 
-export function airfoilSideSection(leadingY: number, chordM: number, thicknessRatio: number, progress: number, frame: SideProjectionFrame) {
+export function airfoilSideSection(
+  leadingY: number,
+  chordM: number,
+  airfoilName: string,
+  progress: number,
+  frame: SideProjectionFrame,
+  incidenceDeg = 0,
+  pathBreak = false,
+) {
   const upper: SizePoint[] = [];
   const lower: SizePoint[] = [];
   const safeChordM = Math.max(Math.abs(chordM), 0.01);
   const direction = chordM < 0 ? -1 : 1;
-  const safeThicknessRatio = Math.max(thicknessRatio, 0.04);
+  const safeThicknessRatio = Math.max(airfoilThicknessRatio(airfoilName), 0.04);
+  const incidenceRad = (incidenceDeg * Math.PI) / 180;
+  const cos = Math.cos(incidenceRad);
+  const sin = Math.sin(incidenceRad);
   for (let index = 0; index <= 28; index += 1) {
     const x = index / 28;
-    const yM = leadingY + safeChordM * x * direction;
+    const chordOffsetM = safeChordM * x * direction;
     const halfThicknessM = nacaSymmetricHalfThickness(x, safeThicknessRatio, safeChordM);
-    upper.push(sideProjectedPoint(yM, halfThicknessM, progress, frame));
-    lower.unshift(sideProjectedPoint(yM, -halfThicknessM, progress, frame));
+    const camberM = airfoilCamberAtStation(airfoilName, x, safeChordM);
+    upper.push(airfoilSidePoint(leadingY, chordOffsetM, camberM + halfThicknessM, cos, sin, progress, frame, pathBreak && index === 0));
+    lower.unshift(airfoilSidePoint(leadingY, chordOffsetM, camberM - halfThicknessM, cos, sin, progress, frame));
   }
-  return [...upper, ...lower, upper[0]];
+  return [...upper, ...lower, { ...upper[0], pathBreak: false } as SizePoint & { pathBreak?: boolean }];
+}
+
+export function airfoilSidePoint(
+  leadingY: number,
+  chordOffsetM: number,
+  heightM: number,
+  cos: number,
+  sin: number,
+  progress: number,
+  frame: SideProjectionFrame,
+  pathBreak = false,
+): SizePoint {
+  const yM = leadingY + chordOffsetM * cos - heightM * sin;
+  const zM = chordOffsetM * sin + heightM * cos;
+  return {
+    ...sideProjectedPoint(yM, zM, progress, frame),
+    pathBreak,
+  } as SizePoint & { pathBreak?: boolean };
 }
 
 export function nacaSymmetricHalfThickness(stationT: number, thicknessRatio: number, chordM: number) {
@@ -768,6 +1121,21 @@ export function nacaSymmetricHalfThickness(stationT: number, thicknessRatio: num
     thicknessRatio *
     (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x ** 3 - 0.1015 * x ** 4);
   return Math.max(normalizedHalfThickness * chordM, 0);
+}
+
+export function airfoilCamberAtStation(name: string, stationT: number, chordM: number) {
+  const match = name.match(/(\d{4})/);
+  if (!match) return 0;
+  const digits = match[1];
+  const maxCamber = Number(digits[0]) / 100;
+  const camberPosition = Number(digits[1]) / 10;
+  if (maxCamber <= 0 || camberPosition <= 0) return 0;
+  const x = clamp(stationT, 0, 1);
+  const camber =
+    x < camberPosition
+      ? (maxCamber / (camberPosition ** 2)) * (2 * camberPosition * x - x ** 2)
+      : (maxCamber / ((1 - camberPosition) ** 2)) * ((1 - 2 * camberPosition) + 2 * camberPosition * x - x ** 2);
+  return camber * chordM;
 }
 
 export function circularFrontSection(shape: SizeShape, progress: number, overrideRadiusM?: number, overrideCenterX?: number) {
@@ -791,17 +1159,19 @@ export function circularFrontSection(shape: SizeShape, progress: number, overrid
   return points;
 }
 
-export function squareFrontSection(shape: SizeShape, progress: number) {
+export function boxFrontSection(shape: SizeShape, progress: number, heightM = partZHeightM(shape)) {
   const centerX = frontSectionCenterX(shape);
-  const halfSideM = Math.max(frontSectionRadius(shape), inferredBatteryThicknessM(shape) / 2, 0.01);
-  const minX = Math.max(0, centerX - halfSideM);
-  const maxX = centerX + halfSideM;
+  const bounds = shapeBounds(shape);
+  const halfWidthM = Math.max((bounds.maxX - bounds.minX) / 2, 0.01);
+  const halfHeightM = Math.max(heightM / 2, 0.004);
+  const minX = Math.max(0, centerX - halfWidthM);
+  const maxX = centerX + halfWidthM;
   return [
-    { xM: minX, yM: halfSideM * progress, curveMode: "corner" as const },
-    { xM: maxX, yM: halfSideM * progress, curveMode: "corner" as const },
-    { xM: maxX, yM: -halfSideM * progress, curveMode: "corner" as const },
-    { xM: minX, yM: -halfSideM * progress, curveMode: "corner" as const },
-    { xM: minX, yM: halfSideM * progress, curveMode: "corner" as const },
+    { xM: minX, yM: halfHeightM * progress, curveMode: "corner" as const },
+    { xM: maxX, yM: halfHeightM * progress, curveMode: "corner" as const },
+    { xM: maxX, yM: -halfHeightM * progress, curveMode: "corner" as const },
+    { xM: minX, yM: -halfHeightM * progress, curveMode: "corner" as const },
+    { xM: minX, yM: halfHeightM * progress, curveMode: "corner" as const },
   ];
 }
 
@@ -856,6 +1226,7 @@ export function frontSectionCenterX(shape: SizeShape, shapes: SizeShape[] = []) 
   const referenceCenter = referenceCenterXForShape(shape, shapes);
   if (referenceCenter !== undefined) return referenceCenter;
   if (shape.partType === "rotor") return nearestMotorCenterX(shape, shapes) ?? rotorHubCenterX(shape);
+  if (shape.partType === "motor") return motorSpanPoints(shape.points)[0]?.xM ?? 0;
   const bounds = shapeBounds(shape);
   return shapeTouchesMirrorAxis(shape) ? 0 : (bounds.minX + bounds.maxX) / 2;
 }
@@ -885,6 +1256,10 @@ export function nearestMotorCenterY(shape: SizeShape, shapes: SizeShape[]) {
 }
 
 export function topDownShapeCenter(shape: SizeShape): SizePoint {
+  if (shape.partType === "motor") {
+    const origin = motorSpanPoints(shape.points)[0];
+    if (origin) return { xM: origin.xM, yM: origin.yM };
+  }
   const bounds = shapeBounds(shape);
   return {
     xM: shapeTouchesMirrorAxis(shape) ? 0 : (bounds.minX + bounds.maxX) / 2,
@@ -961,10 +1336,19 @@ export function frontSectionDepth(shape: SizeShape) {
 }
 
 export function shapeTouchesMirrorAxis(shape: SizeShape) {
-  return shape.points.some((point) => Math.abs(point.xM) <= mirrorAxisTouchToleranceM);
+  return pointsTouchMirrorAxis(shape.points);
+}
+
+export function pointsTouchMirrorAxis(points: SizePoint[]) {
+  return points.some((point) => Math.abs(point.xM) <= mirrorAxisTouchToleranceM);
 }
 
 export function chordLengthAtX(points: SizePoint[], xM: number) {
+  const extents = chordExtentsAtX(points, xM);
+  return extents ? extents.maxY - extents.minY : 0;
+}
+
+export function chordExtentsAtX(points: SizePoint[], xM: number) {
   const intersections: number[] = [];
   const epsilon = 1e-6;
   for (let index = 0; index < points.length; index += 1) {
@@ -982,8 +1366,8 @@ export function chordLengthAtX(points: SizePoint[], xM: number) {
     const t = (xM - a.xM) / (b.xM - a.xM);
     intersections.push(a.yM + (b.yM - a.yM) * t);
   }
-  if (intersections.length < 2) return 0;
-  return Math.max(...intersections) - Math.min(...intersections);
+  if (intersections.length < 2) return undefined;
+  return { minY: Math.min(...intersections), maxY: Math.max(...intersections) };
 }
 
 export function chordLengthAtXForSets(pointSets: SizePoint[][], xM: number) {
@@ -1080,7 +1464,7 @@ export function shapeTouchesMirrorPlane(shape: SizeShape, plane: SizeShape) {
   const [start, end] = plane.points;
   if (!start || !end) return false;
   const thresholdM = 0.015;
-  return shape.points.some((point) => distancePointToLine(point, start, end) <= thresholdM);
+  return shape.points.some((point) => distancePointToSegment(point, start, end) <= thresholdM) || shapeSegments(shape.points).some(([a, b]) => segmentsTouch(a, b, start, end, thresholdM));
 }
 
 export function mirrorPointsAcrossPlane(points: SizePoint[], plane: SizeShape) {
@@ -1112,6 +1496,61 @@ export function distancePointToLine(point: SizePoint, start: SizePoint, end: Siz
   const length = Math.hypot(dx, dy);
   if (length <= 1e-9) return distanceBetweenPoints(point, start);
   return Math.abs(dy * point.xM - dx * point.yM + end.xM * start.yM - end.yM * start.xM) / length;
+}
+
+export function distancePointToSegment(point: SizePoint, start: SizePoint, end: SizePoint) {
+  const dx = end.xM - start.xM;
+  const dy = end.yM - start.yM;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 1e-9) return distanceBetweenPoints(point, start);
+  const t = clamp(((point.xM - start.xM) * dx + (point.yM - start.yM) * dy) / lengthSquared, 0, 1);
+  return distanceBetweenPoints(point, { xM: start.xM + dx * t, yM: start.yM + dy * t });
+}
+
+function shapeSegments(points: SizePoint[]) {
+  const segments: Array<[SizePoint, SizePoint]> = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    segments.push([points[index], points[index + 1]]);
+  }
+  if (points.length > 2) segments.push([points[points.length - 1], points[0]]);
+  return segments;
+}
+
+function segmentsTouch(a: SizePoint, b: SizePoint, c: SizePoint, d: SizePoint, thresholdM: number) {
+  if (segmentsIntersect(a, b, c, d)) return true;
+  return (
+    distancePointToSegment(a, c, d) <= thresholdM ||
+    distancePointToSegment(b, c, d) <= thresholdM ||
+    distancePointToSegment(c, a, b) <= thresholdM ||
+    distancePointToSegment(d, a, b) <= thresholdM
+  );
+}
+
+function segmentsIntersect(a: SizePoint, b: SizePoint, c: SizePoint, d: SizePoint) {
+  const epsilon = 1e-9;
+  const abC = orientation(a, b, c);
+  const abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a);
+  const cdB = orientation(c, d, b);
+  if (Math.abs(abC) <= epsilon && pointWithinSegment(c, a, b)) return true;
+  if (Math.abs(abD) <= epsilon && pointWithinSegment(d, a, b)) return true;
+  if (Math.abs(cdA) <= epsilon && pointWithinSegment(a, c, d)) return true;
+  if (Math.abs(cdB) <= epsilon && pointWithinSegment(b, c, d)) return true;
+  return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0);
+}
+
+function orientation(a: SizePoint, b: SizePoint, c: SizePoint) {
+  return (b.xM - a.xM) * (c.yM - a.yM) - (b.yM - a.yM) * (c.xM - a.xM);
+}
+
+function pointWithinSegment(point: SizePoint, start: SizePoint, end: SizePoint) {
+  const epsilon = 1e-9;
+  return (
+    point.xM >= Math.min(start.xM, end.xM) - epsilon &&
+    point.xM <= Math.max(start.xM, end.xM) + epsilon &&
+    point.yM >= Math.min(start.yM, end.yM) - epsilon &&
+    point.yM <= Math.max(start.yM, end.yM) + epsilon
+  );
 }
 
 export function closeIfNearCenterline(points: SizePoint[]) {
@@ -1392,16 +1831,22 @@ export function resolveAttachedShapes(shapes: SizeShape[]) {
 }
 
 export function resolveMotorAttachedPoints(points: SizePoint[], shapes: SizeShape[]) {
-  const resolved = motorSpanPoints(points).map((point) => resolveAttachedPoint(point, shapes));
-  const lockIndices = [0, 1].filter((index) => index < resolved.length);
-  if (lockIndices.length < 2) return resolved;
-  const first = resolved[lockIndices[0]];
-  const second = resolved[lockIndices[1]];
-  if (!first || !second) return resolved;
-  const lockedSecond = hvLockedPoint(first, second);
-  const next = updateMotorPoint(resolved, lockIndices[1], { ...lockedSecond, snapAttachment: second.snapAttachment });
-  next[lockIndices[0]] = { ...next[lockIndices[0]], snapAttachment: first.snapAttachment };
-  return next;
+  const controls = motorSpanPoints(points);
+  if (controls.length < 2) return controls.map((point) => resolveAttachedPoint(point, shapes));
+  const origin = controls[0];
+  const handle = controls[1];
+  if (!origin || !handle) return controls;
+  const resolvedOrigin = resolveAttachedPoint(origin, shapes);
+  const dx = resolvedOrigin.xM - origin.xM;
+  const dy = resolvedOrigin.yM - origin.yM;
+  return [
+    resolvedOrigin,
+    cleanPartDraftPoint({
+      ...handle,
+      xM: Math.max(0, handle.xM + dx),
+      yM: handle.yM + dy,
+    }),
+  ];
 }
 
 export function resolveAttachedPoint(point: SizePoint, shapes: SizeShape[]): SizePoint {
