@@ -4,13 +4,17 @@ mod cad;
 mod dispatch;
 mod legacy;
 mod model;
+mod openai_response;
+mod openvsp_sizing;
 mod tools;
+
+use openai_response::{extract_function_calls, extract_output_text};
+use openvsp_sizing::{OpenVspSizingRequest, OpenVspSizingResult};
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::Manager;
 use uuid::Uuid;
@@ -299,275 +303,7 @@ fn analyze_sizing_openvsp(
     request: OpenVspSizingRequest,
 ) -> Result<OpenVspSizingResult, String> {
     let export_dir = default_export_dir(&app)?.join("openvsp");
-    fs::create_dir_all(&export_dir).map_err(|error| error.to_string())?;
-    let stem = format!(
-        "{}_sizing_{}",
-        legacy::sanitize_filename(&request.project_name),
-        Uuid::new_v4()
-    );
-    let script_path = export_dir.join(format!("{stem}.vspscript"));
-    let vsp3_path = export_dir.join(format!("{stem}.vsp3"));
-    let lifting_surfaces = sizing_lifting_surfaces(&request.sizing);
-    let script = sizing_to_openvsp_script(&lifting_surfaces, &request.sizing, &vsp3_path);
-    fs::write(&script_path, script).map_err(|error| error.to_string())?;
-
-    if lifting_surfaces.is_empty() {
-        return Ok(OpenVspSizingResult {
-            script_path: script_path.display().to_string(),
-            vsp3_path: vsp3_path.display().to_string(),
-            ran_openvsp: false,
-            message: "Draw at least one lifting surface before running OpenVSP.".to_string(),
-            stdout: String::new(),
-            stderr: String::new(),
-        });
-    }
-
-    if let Some(binary) = legacy::find_openvsp_binary() {
-        let output = Command::new(binary)
-            .arg("-script")
-            .arg(&script_path)
-            .output()
-            .map_err(|error| error.to_string())?;
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        if !output.status.success() {
-            return Ok(OpenVspSizingResult {
-                script_path: script_path.display().to_string(),
-                vsp3_path: vsp3_path.display().to_string(),
-                ran_openvsp: true,
-                message: "OpenVSP ran but returned an error. The generated script was saved.".to_string(),
-                stdout,
-                stderr,
-            });
-        }
-        return Ok(OpenVspSizingResult {
-            script_path: script_path.display().to_string(),
-            vsp3_path: vsp3_path.display().to_string(),
-            ran_openvsp: true,
-            message: "OpenVSP model and VSPAERO setup script generated.".to_string(),
-            stdout,
-            stderr,
-        });
-    }
-
-    Ok(OpenVspSizingResult {
-        script_path: script_path.display().to_string(),
-        vsp3_path: vsp3_path.display().to_string(),
-        ran_openvsp: false,
-        message: "OpenVSP was not found. Saved the OpenVSP/VSPAERO script for this sizing sketch.".to_string(),
-        stdout: String::new(),
-        stderr: String::new(),
-    })
-}
-
-#[derive(Debug, Clone)]
-struct SizingSurface {
-    name: String,
-    span_m: f64,
-    chord_m: f64,
-    y_m: f64,
-}
-
-fn sizing_lifting_surfaces(sizing: &Value) -> Vec<SizingSurface> {
-    sizing
-        .get("shapes")
-        .and_then(|value| value.as_array())
-        .into_iter()
-        .flatten()
-        .filter(|shape| shape.get("role").and_then(|value| value.as_str()) == Some("liftingSurface"))
-        .filter_map(sizing_surface_from_shape)
-        .collect()
-}
-
-fn sizing_surface_from_shape(shape: &Value) -> Option<SizingSurface> {
-    let points = shape.get("points")?.as_array()?;
-    if points.len() < 2 {
-        return None;
-    }
-    let mut max_x = 0.0_f64;
-    let mut min_y = 0.0_f64;
-    let mut max_y = 0.0_f64;
-    let mut sum_y = 0.0_f64;
-    for point in points {
-        let x = point.get("xM").and_then(|value| value.as_f64()).unwrap_or(0.0).abs();
-        let y = point.get("yM").and_then(|value| value.as_f64()).unwrap_or(0.0);
-        max_x = max_x.max(x);
-        min_y = min_y.min(y);
-        max_y = max_y.max(y);
-        sum_y += y;
-    }
-    let span_m = (max_x * 2.0).max(0.05);
-    let chord_m = (max_y - min_y).max(0.05);
-    let y_m = sum_y / points.len() as f64;
-    let name = shape
-        .get("label")
-        .and_then(|value| value.as_str())
-        .unwrap_or("Sizing lifting surface")
-        .replace('"', "\\\"");
-    Some(SizingSurface {
-        name,
-        span_m,
-        chord_m,
-        y_m,
-    })
-}
-
-fn sizing_vspaero_reference(surfaces: &[SizingSurface], sizing: &Value) -> (f64, f64, f64) {
-    if let Some(analysis) = sizing.get("analysis") {
-        let area = analysis
-            .get("wingAreaM2")
-            .and_then(|value| value.as_f64())
-            .filter(|value| *value > 0.0);
-        let chord = analysis
-            .get("meanChordM")
-            .and_then(|value| value.as_f64())
-            .filter(|value| *value > 0.0);
-        if let (Some(area), Some(chord)) = (area, chord) {
-            return (area, (area / chord).max(0.05), chord);
-        }
-    }
-    let area: f64 = surfaces.iter().map(|surface| surface.span_m * surface.chord_m).sum();
-    let span: f64 = surfaces.iter().map(|surface| surface.span_m).sum();
-    let chord: f64 = if span > 0.0 { area / span } else { 0.2 };
-    (area.max(0.01), span.max(0.05), chord.max(0.05))
-}
-
-fn sizing_to_openvsp_script(surfaces: &[SizingSurface], sizing: &Value, vsp3_path: &Path) -> String {
-    let speed = sizing
-        .get("mission")
-        .and_then(|mission| mission.get("cruiseSpeedMS"))
-        .and_then(|value| value.as_f64())
-        .unwrap_or(17.0);
-    let (area, span, chord) = sizing_vspaero_reference(surfaces, sizing);
-    let mut script = String::from("void main()\n{\n    ClearVSPModel();\n");
-    for surface in surfaces {
-        script.push_str(&format!(
-            concat!(
-                "    string wid = AddGeom(\"WING\");\n",
-                "    SetGeomName(wid, \"{name}\");\n",
-                "    SetParmVal(wid, \"Sym_Planar_Flag\", \"Sym\", 2);\n",
-                "    SetParmVal(wid, \"X_Rel_Location\", \"XForm\", {x});\n",
-                "    SetParmVal(wid, \"Y_Rel_Location\", \"XForm\", 0.0);\n",
-                "    SetParmVal(wid, \"Z_Rel_Location\", \"XForm\", 0.0);\n",
-                "    SetDriverGroup(wid, 1, SPAN_WSECT_DRIVER, ROOTC_WSECT_DRIVER, TIPC_WSECT_DRIVER);\n",
-                "    SetParmVal(wid, \"Span\", \"XSec_1\", {half_span});\n",
-                "    SetParmVal(wid, \"Root_Chord\", \"XSec_1\", {chord});\n",
-                "    SetParmVal(wid, \"Tip_Chord\", \"XSec_1\", {chord});\n",
-                "    Update();\n"
-            ),
-            name = surface.name,
-            x = surface.y_m,
-            half_span = surface.span_m / 2.0,
-            chord = surface.chord_m,
-        ));
-    }
-    script.push_str(&format!(
-        concat!(
-            "    Update();\n",
-            "    WriteVSPFile(\"{vsp3}\");\n",
-            "\n",
-            "    // VSPAERO hook: OpenVSP exposes VSPAERO through the Analysis Manager.\n",
-            "    // This script prepares the geometry and reference values for a VLM run.\n",
-            "    string geom_analysis = \"VSPAEROComputeGeometry\";\n",
-            "    SetAnalysisInputDefaults(geom_analysis);\n",
-            "    ExecAnalysis(geom_analysis);\n",
-            "\n",
-            "    string aero_analysis = \"VSPAEROSinglePoint\";\n",
-            "    SetAnalysisInputDefaults(aero_analysis);\n",
-            "    array<double> alpha(1); alpha[0] = 0.0;\n",
-            "    array<double> mach(1); mach[0] = {mach};\n",
-            "    array<double> sref(1); sref[0] = {area};\n",
-            "    array<double> bref(1); bref[0] = {span};\n",
-            "    array<double> cref(1); cref[0] = {chord};\n",
-            "    SetDoubleAnalysisInput(aero_analysis, \"Alpha\", alpha);\n",
-            "    SetDoubleAnalysisInput(aero_analysis, \"Mach\", mach);\n",
-            "    SetDoubleAnalysisInput(aero_analysis, \"Sref\", sref);\n",
-            "    SetDoubleAnalysisInput(aero_analysis, \"bref\", bref);\n",
-            "    SetDoubleAnalysisInput(aero_analysis, \"cref\", cref);\n",
-            "    // ExecAnalysis(aero_analysis);\n",
-            "}}\n"
-        ),
-        vsp3 = vsp3_path.display().to_string().replace('\\', "\\\\").replace('"', "\\\""),
-        mach = speed / 343.0,
-        area = area,
-        span = span,
-        chord = chord,
-    ));
-    script
-}
-
-#[derive(Debug)]
-struct ToolCall {
-    name: String,
-    arguments: serde_json::Value,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct OpenVspSizingRequest {
-    project_name: String,
-    sizing: Value,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct OpenVspSizingResult {
-    script_path: String,
-    vsp3_path: String,
-    ran_openvsp: bool,
-    message: String,
-    stdout: String,
-    stderr: String,
-}
-
-fn extract_function_calls(response: &serde_json::Value) -> Vec<ToolCall> {
-    response
-        .get("output")
-        .and_then(|output| output.as_array())
-        .into_iter()
-        .flatten()
-        .filter_map(|item| {
-            let item_type = item.get("type")?.as_str()?;
-            if item_type != "function_call" {
-                return None;
-            }
-            let name = item.get("name")?.as_str()?.to_string();
-            let raw_args = item.get("arguments")?.as_str()?;
-            let arguments = serde_json::from_str(raw_args).ok()?;
-            Some(ToolCall { name, arguments })
-        })
-        .collect()
-}
-
-fn extract_output_text(response: &serde_json::Value) -> Option<String> {
-    if let Some(text) = response.get("output_text").and_then(|value| value.as_str()) {
-        return Some(text.to_string());
-    }
-    let mut output = String::new();
-    for item in response.get("output")?.as_array()? {
-        if item.get("type").and_then(|value| value.as_str()) != Some("message") {
-            continue;
-        }
-        for content in item
-            .get("content")
-            .and_then(|value| value.as_array())
-            .into_iter()
-            .flatten()
-        {
-            let kind = content.get("type").and_then(|value| value.as_str()).unwrap_or("");
-            if kind != "output_text" {
-                continue;
-            }
-            if let Some(text) = content.get("text").and_then(|value| value.as_str()) {
-                output.push_str(text);
-            }
-        }
-    }
-    if output.is_empty() {
-        None
-    } else {
-        Some(output)
-    }
+    openvsp_sizing::analyze_sizing(&app, &export_dir, request)
 }
 
 fn main() {
@@ -692,56 +428,6 @@ mod tests {
     }
 
     #[test]
-    fn sizing_openvsp_script_contains_vspaero_hook() {
-        let sizing = serde_json::json!({
-            "mission": { "cruiseSpeedMS": 17.0 },
-            "shapes": [
-                {
-                    "role": "liftingSurface",
-                    "label": "Main wing",
-                    "points": [
-                        { "xM": 0.0, "yM": 0.1 },
-                        { "xM": 1.0, "yM": 0.1 },
-                        { "xM": 1.0, "yM": -0.2 },
-                        { "xM": 0.0, "yM": -0.2 }
-                    ]
-                }
-            ],
-            "analysis": {
-                "wingAreaM2": 0.4,
-                "meanChordM": 0.2
-            }
-        });
-        let surfaces = sizing_lifting_surfaces(&sizing);
-        assert_eq!(surfaces.len(), 1);
-        let script = sizing_to_openvsp_script(&surfaces, &sizing, &PathBuf::from("/tmp/cadex-sizing.vsp3"));
-        assert!(script.contains("AddGeom(\"WING\")"));
-        assert!(script.contains("VSPAEROComputeGeometry"));
-        assert!(script.contains("VSPAEROSinglePoint"));
-        assert!(script.contains("WriteVSPFile"));
-        assert!(script.contains("sref[0] = 0.4"));
-        assert!(script.contains("cref[0] = 0.2"));
-        assert!(script.contains("bref[0] = 2"));
-    }
-
-    #[test]
-    fn sizing_vspaero_reference_prefers_analysis() {
-        let surfaces = vec![SizingSurface {
-            name: "Wing".to_string(),
-            span_m: 2.0,
-            chord_m: 0.2,
-            y_m: 0.0,
-        }];
-        let sizing = serde_json::json!({
-            "analysis": { "wingAreaM2": 0.48, "meanChordM": 0.16 }
-        });
-        let (area, span, chord) = sizing_vspaero_reference(&surfaces, &sizing);
-        assert!((area - 0.48).abs() < 1e-9);
-        assert!((chord - 0.16).abs() < 1e-9);
-        assert!((span - 3.0).abs() < 1e-9);
-    }
-
-    #[test]
     fn sanitize_filename_replaces_non_alphanumeric() {
         assert_eq!(sanitize_filename("My Aircraft"), "My_Aircraft");
         assert_eq!(sanitize_filename(""), "cadex_export");
@@ -788,23 +474,6 @@ mod tests {
         let stl = b"solid empty\nendsolid empty\n";
         let result = parse_stl(stl, Path::new("empty.stl"));
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn extract_output_text_filters_to_output_text_type() {
-        let response = serde_json::json!({
-            "output": [
-                { "type": "function_call", "name": "create_box", "arguments": "{}" },
-                {
-                    "type": "message",
-                    "content": [
-                        { "type": "reasoning", "text": "internal thinking" },
-                        { "type": "output_text", "text": "Hello!" }
-                    ]
-                }
-            ]
-        });
-        assert_eq!(extract_output_text(&response).as_deref(), Some("Hello!"));
     }
 
     #[test]

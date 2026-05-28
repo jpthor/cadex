@@ -1,5 +1,7 @@
 import { batteryMassEstimate, rotorDiameterEstimate } from "./sizing/auditedSizingEngine.ts";
-import type { SizingProject } from "./sizingEngine";
+import type { SizingProject } from "./sizing";
+
+const fixedRotorCount = 2;
 
 export type PropulsionInputs = {
   rotorPitchIn: number;
@@ -270,12 +272,12 @@ export function batteryMassFromSizing(sizing: Pick<SizingProject, "shapes">) {
 export function rotorDefinitionFromSizing(sizing: Pick<SizingProject, "mission" | "shapes">): RotorDefinition {
   const rotorShapes = sizing.shapes.filter((shape) => shape.role === "part" && shape.partType === "rotor");
   if (!rotorShapes.length) {
-    return { bladeCount: 2, count: sizing.mission.motorCount, diameterM: 0 };
+    return { bladeCount: 2, count: fixedRotorCount, diameterM: 0 };
   }
   const primary = rotorShapes[0];
   return {
     bladeCount: Math.max(1, Math.round(primary.rotorBladeCount ?? 2)),
-    count: rotorShapes.reduce((total, shape) => total + mirroredRotorInstanceCount(shape), 0),
+    count: fixedRotorCount,
     diameterM: Math.max(...rotorShapes.map((shape) => rotorDiameterEstimate(shape, sizing.shapes)), 0),
   };
 }

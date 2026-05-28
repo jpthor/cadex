@@ -9,7 +9,7 @@ import {
   motorMassEstimate,
   rotorMassPerRotorEstimate,
   rotorTotalMassEstimate,
-} from "../src/sizing/auditedSizingEngine.ts";
+} from "../src/sizing/index.ts";
 
 const carbonFibreDensityKgM3 = 1600;
 const thicknessM = 0.0012;
@@ -157,6 +157,21 @@ approx(
   0.6,
   "motor mass ignores stale manual mass and uses inferred volume",
 );
+approx(
+  motorMassEstimate({
+    id: "motor-line",
+    role: "part",
+    partType: "motor",
+    label: "Motor line",
+    drawMode: "line",
+    points: [
+      { xM: 0.2, yM: 0.15 },
+      { xM: 0.25, yM: 0.15 },
+    ],
+  }),
+  Math.PI * Math.pow(0.05 / 2, 2) * 2 * 0.0375 * 3200,
+  "line motor mass from H/V diameter and inferred depth",
+);
 const rotorShape = {
   id: "rotor",
   role: "part",
@@ -205,7 +220,7 @@ const tailProject = {
 };
 const tailAnalysis = computeSizingAnalysis(tailProject);
 const tailArea = 0.5 * 0.08 * 2;
-const tailEffectiveness = 0.65;
+const tailEffectiveness = 0.9;
 const expectedTailWeightedCop =
   (0.05 * wingSurfaceAreaM2 + (-0.68 - 0.08 * 0.25) * tailArea * tailEffectiveness) /
   (wingSurfaceAreaM2 + tailArea * tailEffectiveness);

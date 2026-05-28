@@ -11,13 +11,16 @@ mod model;
 #[path = "../tools.rs"]
 mod tools;
 
+use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 
 use cad::KernelState;
 use model::CadProject;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 #[derive(Debug, Deserialize)]
@@ -27,6 +30,41 @@ struct ToolRequest {
     name: String,
     args: Value,
     selected_geometry: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectCreateRequest {
+    name: String,
+    state: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectLoadRequest {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectSaveRequest {
+    id: String,
+    state: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectDeleteRequest {
+    id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectEntry {
+    id: String,
+    name: String,
+    path: String,
+    updated_at_ms: u128,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -78,6 +116,11 @@ fn handle_connection(mut stream: TcpStream, state: &KernelState) -> Result<(), S
     let response = match (method, path) {
         ("GET", "/health") => Ok(json!({ "ok": true, "engine": "cadrum" })),
         ("GET", "/tools") => Ok(json!({ "tools": tools::openai_tool_array() })),
+        ("GET", "/projects") => list_aircraft_projects().map(|projects| json!({ "projects": projects })),
+        ("POST", "/projects/create") => create_aircraft_project(body),
+        ("POST", "/projects/load") => load_aircraft_project(body),
+        ("POST", "/projects/save") => save_aircraft_project(body),
+        ("POST", "/projects/delete") => delete_aircraft_project(body),
         ("POST", "/tool") => run_tool_request(state, body),
         _ => Err(format!("unsupported route {method} {path}")),
     };
@@ -86,6 +129,194 @@ fn handle_connection(mut stream: TcpStream, state: &KernelState) -> Result<(), S
         Ok(payload) => write_json(&mut stream, 200, &payload),
         Err(error) => write_json(&mut stream, 400, &json!({ "error": error })),
     }
+}
+
+fn list_aircraft_projects() -> Result<Vec<ProjectEntry>, String> {
+    let root = aircraft_root()?;
+    fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+    let mut projects = Vec::new();
+    for entry in fs::read_dir(&root).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        if !entry.file_type().map_err(|error| error.to_string())?.is_dir() {
+            continue;
+        }
+        let path = entry.path().join("aircraft.json");
+        if !path.exists() {
+            continue;
+        }
+        let state = fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+        let id = state
+            .as_ref()
+            .and_then(|value| value.get("id"))
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string)
+            .unwrap_or_else(|| entry.file_name().to_string_lossy().to_string());
+        let name = state
+            .as_ref()
+            .and_then(|value| value.get("name"))
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string)
+            .unwrap_or_else(|| id.clone());
+        let updated_at_ms = path
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis())
+            .unwrap_or(0);
+        projects.push(ProjectEntry {
+            id,
+            name,
+            path: path.display().to_string(),
+            updated_at_ms,
+        });
+    }
+    projects.sort_by(|a, b| b.updated_at_ms.cmp(&a.updated_at_ms));
+    Ok(projects)
+}
+
+fn create_aircraft_project(body: &str) -> Result<Value, String> {
+    let request: ProjectCreateRequest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+    let id = unique_aircraft_id(&request.name)?;
+    let name = request.name.trim();
+    let name = if name.is_empty() { "Untitled aircraft" } else { name };
+    let state = stamp_project_state(request.state, &id, name);
+    let path = aircraft_project_path(&id)?;
+    write_project_file(&path, &state)?;
+    git_add(&path);
+    Ok(json!({ "project": project_entry_from_state(&state, &path), "state": state }))
+}
+
+fn load_aircraft_project(body: &str) -> Result<Value, String> {
+    let request: ProjectLoadRequest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+    let path = aircraft_project_path(&sanitize_id(&request.id))?;
+    let text = fs::read_to_string(&path).map_err(|error| error.to_string())?;
+    let state: Value = serde_json::from_str(&text).map_err(|error| error.to_string())?;
+    Ok(json!({ "project": project_entry_from_state(&state, &path), "state": state }))
+}
+
+fn save_aircraft_project(body: &str) -> Result<Value, String> {
+    let request: ProjectSaveRequest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+    let id = sanitize_id(&request.id);
+    let path = aircraft_project_path(&id)?;
+    let current = fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+    let name = request
+        .state
+        .get("name")
+        .and_then(|value| value.as_str())
+        .or_else(|| current.as_ref().and_then(|value| value.get("name")).and_then(|value| value.as_str()))
+        .unwrap_or("Untitled aircraft")
+        .to_string();
+    let state = stamp_project_state(request.state, &id, &name);
+    write_project_file(&path, &state)?;
+    git_add(&path);
+    Ok(json!({ "project": project_entry_from_state(&state, &path), "state": state }))
+}
+
+fn delete_aircraft_project(body: &str) -> Result<Value, String> {
+    let request: ProjectDeleteRequest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+    let id = sanitize_id(&request.id);
+    if id.is_empty() {
+        return Err("missing aircraft project id".to_string());
+    }
+    let project_dir = aircraft_root()?.join(&id);
+    if project_dir.exists() {
+        fs::remove_dir_all(&project_dir).map_err(|error| error.to_string())?;
+        git_add_all(&project_dir);
+    }
+    Ok(json!({ "deletedId": id, "projects": list_aircraft_projects()? }))
+}
+
+fn stamp_project_state(mut state: Value, id: &str, name: &str) -> Value {
+    if !state.is_object() {
+        state = json!({});
+    }
+    let object = state.as_object_mut().expect("state object");
+    object.insert("id".to_string(), json!(id));
+    object.insert("name".to_string(), json!(name));
+    object.insert("schemaVersion".to_string(), json!(1));
+    object.insert("updatedAt".to_string(), json!(chrono_like_timestamp_ms()));
+    state
+}
+
+fn project_entry_from_state(state: &Value, path: &Path) -> ProjectEntry {
+    ProjectEntry {
+        id: state.get("id").and_then(|value| value.as_str()).unwrap_or("aircraft").to_string(),
+        name: state.get("name").and_then(|value| value.as_str()).unwrap_or("Untitled aircraft").to_string(),
+        path: path.display().to_string(),
+        updated_at_ms: path
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis())
+            .unwrap_or(0),
+    }
+}
+
+fn write_project_file(path: &Path, state: &Value) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let text = serde_json::to_string_pretty(state).map_err(|error| error.to_string())?;
+    fs::write(path, format!("{text}\n")).map_err(|error| error.to_string())
+}
+
+fn aircraft_root() -> Result<PathBuf, String> {
+    std::env::current_dir()
+        .map_err(|error| error.to_string())
+        .map(|cwd| cwd.join("aircraft"))
+}
+
+fn aircraft_project_path(id: &str) -> Result<PathBuf, String> {
+    Ok(aircraft_root()?.join(id).join("aircraft.json"))
+}
+
+fn unique_aircraft_id(name: &str) -> Result<String, String> {
+    let root = aircraft_root()?;
+    let base = sanitize_id(name);
+    let base = if base.is_empty() { "aircraft".to_string() } else { base };
+    for index in 0..1000 {
+        let candidate = if index == 0 { base.clone() } else { format!("{base}-{index}") };
+        if !root.join(&candidate).exists() {
+            return Ok(candidate);
+        }
+    }
+    Err("Could not allocate a unique aircraft project id.".to_string())
+}
+
+fn sanitize_id(value: &str) -> String {
+    let mut slug = String::new();
+    let mut last_dash = false;
+    for character in value.trim().to_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character);
+            last_dash = false;
+        } else if !last_dash {
+            slug.push('-');
+            last_dash = true;
+        }
+    }
+    slug.trim_matches('-').to_string()
+}
+
+fn git_add(path: &Path) {
+    let _ = Command::new("git").arg("add").arg(path).output();
+}
+
+fn git_add_all(path: &Path) {
+    let _ = Command::new("git").arg("add").arg("-A").arg(path).output();
+}
+
+fn chrono_like_timestamp_ms() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
 }
 
 fn run_tool_request(state: &KernelState, body: &str) -> Result<Value, String> {
