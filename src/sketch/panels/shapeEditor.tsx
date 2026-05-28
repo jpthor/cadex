@@ -22,6 +22,10 @@ import {
   liftingSurfaceMassEstimate,
   liftingSurfaceSkinAreaEstimate,
   liftingSurfaceStats,
+  motorMassEstimate,
+  motorDiameterEstimateM,
+  motorLengthEstimateM,
+  motorVolumeEstimate,
   rotorDiameterEstimate,
   rotorInstanceCount,
   rotorMassPerRotorEstimate,
@@ -31,7 +35,7 @@ import {
 } from "../../sizing/auditedSizingEngine";
 import { partTouchesMirrorAxis } from "../diagnostics";
 import { referenceRoles } from "../constants";
-import { cadGeometryForShape, motorDepthM, motorDiameterM, motorLengthM } from "../geometry";
+import { cadGeometryForShape, motorDepthM } from "../geometry";
 import { NumberField, SketchPanelTitle } from "./shared";
 export function ShapeSelector({
   selectedShapeId,
@@ -73,15 +77,17 @@ export function ShapeEditor({
   onDelete: () => void;
 }) {
   const bounds = shapeBounds(shape);
-  const motorDiameter = shape.partType === "motor" ? motorDiameterM(shape) : 0;
-  const motorLength = shape.partType === "motor" ? motorLengthM(shape) : 0;
+  const motorDiameter = shape.partType === "motor" ? motorDiameterEstimateM(shape) : 0;
+  const motorLength = shape.partType === "motor" ? motorLengthEstimateM(shape) : 0;
   const motorDepth = shape.partType === "motor" ? motorDepthM(shape) : 0;
   const motorCount = shape.partType === "motor" && partTouchesMirrorAxis(shape) ? 1 : 2;
-  const motorVolumeM3 = shape.partType === "motor" ? Math.PI * (motorDiameter / 2) ** 2 * motorLength * motorCount : 0;
-  const motorMassKg = motorVolumeM3 * 3200;
+  const motorVolumeM3 = shape.partType === "motor" ? motorVolumeEstimate(shape) : 0;
+  const motorMassKg = shape.partType === "motor" ? motorMassEstimate(shape) : 0;
   const cadGeometry = cadGeometryForShape(shape);
   const liftingStats = shape.role === "liftingSurface" ? liftingSurfaceStats(shape, mirrorPlanes) : undefined;
   const drawnLiftingAreaM2 = shape.role === "liftingSurface" ? polygonAreaM2(shape.points) : 0;
+  const drawnLiftingSpanM = shape.role === "liftingSurface" ? Math.max(bounds.maxX - bounds.minX, 0) : 0;
+  const mirroredLiftingSpanM = shape.role === "liftingSurface" && bounds.minX > 0.005 ? drawnLiftingSpanM * 2 : drawnLiftingSpanM;
   const liftingAreaScope =
     shape.role === "liftingSurface"
       ? liftingStats && Math.abs(liftingStats.areaM2 - drawnLiftingAreaM2) <= 0.001
@@ -182,6 +188,8 @@ export function ShapeEditor({
             onChange={(bodyThicknessMm) => onChange({ bodyThicknessMm })}
           />
           <div className="shape-readout">
+            <span>Span of drawn surface {(drawnLiftingSpanM * 1000).toFixed(0)} mm</span>
+            {mirroredLiftingSpanM > drawnLiftingSpanM + 0.001 ? <span>Combined mirrored surface span {(mirroredLiftingSpanM * 1000).toFixed(0)} mm</span> : null}
             <span>Drawn planform area {drawnLiftingAreaM2.toFixed(3)} m2</span>
             {liftingStats ? <span>{liftingAreaScope} {liftingStats.areaM2.toFixed(3)} m2</span> : null}
             <span>Skin area used for mass {liftingSurfaceSkinAreaEstimate(shape, mirrorPlanes).toFixed(3)} m2</span>
@@ -239,7 +247,8 @@ export function ShapeEditor({
               <span>Length {(motorLength * 1000).toFixed(0)} mm</span>
               <span>Depth {(motorDepth * 1000).toFixed(0)} mm</span>
               <span>Volume {(motorVolumeM3 * 1000).toFixed(2)} L</span>
-              <span>Motor mass {motorMassKg.toFixed(3)} kg</span>
+              <span>Mass / motor {(motorMassKg / Math.max(motorCount, 1)).toFixed(3)} kg</span>
+              <span>Total motor mass {motorMassKg.toFixed(3)} kg</span>
               <span>Motor density 3.20 kg/L</span>
               {cadGeometry?.kind === "cylinder" ? <span>Axis follows motor length</span> : null}
             </div>

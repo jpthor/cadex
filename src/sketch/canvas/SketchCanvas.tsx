@@ -76,9 +76,6 @@ export function SketchCanvas({
   onSelectDimension,
   onSetDrawActive,
   onSetDimensionToolActive,
-  onSetPendingDimensionValue,
-  onCommitPendingDimension,
-  onCancelPendingDimension,
   onSetPreviewPoint,
   onCanvasViewChange,
   onToggleSizingReference,
@@ -88,6 +85,7 @@ export function SketchCanvas({
   onMoveShapePoints,
   onMoveDimensionLabel,
   onBeginUndoableEdit,
+  onDeleteDimension,
   onSelectPoint,
   onSelectDimensionTarget,
   onJoinToPoint,
@@ -129,9 +127,6 @@ export function SketchCanvas({
   onSelectDimension: (id: string) => void;
   onSetDrawActive: (active: boolean) => void;
   onSetDimensionToolActive: (active: boolean) => void;
-  onSetPendingDimensionValue: (value: string) => void;
-  onCommitPendingDimension: () => void;
-  onCancelPendingDimension: () => void;
   onSetPreviewPoint: (point: SizePoint | null) => void;
   onCanvasViewChange: (view: CanvasView) => void;
   onToggleSizingReference: () => void;
@@ -141,6 +136,7 @@ export function SketchCanvas({
   onMoveShapePoints: (shapeId: string, points: SizePoint[]) => void;
   onMoveDimensionLabel: (dimensionId: string, offset: SizePoint) => void;
   onBeginUndoableEdit: () => void;
+  onDeleteDimension: (id: string) => void;
   onSelectPoint: (shapeId: string, pointIndex: number) => void;
   onSelectDimensionTarget: (target: SizeDimensionTarget) => void;
   onJoinToPoint: (shapeId: string, pointIndex: number) => void;
@@ -477,26 +473,6 @@ export function SketchCanvas({
         </div>
       </div>
       {dimensionPrompt ? <div className="canvas-dimension-prompt">{dimensionPrompt}</div> : null}
-      {pendingDimension ? (
-        <div className="canvas-dimension-entry">
-          <label>
-            <span>Dimension</span>
-            <input
-              autoFocus
-              type="number"
-              step="0.001"
-              value={pendingDimensionValue}
-              onChange={(event) => onSetPendingDimensionValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onCommitPendingDimension();
-                if (event.key === "Escape") onCancelPendingDimension();
-              }}
-            />
-          </label>
-          <button onClick={onCommitPendingDimension} type="button">Lock</button>
-          <button onClick={onCancelPendingDimension} type="button">Cancel</button>
-        </div>
-      ) : null}
       <div className={`canvas-sketch-toolbar ${drawActive ? "drawing" : ""}`}>
         <button
           className={drawIsSplineTool ? "active" : ""}
@@ -701,7 +677,10 @@ export function SketchCanvas({
             event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);
             setDragTarget({ kind: "dimensionLabel", dimensionId, pointerId: event.pointerId });
           }}
+          onDeleteDimension={onDeleteDimension}
           onSelectDimension={onSelectDimension}
+          pendingDimension={pendingDimension}
+          pendingDimensionValue={pendingDimensionValue}
           selectedDimensionId={selectedDimensionId}
           shapes={shapes}
           view={displayView}

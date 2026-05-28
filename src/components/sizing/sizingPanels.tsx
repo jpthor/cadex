@@ -1,7 +1,7 @@
 import { Gauge } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { computeSizingAnalysis } from "../../sizing/auditedSizingEngine";
+import { auditedSizingAssumptions, computeSizingAnalysis } from "../../sizing/auditedSizingEngine";
 import { fixedAircraftMotorCount, fixedAircraftTailplaneCount, metersPerSecondPerKnot } from "../../app/constants";
 import type { SizingProject } from "../../sizing";
 import { defaultTurbineCount, turbineEngineOptions } from "../../sketch/constants";
@@ -109,7 +109,7 @@ export function SizingDashboard({
               <Metric label="Total length" value={`${computedDraft.totalLengthM.toFixed(2)} m`} />
               <Metric label="Payload" value={`${computedDraft.payloadKg.toFixed(2)} kg`} />
               <Metric label="Structure" value={`${computedDraft.structureMassKg.toFixed(2)} kg`} />
-              <Metric label="Motor mass" value={`${computedDraft.motorMassKg.toFixed(2)} kg`} />
+              <Metric label="Total motor mass" value={`${computedDraft.motorMassKg.toFixed(2)} kg`} />
               <Metric label="Rotor mass" value={`${computedDraft.rotorMassKg.toFixed(2)} kg`} />
               <Metric label="Battery mass" value={`${computedDraft.batteryMassKg.toFixed(2)} kg`} />
               <Metric label="Energy required" value={`${computedDraft.batteryEnergyWh.toFixed(0)} Wh`} />
@@ -145,7 +145,7 @@ export function SizingDashboard({
                 <>
                   <Metric label="Motor diameter" value={`${(hardwarePick.motor.diameterM * 1000).toFixed(0)} mm`} />
                   <Metric label="Motor length" value={`${(hardwarePick.motor.lengthM * 1000).toFixed(0)} mm`} />
-                  <Metric label="Motor weight" value={`${hardwarePick.motor.massKg.toFixed(2)} kg each`} />
+                  <Metric label="Mass / motor" value={`${hardwarePick.motor.massKg.toFixed(2)} kg each`} />
                 </>
               ) : null}
             </SizingDataGroup>
@@ -342,7 +342,8 @@ function selectActualHardwareFor({
   const pair = actualHardwarePairs.find((candidate) => candidate.motor.maxThrustKg >= thrustTargetKg) ?? actualHardwarePairs[actualHardwarePairs.length - 1];
   const motorMassKg = Math.max(0.25, (powerPerMotorW ?? 0) / indicativeAxialFluxPowerDensityWKg, thrustTargetKg * 0.012);
   const motorDiameterM = indicativeAxialFluxDiameterM * Math.pow(motorMassKg / indicativeAxialFluxMassKg, 0.38);
-  const motorLengthM = indicativeAxialFluxLengthM * Math.pow(motorMassKg / indicativeAxialFluxMassKg, 0.28);
+  const motorPlanformAreaM2 = Math.PI * Math.pow(motorDiameterM / 2, 2);
+  const motorLengthM = motorMassKg / Math.max(motorPlanformAreaM2 * auditedSizingAssumptions.brushlessMotorDensityKgM3, 1e-6);
   const motor: HardwareMotor = {
     ...pair.motor,
     diameterM: motorDiameterM,

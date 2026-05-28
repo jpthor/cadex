@@ -7,6 +7,8 @@ import {
   inferredBatteryThicknessM,
   liftingSurfaceStats,
   motorMassEstimate,
+  motorDiameterEstimateM,
+  motorLengthEstimateM,
   rotorDiameterEstimate,
   rotorInstanceCount,
   shapeBounds,
@@ -42,8 +44,6 @@ import {
   sameDimensionTarget,
   trimDimensionValue,
   motorDepthM,
-  motorDiameterM,
-  motorLengthM,
   moveConstrainedPartPoint,
   motorLockPointIndices,
   moveShapePointWithConstraints,
@@ -229,19 +229,16 @@ export function SketchWorkspace({
     const measured = measureDimension(dimensionDraft.firstTarget, target, sizing.shapes);
     setDimensionDraft(null);
     if (!measured || measured <= 0) return;
-    setPendingDimension({ targetA: dimensionDraft.firstTarget, targetB: target });
-    setPendingDimensionValue(trimDimensionValue(measured));
+    createDimension(dimensionDraft.firstTarget, target, measured);
   }
 
-  function commitPendingDimension() {
-    if (!pendingDimension) return;
-    const valueM = Number(pendingDimensionValue);
+  function createDimension(targetA: SizeDimensionTarget, targetB: SizeDimensionTarget, valueM: number) {
     if (!Number.isFinite(valueM) || valueM <= 0) return;
     const nextDimension: SizeDimension = {
       id: `dimension-${crypto.randomUUID()}`,
       label: `D${(sizing.dimensions ?? []).length + 1}`,
-      targetA: pendingDimension.targetA,
-      targetB: pendingDimension.targetB,
+      targetA,
+      targetB,
       valueM,
     };
     setPendingDimension(null);
@@ -255,6 +252,11 @@ export function SketchWorkspace({
       },
       true,
     );
+  }
+
+  function commitPendingDimension() {
+    if (!pendingDimension) return;
+    createDimension(pendingDimension.targetA, pendingDimension.targetB, Number(pendingDimensionValue));
   }
 
   function cancelPendingDimension() {
@@ -680,15 +682,13 @@ export function SketchWorkspace({
             setDimensionDraft(null);
             if (active) setDrawActive(false);
           }}
-          onSetPendingDimensionValue={setPendingDimensionValue}
-          onCommitPendingDimension={commitPendingDimension}
-          onCancelPendingDimension={cancelPendingDimension}
           onMoveDraftPoint={moveDraftPoint}
           onMoveShapePoint={moveShapePoint}
           onMoveShapeLine={moveShapeLine}
           onMoveShapePoints={moveShapePoints}
           onMoveDimensionLabel={moveDimensionLabel}
           onBeginUndoableEdit={pushUndoCheckpoint}
+          onDeleteDimension={deleteDimension}
           onSelectPoint={selectJoinPoint}
           onSelectDimensionTarget={selectDimensionTarget}
           onJoinToPoint={joinSelectedPointToNode}
@@ -909,10 +909,10 @@ function partDimensionRows(shape: SizeShape, shapes: SizeShape[], sizingRotorDia
   }
   if (shape.partType === "motor") {
     return [
-      { label: "Diameter", value: formatDimension(motorDiameterM(shape)) },
-      { label: "Length", value: formatDimension(motorLengthM(shape)) },
+      { label: "Diameter", value: formatDimension(motorDiameterEstimateM(shape)) },
+      { label: "Length", value: formatDimension(motorLengthEstimateM(shape)) },
       { label: "Depth", value: formatDimension(motorDepthM(shape)) },
-      { label: "Mass", value: `${motorMassEstimate(shape).toFixed(3)} kg` },
+      { label: "Total motor mass", value: `${motorMassEstimate(shape).toFixed(3)} kg` },
     ];
   }
   return baseRows;

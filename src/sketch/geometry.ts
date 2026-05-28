@@ -1600,9 +1600,62 @@ export function sameDimensionTarget(a: SizeDimensionTarget, b: SizeDimensionTarg
 }
 
 export function measureDimension(targetA: SizeDimensionTarget, targetB: SizeDimensionTarget, shapes: SizeShape[]) {
-  const a = dimensionTargetPoint(targetA, shapes);
-  const b = dimensionTargetPoint(targetB, shapes);
+  const points = dimensionTargetPoints(targetA, targetB, shapes);
+  const a = points?.start;
+  const b = points?.end;
   return a && b ? distanceBetweenPoints(a, b) : undefined;
+}
+
+export function dimensionTargetPoints(targetA: SizeDimensionTarget, targetB: SizeDimensionTarget, shapes: SizeShape[]) {
+  const lineA = dimensionLineTarget(targetA, shapes);
+  const lineB = dimensionLineTarget(targetB, shapes);
+  const pointA = dimensionTargetPoint(targetA, shapes);
+  const pointB = dimensionTargetPoint(targetB, shapes);
+  if (lineA && lineB) return closestPointsBetweenDimensionLines(lineA.start, lineA.end, lineB.start, lineB.end);
+  if (pointA && lineB) return { start: pointA, end: closestPointOnDimensionLine(pointA, lineB.start, lineB.end, lineB.infinite) };
+  if (lineA && pointB) return { start: closestPointOnDimensionLine(pointB, lineA.start, lineA.end, lineA.infinite), end: pointB };
+  if (pointA && pointB) return { start: pointA, end: pointB };
+  return undefined;
+}
+
+function dimensionLineTarget(target: SizeDimensionTarget, shapes: SizeShape[]) {
+  if (target.kind !== "segment") return undefined;
+  const shape = shapes.find((candidate) => candidate.id === target.shapeId);
+  const start = shape?.points[target.segmentIndex];
+  const end = shape?.points[target.segmentIndex + 1];
+  if (!shape || !start || !end) return undefined;
+  return { start, end, infinite: referenceRoles.includes(shape.role) };
+}
+
+function closestPointsBetweenDimensionLines(startA: SizePoint, endA: SizePoint, startB: SizePoint, endB: SizePoint) {
+  const ax = endA.xM - startA.xM;
+  const ay = endA.yM - startA.yM;
+  const bx = endB.xM - startB.xM;
+  const by = endB.yM - startB.yM;
+  const denominator = cross2d(ax, ay, bx, by);
+  if (Math.abs(denominator) > 1e-9) {
+    const cx = startB.xM - startA.xM;
+    const cy = startB.yM - startA.yM;
+    const t = cross2d(cx, cy, bx, by) / denominator;
+    const intersection = { xM: startA.xM + ax * t, yM: startA.yM + ay * t };
+    return { start: intersection, end: intersection };
+  }
+  const start = startA;
+  return { start, end: closestPointOnDimensionLine(start, startB, endB, true) };
+}
+
+function closestPointOnDimensionLine(point: SizePoint, start: SizePoint, end: SizePoint, infinite: boolean) {
+  const dx = end.xM - start.xM;
+  const dy = end.yM - start.yM;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 1e-12) return start;
+  const rawT = ((point.xM - start.xM) * dx + (point.yM - start.yM) * dy) / lengthSquared;
+  const t = infinite ? rawT : clamp(rawT, 0, 1);
+  return { xM: start.xM + dx * t, yM: start.yM + dy * t };
+}
+
+function cross2d(ax: number, ay: number, bx: number, by: number) {
+  return ax * by - ay * bx;
 }
 
 export function dimensionTargetPoint(target: SizeDimensionTarget, shapes: SizeShape[]): SizePoint | undefined {

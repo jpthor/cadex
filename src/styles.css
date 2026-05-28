@@ -2082,11 +2082,23 @@ button {
   stroke-dasharray: none;
 }
 
-.dimension-lock line {
+.dimension-lock line,
+.dimension-layer marker path {
   stroke: #facc15;
+  fill: #facc15;
+}
+
+.dimension-lock line {
   stroke-width: 1.5;
-  stroke-dasharray: 5 4;
   vector-effect: non-scaling-stroke;
+}
+
+.dimension-lock .dimension-extension {
+  stroke-dasharray: 5 4;
+}
+
+.dimension-lock .dimension-measure {
+  stroke-dasharray: none;
 }
 
 .dimension-lock circle {
@@ -2114,8 +2126,42 @@ button {
   stroke-width: 2.4;
 }
 
+.dimension-lock.selected marker path {
+  fill: #ffffff;
+  stroke: #ffffff;
+}
+
 .dimension-lock.selected text {
   fill: #ffffff;
+}
+
+.dimension-delete-control {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.dimension-delete-control circle {
+  fill: #3b1218;
+  stroke: #fb7185;
+  stroke-width: 1.5;
+}
+
+.dimension-delete-control text {
+  fill: #ffe4e6;
+  font-size: 11px;
+  font-weight: 900;
+  pointer-events: none;
+  stroke: none;
+}
+
+.dimension-delete-control:hover circle {
+  fill: #5f1a23;
+  stroke: #fecdd3;
+}
+
+.dimension-lock.dimension-pending {
+  opacity: 0.9;
+  pointer-events: none;
 }
 
 .dimension-draft-target {

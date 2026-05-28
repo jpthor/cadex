@@ -11,11 +11,12 @@ import type {
 } from "../../sizing";
 import { shapeBounds } from "../../sizing/auditedSizingEngine";
 import { referenceRoles } from "../constants";
-import type { AirfoilStation, CanvasView, DimensionDraft, JoinPointSelection } from "../types";
+import type { AirfoilStation, CanvasView, DimensionDraft, JoinPointSelection, PendingDimension } from "../types";
 import {
   closedPathForPoints,
   canonicalPartPoints,
   dimensionTargetPoint,
+  dimensionTargetPoints,
   halfMoonPath,
   isFillablePartShape,
   mirrorPoints,
@@ -631,7 +632,10 @@ export function DimensionLayer({
   dimensionDraft,
   dimensions,
   onBeginDimensionDrag,
+  onDeleteDimension,
   onSelectDimension,
+  pendingDimension,
+  pendingDimensionValue,
   selectedDimensionId,
   shapes,
   view,
@@ -639,25 +643,35 @@ export function DimensionLayer({
   dimensionDraft: DimensionDraft;
   dimensions: SizeDimension[];
   onBeginDimensionDrag: (id: string, event: PointerEvent<SVGTextElement>) => void;
+  onDeleteDimension: (id: string) => void;
   onSelectDimension: (id: string) => void;
+  pendingDimension: PendingDimension;
+  pendingDimensionValue: string;
   selectedDimensionId: string | null;
   shapes: SizeShape[];
   view: CanvasView;
 }) {
   const draftPoint = dimensionDraft ? dimensionTargetPoint(dimensionDraft.firstTarget, shapes) : undefined;
+  const pendingTargetPoints = pendingDimension ? dimensionTargetPoints(pendingDimension.targetA, pendingDimension.targetB, shapes) : undefined;
+  const pendingStart = pendingTargetPoints?.start;
+  const pendingEnd = pendingTargetPoints?.end;
   return (
     <g className="dimension-layer">
+      <defs>
+        <marker id="dimension-arrow-end" markerHeight="8" markerWidth="8" orient="auto" refX="6" refY="4">
+          <path d="M 0 0 L 8 4 L 0 8 z" />
+        </marker>
+        <marker id="dimension-arrow-start" markerHeight="8" markerWidth="8" orient="auto-start-reverse" refX="2" refY="4">
+          <path d="M 8 0 L 0 4 L 8 8 z" />
+        </marker>
+      </defs>
       {dimensions.map((dimension) => {
-        const start = dimensionTargetPoint(dimension.targetA, shapes);
-        const end = dimensionTargetPoint(dimension.targetB, shapes);
+        const targetPoints = dimensionTargetPoints(dimension.targetA, dimension.targetB, shapes);
+        const start = targetPoints?.start;
+        const end = targetPoints?.end;
         if (!start || !end) return null;
-        const startCanvas = toCanvas(start, view);
-        const endCanvas = toCanvas(end, view);
-        const midPoint = {
-          xM: (start.xM + end.xM) / 2 + (dimension.labelOffset?.xM ?? 0),
-          yM: (start.yM + end.yM) / 2 + (dimension.labelOffset?.yM ?? 0),
-        };
-        const labelPoint = toCanvas(midPoint, view);
+        const geometry = dimensionGeometry(start, end, view, dimension.labelOffset);
+        if (!geometry) return null;
         const selected = dimension.id === selectedDimensionId;
         return (
           <g
@@ -668,10 +682,7 @@ export function DimensionLayer({
               onSelectDimension(dimension.id);
             }}
           >
-            <line className="dimension-hit" x1={startCanvas.x} y1={startCanvas.y} x2={endCanvas.x} y2={endCanvas.y} />
-            <line x1={startCanvas.x} y1={startCanvas.y} x2={endCanvas.x} y2={endCanvas.y} />
-            <circle cx={startCanvas.x} cy={startCanvas.y} r="3" />
-            <circle cx={endCanvas.x} cy={endCanvas.y} r="3" />
+            <DimensionGraphics geometry={geometry} />
             <text
               className="dimension-label"
               onPointerDown={(event) => {
@@ -679,19 +690,102 @@ export function DimensionLayer({
                 onSelectDimension(dimension.id);
                 onBeginDimensionDrag(dimension.id, event);
               }}
-              x={labelPoint.x}
-              y={labelPoint.y}
+              textAnchor="middle"
+              x={geometry.label.x}
+              y={geometry.label.y - 8}
             >
               {`${dimension.label} ${trimDimensionValue(dimension.valueM)} m`}
             </text>
+            {selected ? (
+              <g
+                className="dimension-delete-control"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDeleteDimension(dimension.id);
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+                transform={`translate(${geometry.label.x + 34} ${geometry.label.y - 13})`}
+              >
+                <circle r="9" />
+                <text textAnchor="middle" x="0" y="4">x</text>
+              </g>
+            ) : null}
           </g>
         );
       })}
+      {pendingDimension && pendingStart && pendingEnd ? (
+        <PendingDimensionGraphic
+          end={pendingEnd}
+          label={pendingDimensionValue ? `${trimDimensionValue(Number(pendingDimensionValue))} m` : ""}
+          start={pendingStart}
+          view={view}
+        />
+      ) : null}
       {draftPoint ? (
         <circle className="dimension-draft-target" cx={toCanvas(draftPoint, view).x} cy={toCanvas(draftPoint, view).y} r="9" />
       ) : null}
     </g>
   );
+}
+
+function PendingDimensionGraphic({
+  end,
+  label,
+  start,
+  view,
+}: {
+  end: SizePoint;
+  label: string;
+  start: SizePoint;
+  view: CanvasView;
+}) {
+  const geometry = dimensionGeometry(start, end, view);
+  if (!geometry) return null;
+  return (
+    <g className="dimension-lock dimension-pending">
+      <DimensionGraphics geometry={geometry} />
+      {label ? <text className="dimension-label" textAnchor="middle" x={geometry.label.x} y={geometry.label.y - 8}>{label}</text> : null}
+    </g>
+  );
+}
+
+function DimensionGraphics({ geometry }: { geometry: DimensionGeometry }) {
+  return (
+    <>
+      <line className="dimension-hit" x1={geometry.dimStart.x} y1={geometry.dimStart.y} x2={geometry.dimEnd.x} y2={geometry.dimEnd.y} />
+      <line className="dimension-extension" x1={geometry.start.x} y1={geometry.start.y} x2={geometry.dimStart.x} y2={geometry.dimStart.y} />
+      <line className="dimension-extension" x1={geometry.end.x} y1={geometry.end.y} x2={geometry.dimEnd.x} y2={geometry.dimEnd.y} />
+      <line className="dimension-measure" markerEnd="url(#dimension-arrow-end)" markerStart="url(#dimension-arrow-start)" x1={geometry.dimStart.x} y1={geometry.dimStart.y} x2={geometry.dimEnd.x} y2={geometry.dimEnd.y} />
+      <circle cx={geometry.start.x} cy={geometry.start.y} r="3" />
+      <circle cx={geometry.end.x} cy={geometry.end.y} r="3" />
+    </>
+  );
+}
+
+type DimensionGeometry = {
+  dimEnd: { x: number; y: number };
+  dimStart: { x: number; y: number };
+  end: { x: number; y: number };
+  label: { x: number; y: number };
+  start: { x: number; y: number };
+};
+
+function dimensionGeometry(start: SizePoint, end: SizePoint, view: CanvasView, labelOffset?: SizePoint): DimensionGeometry | null {
+  const startCanvas = toCanvas(start, view);
+  const endCanvas = toCanvas(end, view);
+  const dx = endCanvas.x - startCanvas.x;
+  const dy = endCanvas.y - startCanvas.y;
+  const length = Math.hypot(dx, dy);
+  if (length <= 1e-6) return null;
+  const normal = { x: -dy / length, y: dx / length };
+  const midCanvas = { x: (startCanvas.x + endCanvas.x) / 2, y: (startCanvas.y + endCanvas.y) / 2 };
+  const label = labelOffset
+    ? toCanvas({ xM: (start.xM + end.xM) / 2 + labelOffset.xM, yM: (start.yM + end.yM) / 2 + labelOffset.yM }, view)
+    : { x: midCanvas.x + normal.x * 34, y: midCanvas.y + normal.y * 34 };
+  const offset = (label.x - midCanvas.x) * normal.x + (label.y - midCanvas.y) * normal.y;
+  const dimStart = { x: startCanvas.x + normal.x * offset, y: startCanvas.y + normal.y * offset };
+  const dimEnd = { x: endCanvas.x + normal.x * offset, y: endCanvas.y + normal.y * offset };
+  return { dimEnd, dimStart, end: endCanvas, label, start: startCanvas };
 }
 
 export function CanvasCursorPoint({ point, view }: { point: SizePoint; view: CanvasView }) {

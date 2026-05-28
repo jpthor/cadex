@@ -1820,7 +1820,29 @@
     ],
     "sizing": {
       "activeRole": "mirrorPlane",
-      "dimensions": [],
+      "dimensions": [
+        {
+          "id": "dimension-163d8236-b0cf-4d6c-a1a8-79118b40f838",
+          "label": "D1",
+          "labelOffset": {
+            "xM": -0.024554625135199237,
+            "yM": -0.32674734096690883
+          },
+          "targetA": {
+            "kind": "segment",
+            "segmentIndex": 1,
+            "shapeId": "liftingSurface-78881328-cb17-4a50-a4e5-f8d1c30928c0",
+            "t": 0.4140282097638188
+          },
+          "targetB": {
+            "kind": "segment",
+            "segmentIndex": 0,
+            "shapeId": "mirrorPlane-3ee5f33f-b262-492b-b1d2-327c5eb9b5c8",
+            "t": 0.8315485470111997
+          },
+          "valueM": 0.2984430759561829
+        }
+      ],
       "drawMode": "spline",
       "mission": {
         "aspectRatio": 5,
@@ -1838,7 +1860,7 @@
         "tailVolumeTarget": 0.55,
         "takeoffThrustToWeight": 1.4
       },
-      "selectedShapeId": "",
+      "selectedShapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
       "shapes": [
         {
           "bodyMaterial": "carbonFibre",
@@ -1851,7 +1873,7 @@
             ],
             "kind": "revolvedBody",
             "lengthM": 1.475706452504954,
-            "radiusM": 0.15515748545722538
+            "radiusM": 0.11312227107255168
           },
           "drawMode": "spline",
           "id": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
@@ -1873,7 +1895,7 @@
                 "shapeId": "referenceLine-52d57fac-ad77-4f51-a320-f4a15a66214a",
                 "t": 0.18114032220973855
               },
-              "xM": 0.15515748545722538,
+              "xM": 0.11312227107255168,
               "yM": -0.19925435443071243
             },
             {
@@ -1884,7 +1906,7 @@
                 "shapeId": "referenceLine-52d57fac-ad77-4f51-a320-f4a15a66214a",
                 "t": 0.9461862960987896
               },
-              "xM": 0.15515748545722538,
+              "xM": 0.11312227107255168,
               "yM": -1.040804925708669
             },
             {
@@ -1913,7 +1935,7 @@
               0,
               0
             ],
-            "spanM": 2.3140783370209372,
+            "spanM": 2.316587378547876,
             "tipChordM": 0.6597016184300655
           },
           "drawMode": "spline",
@@ -1935,7 +1957,7 @@
                 "shapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
                 "t": 0.3653829187872805
               },
-              "xM": 0.15515748545722538,
+              "xM": 0.11312227107255168,
               "yM": -0.5067425584713554
             },
             {
@@ -1959,7 +1981,7 @@
                 "shapeId": "referenceLine-8ec1fae5-ca93-436d-92ea-1d719ed564a1",
                 "t": 0.35643190723503004
               },
-              "xM": 1.1570391685104686,
+              "xM": 1.158293689273938,
               "yM": -0.3590266019621184
             },
             {
@@ -1972,7 +1994,7 @@
                 "shapeId": "referenceLine-8ec1fae5-ca93-436d-92ea-1d719ed564a1",
                 "t": 0.5964997090606864
               },
-              "xM": 1.1570391685104686,
+              "xM": 1.158293689273938,
               "yM": -0.6008420101240671
             },
             {
@@ -1996,7 +2018,7 @@
                 "shapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
                 "t": 0.8863419081857618
               },
-              "xM": 0.15515748545722538,
+              "xM": 0.11312227107255168,
               "yM": -0.945155893612034
             }
           ],
@@ -2033,14 +2055,14 @@
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 1.1570391685104686,
+              "xM": 1.158293689273938,
               "yM": 0
             },
             {
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 1.1570391685104686,
+              "xM": 1.158293689273938,
               "yM": -1.007279636515194
             }
           ],
@@ -2055,14 +2077,14 @@
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.15515748545722538,
+              "xM": 0.11312227107255168,
               "yM": 0
             },
             {
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.15515748545722538,
+              "xM": 0.11312227107255168,
               "yM": -1.1
             }
           ],
@@ -2222,7 +2244,7 @@
                 "shapeId": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
                 "t": 0.940306560264111
               },
-              "xM": 0.7181724441002483,
+              "xM": 0.7182473307598398,
               "yM": -0.7274270711752431
             },
             {
@@ -2259,9 +2281,9 @@
               0
             ],
             "kind": "rotor",
-            "radiusM": 0.3030865970351607,
-            "rootChordM": 0.03333952567386768,
-            "tipChordM": 0.016972849433969
+            "radiusM": 0.30413112946494825,
+            "rootChordM": 0.03345442424114431,
+            "tipChordM": 0.017031343250037103
           },
           "drawMode": "line",
           "id": "part-a01ec89c-3797-43ab-b9fc-6830451a430b",
@@ -2286,7 +2308,7 @@
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.9933984842992318,
+              "xM": 0.9944430167290194,
               "yM": -0.22500191544327927
             }
           ],
@@ -2400,9 +2422,9 @@
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 720,
-        "originX": 257.27549865918263,
-        "originY": 233.89209209601688,
-        "scale": 243.89692263732468,
+        "originX": 322.3670209492491,
+        "originY": 192.99843906985672,
+        "scale": 331.7563626887593,
         "width": 900
       }
     },
@@ -2430,7 +2452,29 @@
   "schemaVersion": 1,
   "sizing": {
     "activeRole": "mirrorPlane",
-    "dimensions": [],
+    "dimensions": [
+      {
+        "id": "dimension-163d8236-b0cf-4d6c-a1a8-79118b40f838",
+        "label": "D1",
+        "labelOffset": {
+          "xM": -0.024554625135199237,
+          "yM": -0.32674734096690883
+        },
+        "targetA": {
+          "kind": "segment",
+          "segmentIndex": 1,
+          "shapeId": "liftingSurface-78881328-cb17-4a50-a4e5-f8d1c30928c0",
+          "t": 0.4140282097638188
+        },
+        "targetB": {
+          "kind": "segment",
+          "segmentIndex": 0,
+          "shapeId": "mirrorPlane-3ee5f33f-b262-492b-b1d2-327c5eb9b5c8",
+          "t": 0.8315485470111997
+        },
+        "valueM": 0.2984430759561829
+      }
+    ],
     "drawMode": "spline",
     "mission": {
       "aspectRatio": 5,
@@ -2448,7 +2492,7 @@
       "tailVolumeTarget": 0.55,
       "takeoffThrustToWeight": 1.4
     },
-    "selectedShapeId": "",
+    "selectedShapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
     "shapes": [
       {
         "bodyMaterial": "carbonFibre",
@@ -2461,7 +2505,7 @@
           ],
           "kind": "revolvedBody",
           "lengthM": 1.475706452504954,
-          "radiusM": 0.15515748545722538
+          "radiusM": 0.11312227107255168
         },
         "drawMode": "spline",
         "id": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
@@ -2483,7 +2527,7 @@
               "shapeId": "referenceLine-52d57fac-ad77-4f51-a320-f4a15a66214a",
               "t": 0.18114032220973855
             },
-            "xM": 0.15515748545722538,
+            "xM": 0.11312227107255168,
             "yM": -0.19925435443071243
           },
           {
@@ -2494,7 +2538,7 @@
               "shapeId": "referenceLine-52d57fac-ad77-4f51-a320-f4a15a66214a",
               "t": 0.9461862960987896
             },
-            "xM": 0.15515748545722538,
+            "xM": 0.11312227107255168,
             "yM": -1.040804925708669
           },
           {
@@ -2523,7 +2567,7 @@
             0,
             0
           ],
-          "spanM": 2.3140783370209372,
+          "spanM": 2.316587378547876,
           "tipChordM": 0.6597016184300655
         },
         "drawMode": "spline",
@@ -2545,7 +2589,7 @@
               "shapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
               "t": 0.3653829187872805
             },
-            "xM": 0.15515748545722538,
+            "xM": 0.11312227107255168,
             "yM": -0.5067425584713554
           },
           {
@@ -2569,7 +2613,7 @@
               "shapeId": "referenceLine-8ec1fae5-ca93-436d-92ea-1d719ed564a1",
               "t": 0.35643190723503004
             },
-            "xM": 1.1570391685104686,
+            "xM": 1.158293689273938,
             "yM": -0.3590266019621184
           },
           {
@@ -2582,7 +2626,7 @@
               "shapeId": "referenceLine-8ec1fae5-ca93-436d-92ea-1d719ed564a1",
               "t": 0.5964997090606864
             },
-            "xM": 1.1570391685104686,
+            "xM": 1.158293689273938,
             "yM": -0.6008420101240671
           },
           {
@@ -2606,7 +2650,7 @@
               "shapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
               "t": 0.8863419081857618
             },
-            "xM": 0.15515748545722538,
+            "xM": 0.11312227107255168,
             "yM": -0.945155893612034
           }
         ],
@@ -2643,14 +2687,14 @@
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 1.1570391685104686,
+            "xM": 1.158293689273938,
             "yM": 0
           },
           {
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 1.1570391685104686,
+            "xM": 1.158293689273938,
             "yM": -1.007279636515194
           }
         ],
@@ -2665,14 +2709,14 @@
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.15515748545722538,
+            "xM": 0.11312227107255168,
             "yM": 0
           },
           {
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.15515748545722538,
+            "xM": 0.11312227107255168,
             "yM": -1.1
           }
         ],
@@ -2832,7 +2876,7 @@
               "shapeId": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
               "t": 0.940306560264111
             },
-            "xM": 0.7181724441002483,
+            "xM": 0.7182473307598398,
             "yM": -0.7274270711752431
           },
           {
@@ -2869,9 +2913,9 @@
             0
           ],
           "kind": "rotor",
-          "radiusM": 0.3030865970351607,
-          "rootChordM": 0.03333952567386768,
-          "tipChordM": 0.016972849433969
+          "radiusM": 0.30413112946494825,
+          "rootChordM": 0.03345442424114431,
+          "tipChordM": 0.017031343250037103
         },
         "drawMode": "line",
         "id": "part-a01ec89c-3797-43ab-b9fc-6830451a430b",
@@ -2896,7 +2940,7 @@
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.9933984842992318,
+            "xM": 0.9944430167290194,
             "yM": -0.22500191544327927
           }
         ],
@@ -3010,11 +3054,11 @@
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 720,
-      "originX": 257.27549865918263,
-      "originY": 233.89209209601688,
-      "scale": 243.89692263732468,
+      "originX": 322.3670209492491,
+      "originY": 192.99843906985672,
+      "scale": 331.7563626887593,
       "width": 900
     }
   },
-  "updatedAt": 1779970874512
+  "updatedAt": 1779971579326
 }
