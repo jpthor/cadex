@@ -329,7 +329,7 @@
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 874,
-        "originX": 45.53678684936517,
+        "originX": 17.036786849365228,
         "originY": 386.17414696430706,
         "scale": 190,
         "width": 843
@@ -676,11 +676,11 @@
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 874,
-      "originX": 45.53678684936517,
+      "originX": 17.036786849365228,
       "originY": 386.17414696430706,
       "scale": 190,
       "width": 843
     }
   },
-  "updatedAt": 1780013260692
+  "updatedAt": 1780013312479
 }

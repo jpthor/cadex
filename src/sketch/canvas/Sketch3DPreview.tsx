@@ -247,7 +247,7 @@ function liftingSurfacePreviewFromShape(shape: SizeShape): LiftingSurfacePreview
     const trailingY = Math.min(extents.maxY, extents.minY);
     const chordM = Math.max(leadingY - trailingY, 0.001);
     return airfoilSection3D({
-      airfoil: station <= 0 ? rootAirfoil : station >= 1 ? tipAirfoil : shape.airfoil ?? rootAirfoil,
+      airfoil: rootAirfoil,
       blendT: station,
       chordM,
       incidenceDeg: incidenceAtStation(shape, station),
