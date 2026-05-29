@@ -119,6 +119,8 @@ export type SizingMission = {
   batteryEnergyDensityWhKg: number;
   motorCount: number;
   rotorBladeCount: number;
+  turbineEngineId: string;
+  turbineFuelMin: number;
 };
 
 export type SizingAnalysis = {
@@ -144,6 +146,7 @@ export type SizingProject = {
   sizingReferenceShapes?: SizeShape[];
   showSizingReference?: boolean;
   sketchCanvasView?: SizingCanvasView;
+  sketchScaleUnit?: "mm" | "cm" | "m";
   selectedShapeId: string;
   activeRole: SizeShapeRole;
   drawMode: SizeDrawMode;
@@ -176,6 +179,8 @@ const defaultMission: SizingMission = {
   batteryEnergyDensityWhKg: 190,
   motorCount: 2,
   rotorBladeCount: 4,
+  turbineEngineId: "swiwin-sw60b",
+  turbineFuelMin: 20,
 };
 
 export const roleLabels: Record<SizeShapeRole, string> = {
@@ -218,6 +223,7 @@ export function defaultSizingProject(): SizingProject {
     sizingReferenceShapes: [],
     showSizingReference: true,
     sketchCanvasView: undefined,
+    sketchScaleUnit: "cm",
   };
 }
 
@@ -234,6 +240,7 @@ export function normalizeSizingProject(input: unknown): SizingProject {
       : [],
     showSizingReference: candidate.showSizingReference ?? true,
     sketchCanvasView: normalizeCanvasView(candidate.sketchCanvasView),
+    sketchScaleUnit: normalizeScaleUnit(candidate.sketchScaleUnit),
     selectedShapeId: shapes.some((shape) => shape.id === candidate.selectedShapeId) ? candidate.selectedShapeId ?? "" : shapes[0]?.id ?? "",
     activeRole: normalizeRole(candidate.activeRole),
     drawMode: candidate.drawMode === "spline" ? "spline" : "line",
@@ -252,10 +259,16 @@ export function normalizeSizingProject(input: unknown): SizingProject {
       batteryEnergyDensityWhKg: numberOr(candidate.mission?.batteryEnergyDensityWhKg, 190),
       motorCount: 2,
       rotorBladeCount: normalizeRotorBladeCount(candidate.mission?.rotorBladeCount),
+      turbineEngineId: typeof candidate.mission?.turbineEngineId === "string" ? candidate.mission.turbineEngineId : defaultMission.turbineEngineId,
+      turbineFuelMin: Math.max(0, numberOr(candidate.mission?.turbineFuelMin, defaultMission.turbineFuelMin)),
     },
     analysis: candidate.analysis,
     dimensions: Array.isArray(candidate.dimensions) ? candidate.dimensions.map(normalizeDimension).filter(Boolean) as SizeDimension[] : [],
   };
+}
+
+function normalizeScaleUnit(value: unknown): "mm" | "cm" | "m" {
+  return value === "mm" || value === "cm" || value === "m" ? value : "cm";
 }
 
 function normalizeCanvasView(value: unknown): SizingCanvasView | undefined {
@@ -281,6 +294,8 @@ function isSeedSketch(shapes: SizeShape[]) {
 function normalizeShape(shape: SizeShape): SizeShape {
   const role = normalizeRole(shape.role);
   const partType = role === "part" ? normalizePartType(shape.partType) : undefined;
+  const liftingSurfaceKind = role === "liftingSurface" ? normalizeLiftingSurfaceKind(shape.liftingSurfaceKind) : undefined;
+  const defaultAirfoil = liftingSurfaceKind ? defaultAirfoilForLiftingSurface(liftingSurfaceKind) : "NACA 0012";
   const points: SizePoint[] = Array.isArray(shape.points)
     ? shape.points.map((point) => ({
         xM: Math.abs(numberOr(point.xM, 0)),
@@ -299,13 +314,13 @@ function normalizeShape(shape: SizeShape): SizeShape {
     label: typeof shape.label === "string" ? shape.label : roleLabels[role],
     drawMode: shape.drawMode === "spline" ? "spline" : "line",
     points: partType === "rotor" ? normalizeRotorSpanPoints(points) : points,
-    airfoil: role === "liftingSurface" ? shape.airfoil ?? "NACA 0012" : undefined,
-    liftingSurfaceKind: role === "liftingSurface" ? normalizeLiftingSurfaceKind(shape.liftingSurfaceKind) : undefined,
+    airfoil: role === "liftingSurface" ? shape.airfoil ?? defaultAirfoil : undefined,
+    liftingSurfaceKind,
     airfoilStations:
       role === "liftingSurface"
         ? {
-            root: typeof shape.airfoilStations?.root === "string" ? shape.airfoilStations.root : shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012",
-            tip: typeof shape.airfoilStations?.tip === "string" ? shape.airfoilStations.tip : shape.airfoilStations?.tip90 ?? shape.airfoil ?? "NACA 0012",
+            root: typeof shape.airfoilStations?.root === "string" ? shape.airfoilStations.root : shape.airfoilStations?.root10 ?? shape.airfoil ?? defaultAirfoil,
+            tip: typeof shape.airfoilStations?.tip === "string" ? shape.airfoilStations.tip : shape.airfoilStations?.tip90 ?? shape.airfoil ?? defaultAirfoil,
           }
         : undefined,
     incidenceDeg: role === "liftingSurface" ? numberOr(shape.incidenceDeg, 0) : undefined,
@@ -472,6 +487,12 @@ function normalizePartType(value: unknown): PartType {
 
 function normalizeLiftingSurfaceKind(value: unknown): LiftingSurfaceKind {
   return value === "tailplane" || value === "fin" || value === "lex" || value === "wing" ? value : "wing";
+}
+
+function defaultAirfoilForLiftingSurface(kind: LiftingSurfaceKind) {
+  if (kind === "wing") return "NACA 2412";
+  if (kind === "fin") return "NACA 0010";
+  return "NACA 0012";
 }
 
 function normalizeSketchViewMode(value: unknown) {

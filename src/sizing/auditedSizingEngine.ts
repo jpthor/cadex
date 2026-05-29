@@ -103,7 +103,7 @@ export const auditedSizingAssumptions = {
   brushlessMotorDensityKgM3: 3200,
   carbonRotorDensityKgM3: 1600,
   batteryThicknessFractionOfSmallerDimension: 0.28,
-  batteryThicknessClampM: { min: 0.012, max: 0.08 },
+  batteryThicknessClampM: { min: 0.012, max: 0.028 },
   motorDepthFractionOfSmallerDimension: 0.75,
   motorDepthClampM: { min: 0.015, max: 0.12 },
   rotorBladeLengthRadiusFraction: 0.92,
@@ -698,11 +698,8 @@ export function batteryPlanformAreaEstimate(shape: SizeShape) {
 
 export function inferredBatteryThicknessM(shape: SizeShape) {
   const bounds = shapeBounds(shape);
-  const widthM = Math.max(bounds.maxX * 2, 0);
-  const lengthM = Math.max(bounds.maxY - bounds.minY, 0);
-  const smallerDimensionM = Math.min(widthM || lengthM, lengthM || widthM);
   return clamp(
-    smallerDimensionM * auditedSizingAssumptions.batteryThicknessFractionOfSmallerDimension,
+    bounds.maxX * 2,
     auditedSizingAssumptions.batteryThicknessClampM.min,
     auditedSizingAssumptions.batteryThicknessClampM.max,
   );

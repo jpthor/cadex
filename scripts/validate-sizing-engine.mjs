@@ -8,6 +8,7 @@ import {
   liftingSurfaceMassEstimate,
   liftingSurfaceSkinAreaEstimate,
   motorMassEstimate,
+  normalizeSizingProject,
   rotorMassPerRotorEstimate,
   rotorTotalMassEstimate,
 } from "../src/sizing/index.ts";
@@ -404,6 +405,84 @@ const isolatedLexAero = computeSketchAerodynamics({
 });
 assert.equal(isolatedLexAero.lex.active, false, "LEX with no downstream influenced area does not change stall");
 approx(isolatedLexAero.lex.deltaMaxLiftCoefficient, 0, "isolated LEX has no CLmax boost");
+
+const roundTripProject = normalizeSizingProject({
+  ...project,
+  selectedShapeId: "payload",
+  activeRole: "part",
+  drawMode: "spline",
+  sketchScaleUnit: "mm",
+  sketchCanvasView: { width: 1000, height: 800, originX: 123, originY: 456, scale: 234 },
+  mission: {
+    ...project.mission,
+    aspectRatio: 3.2,
+    reservePct: 17,
+    rotorBladeCount: 4,
+    turbineEngineId: "jetcat-p300-rx",
+    turbineFuelMin: 18,
+  },
+  dimensions: [
+    {
+      id: "dimension-payload",
+      label: "D1",
+      valueM: 0.42,
+      targetA: { kind: "node", shapeId: "payload", pointIndex: 0 },
+      targetB: { kind: "segment", shapeId: "wing", segmentIndex: 0, t: 0.25 },
+      labelOffset: { xM: 0.1, yM: -0.2 },
+    },
+  ],
+  shapes: [
+    ...project.shapes,
+    {
+      id: "side-z-reference",
+      role: "referenceLine",
+      label: "PodZ",
+      drawMode: "line",
+      sketchViewMode: "side",
+      sideViewStationId: "wing-station",
+      zOffsetM: 0.1,
+      points: [
+        { xM: 0.1, yM: 0 },
+        { xM: 0.1, yM: -1 },
+      ],
+    },
+    {
+      id: "rotor-4-blade",
+      role: "part",
+      partType: "rotor",
+      label: "Rotor",
+      drawMode: "line",
+      massKg: 0,
+      rotorBladeCount: 4,
+      zStationId: "side-z-reference",
+      dihedralBreakStationId: "wing-station",
+      dihedralLiftM: 0.1,
+      cadGeometry: {
+        kind: "rotor",
+        centerM: [0, 1, 0.1],
+        axisM: [0, 1, 0],
+        radiusM: 0.4,
+        bladeCount: 4,
+        rootChordM: 0.04,
+        tipChordM: 0.02,
+      },
+      points: [
+        { xM: 0.2, yM: -0.2, snapAttachment: { kind: "node", shapeId: "wing", pointIndex: 1 } },
+        { xM: 0.6, yM: -0.2, snapAttachment: { kind: "segment", shapeId: "wing", segmentIndex: 1, t: 0.5 } },
+      ],
+    },
+  ],
+});
+assert.equal(roundTripProject.mission.reservePct, 17, "sizing reserve round-trips through normalization");
+assert.equal(roundTripProject.mission.turbineEngineId, "jetcat-p300-rx", "jet engine choice round-trips through normalization");
+assert.equal(roundTripProject.sketchScaleUnit, "mm", "sketch scale unit round-trips through normalization");
+assert.equal(roundTripProject.dimensions?.[0]?.valueM, 0.42, "locked dimensions round-trip through normalization");
+assert.equal(roundTripProject.shapes.find((shape) => shape.id === "payload")?.massKg, payloadKg, "payload part mass round-trips through normalization");
+assert.equal(roundTripProject.shapes.find((shape) => shape.id === "rotor-4-blade")?.rotorBladeCount, 4, "rotor blade count round-trips through normalization");
+assert.equal(roundTripProject.shapes.find((shape) => shape.id === "rotor-4-blade")?.zStationId, "side-z-reference", "Z station inheritance round-trips through normalization");
+assert.equal(roundTripProject.shapes.find((shape) => shape.id === "rotor-4-blade")?.dihedralLiftM, 0.1, "dihedral lift round-trips through normalization");
+assert.equal(roundTripProject.shapes.find((shape) => shape.id === "rotor-4-blade")?.points[0]?.snapAttachment?.kind, "node", "node snap round-trips through normalization");
+assert.equal(roundTripProject.shapes.find((shape) => shape.id === "rotor-4-blade")?.points[1]?.snapAttachment?.kind, "segment", "segment snap round-trips through normalization");
 
 console.log("Sizing engine validation passed.");
 

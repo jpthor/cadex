@@ -1,6 +1,6 @@
 import type { SizeDimensionTarget } from "../sizing";
 
-export const scaleUnits = ["cm", "m", "mm"] as const;
+export const scaleUnits = ["mm", "cm", "m"] as const;
 export type ScaleUnit = (typeof scaleUnits)[number];
 export type AirfoilStation = "root" | "tip";
 export type CanvasViewMode = "top" | "front" | "side";

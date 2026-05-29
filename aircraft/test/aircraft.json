@@ -25,7 +25,7 @@
         "tailVolumeTarget": 0.55,
         "takeoffThrustToWeight": 1.4
       },
-      "selectedShapeId": "referenceLine-022e41d1-2b72-4e4f-83cd-cf6689ebeec6",
+      "selectedShapeId": "referenceLine-c282e579-6c62-4368-b93e-d775dde1518f",
       "shapes": [
         {
           "bodyMaterial": "carbonFibre",
@@ -205,10 +205,10 @@
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 874,
-        "originX": 359.0236923667842,
-        "originY": 340.27983993148797,
-        "scale": 196.9494265606803,
-        "width": 843
+        "originX": 315.8712307490673,
+        "originY": 350.9409598909888,
+        "scale": 190,
+        "width": 900
       }
     },
     "timeline": [
@@ -248,7 +248,7 @@
       "tailVolumeTarget": 0.55,
       "takeoffThrustToWeight": 1.4
     },
-    "selectedShapeId": "referenceLine-022e41d1-2b72-4e4f-83cd-cf6689ebeec6",
+    "selectedShapeId": "referenceLine-c282e579-6c62-4368-b93e-d775dde1518f",
     "shapes": [
       {
         "bodyMaterial": "carbonFibre",
@@ -428,11 +428,11 @@
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 874,
-      "originX": 359.0236923667842,
-      "originY": 340.27983993148797,
-      "scale": 196.9494265606803,
-      "width": 843
+      "originX": 315.8712307490673,
+      "originY": 350.9409598909888,
+      "scale": 190,
+      "width": 900
     }
   },
-  "updatedAt": 1780017874081
+  "updatedAt": 1780017541833
 }

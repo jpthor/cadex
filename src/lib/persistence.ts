@@ -117,8 +117,9 @@ export async function fetchAircraftProject(id: string) {
   return projectApi<{ project: AircraftProjectEntry; state: AircraftMasterState }>("/api/cad/projects/load", { id });
 }
 
-export async function persistAircraftProject(id: string, state: AircraftMasterState) {
+export async function persistAircraftProject(id: string, state: AircraftMasterState, expectedUpdatedAt?: number) {
   return projectApi<{ project: AircraftProjectEntry; state: AircraftMasterState }>("/api/cad/projects/save", {
+    expectedUpdatedAt,
     id,
     state,
   });

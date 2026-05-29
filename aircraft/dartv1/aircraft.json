@@ -1826,7 +1826,7 @@
         "aspectRatio": 5,
         "batteryEnergyDensityWhKg": 190,
         "cruiseLiftCoefficient": 0.55,
-        "cruiseSpeedMS": 15.43332,
+        "cruiseSpeedMS": 25.7222,
         "diskLoadingNpm2": 65,
         "enduranceMin": 20,
         "hoverTimeMin": 2,
@@ -1836,7 +1836,9 @@
         "reservePct": 20,
         "rotorBladeCount": 4,
         "tailVolumeTarget": 0.55,
-        "takeoffThrustToWeight": 1.4
+        "takeoffThrustToWeight": 1.4,
+        "turbineEngineId": "swiwin-sw60b",
+        "turbineFuelMin": 20
       },
       "selectedShapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
       "shapes": [
@@ -2114,15 +2116,15 @@
         {
           "cadGeometry": {
             "centerM": [
-              -0.4294858794768905,
+              -0.5494316450089203,
               0,
               0
             ],
             "kind": "box",
             "sizeM": [
-              0.363452349782288,
-              0.22303651873321775,
-              0.11151825936660888
+              0.48466406518540184,
+              0.1860866315278652,
+              0.0930433157639326
             ]
           },
           "drawMode": "line",
@@ -2135,35 +2137,29 @@
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.042759289765229976,
-              "yM": -0.24901525057514423
+              "xM": 0.0930433157639326,
+              "yM": -0.7917636776016211
             },
             {
               "curveMode": "corner",
               "segmentInMode": "corner",
               "segmentOutMode": "corner",
-              "xM": 0.11151825936660888,
-              "yM": -0.24901525057514423
-            },
-            {
-              "curveMode": "corner",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "xM": 0.11151825936660888,
-              "yM": -0.6112120543680345
-            },
-            {
-              "curveMode": "spline",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "snapAttachment": {
-                "kind": "segment",
-                "segmentIndex": 0,
-                "shapeId": "implicit-x-axis-mirror",
-                "t": 0.4998761201477071
-              },
               "xM": 0,
-              "yM": -0.24775970458574648
+              "yM": -0.7917636776016211
+            },
+            {
+              "curveMode": "corner",
+              "segmentInMode": "corner",
+              "segmentOutMode": "corner",
+              "xM": 0,
+              "yM": -0.3070996124162193
+            },
+            {
+              "curveMode": "corner",
+              "segmentInMode": "corner",
+              "segmentOutMode": "corner",
+              "xM": 0.0930433157639326,
+              "yM": -0.3070996124162193
             }
           ],
           "role": "part"
@@ -2570,9 +2566,9 @@
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 874,
-        "originX": 196.61174839435228,
-        "originY": 100.98594003040068,
-        "scale": 529.8401668362977,
+        "originX": 129.09511804160223,
+        "originY": 206.72322745307008,
+        "scale": 345.50615245651665,
         "width": 900
       }
     },
@@ -2591,9 +2587,9 @@
     "units": "m"
   },
   "propulsion": {
-    "selectedBatteryId": "pack-8s-8ah-25c",
-    "selectedMotorId": "motor-4225-390kv",
-    "selectedPropellerId": "apc-20x10e",
+    "selectedBatteryId": "pack-16s-30ah-12c",
+    "selectedMotorId": "motor-6310-250kv",
+    "selectedPropellerId": "apc-17x10e",
     "targetEnduranceMin": 20,
     "targetThrustToWeight": 1.3
   },
@@ -2606,7 +2602,7 @@
       "aspectRatio": 5,
       "batteryEnergyDensityWhKg": 190,
       "cruiseLiftCoefficient": 0.55,
-      "cruiseSpeedMS": 15.43332,
+      "cruiseSpeedMS": 25.7222,
       "diskLoadingNpm2": 65,
       "enduranceMin": 20,
       "hoverTimeMin": 2,
@@ -2616,7 +2612,9 @@
       "reservePct": 20,
       "rotorBladeCount": 4,
       "tailVolumeTarget": 0.55,
-      "takeoffThrustToWeight": 1.4
+      "takeoffThrustToWeight": 1.4,
+      "turbineEngineId": "swiwin-sw60b",
+      "turbineFuelMin": 20
     },
     "selectedShapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
     "shapes": [
@@ -2894,15 +2892,15 @@
       {
         "cadGeometry": {
           "centerM": [
-            -0.4294858794768905,
+            -0.5494316450089203,
             0,
             0
           ],
           "kind": "box",
           "sizeM": [
-            0.363452349782288,
-            0.22303651873321775,
-            0.11151825936660888
+            0.48466406518540184,
+            0.1860866315278652,
+            0.0930433157639326
           ]
         },
         "drawMode": "line",
@@ -2915,35 +2913,29 @@
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.042759289765229976,
-            "yM": -0.24901525057514423
+            "xM": 0.0930433157639326,
+            "yM": -0.7917636776016211
           },
           {
             "curveMode": "corner",
             "segmentInMode": "corner",
             "segmentOutMode": "corner",
-            "xM": 0.11151825936660888,
-            "yM": -0.24901525057514423
-          },
-          {
-            "curveMode": "corner",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "xM": 0.11151825936660888,
-            "yM": -0.6112120543680345
-          },
-          {
-            "curveMode": "spline",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "snapAttachment": {
-              "kind": "segment",
-              "segmentIndex": 0,
-              "shapeId": "implicit-x-axis-mirror",
-              "t": 0.4998761201477071
-            },
             "xM": 0,
-            "yM": -0.24775970458574648
+            "yM": -0.7917636776016211
+          },
+          {
+            "curveMode": "corner",
+            "segmentInMode": "corner",
+            "segmentOutMode": "corner",
+            "xM": 0,
+            "yM": -0.3070996124162193
+          },
+          {
+            "curveMode": "corner",
+            "segmentInMode": "corner",
+            "segmentOutMode": "corner",
+            "xM": 0.0930433157639326,
+            "yM": -0.3070996124162193
           }
         ],
         "role": "part"
@@ -3350,11 +3342,11 @@
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 874,
-      "originX": 196.61174839435228,
-      "originY": 100.98594003040068,
-      "scale": 529.8401668362977,
+      "originX": 129.09511804160223,
+      "originY": 206.72322745307008,
+      "scale": 345.50615245651665,
       "width": 900
     }
   },
-  "updatedAt": 1780018036554
+  "updatedAt": 1780055473672
 }

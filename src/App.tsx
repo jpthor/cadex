@@ -2,14 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   Crosshair,
   Download,
-  Fan,
-  Gauge,
   Hand,
   Maximize,
   MessageSquareText,
   MousePointer2,
   Orbit,
-  Ruler,
+  Rocket,
   Settings,
   Sparkles,
   Trash2,
@@ -24,7 +22,6 @@ import {
   defaultModel,
   defaultPropulsionTabState,
   examplePrompt,
-  fixedAircraftMotorCount,
   projectStorageKey,
 } from "./app/constants";
 import type {
@@ -41,6 +38,8 @@ import { CadCanvas } from "./components/canvas/CadCanvas";
 import { toDisplayUnit } from "./components/browser/units";
 import { ComputeDashboard } from "./components/compute/ComputeDashboard";
 import { ProjectMenu } from "./components/design/ProjectMenu";
+import { JetDashboard } from "./components/jet/JetDashboard";
+import { MaxDashboard } from "./components/max/MaxDashboard";
 import { TimelineItem } from "./components/design/TimelineItem";
 import { PropulsionWorkspace } from "./components/propulsion/propulsionPanels";
 import { SizingDashboard } from "./components/sizing/sizingPanels";
@@ -56,6 +55,7 @@ import {
   deleteAircraftProject,
   fetchAircraftProject,
   listAircraftProjects,
+  loadStoredAircraftState,
   loadStoredProject,
   normalizeCadProject,
   normalizePropulsionTabState,
@@ -64,8 +64,8 @@ import {
 } from "./lib/persistence";
 import { friendlyError, isTauriRuntime } from "./lib/tauriRuntime";
 import { batteryMassFromSizing, rotorDefinitionFromSizing } from "./propulsionEngine";
-import { SketchWorkspace, SketchSummaryFooter } from "./SketchMode";
-import { computeSketchAerodynamics, computeSizingAnalysis, defaultSizingProject, normalizeSizingProject } from "./sizing";
+import { SketchWorkspace } from "./SketchMode";
+import { computeSizingAnalysis, defaultSizingProject, normalizeSizingProject } from "./sizing";
 import type { SizingProject } from "./sizing";
 import type { CadProject, GeometryFormat, SelectedGeometry, ToolMode } from "./types";
 import { browserGroupIdForObject, selectionFromBrowserItem } from "./components/browser/browserSelection";
@@ -78,31 +78,111 @@ function formatSelectedContext(selectedGeometry: SelectedGeometry | null) {
 
 function loadStoredAppMode(): AppMode {
   const storedMode = localStorage.getItem(appModeStorageKey);
-  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "propulsion" || storedMode === "design"
+  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "propulsion" || storedMode === "jet" || storedMode === "max" || storedMode === "design"
     ? storedMode
     : "sizing";
-}
-
-function computeSketchFooterValue(project: SizingProject, metric: "cl" | "cd" | "ld") {
-  if (!project.shapes.length) return "-";
-  const aero = computeSketchAerodynamics(project);
-  if (metric === "cd") return aero.validity.drag ? aero.aerodynamics.dragCoefficient.toFixed(3) : "-";
-  if (!aero.validity.lift) return "-";
-  if (metric === "cl") return aero.aerodynamics.liftCoefficient.toFixed(2);
-  return aero.aerodynamics.liftToDrag.toFixed(1);
 }
 
 function isFetchFailure(error: unknown) {
   return error instanceof TypeError && String(error.message).includes("fetch");
 }
 
+function isStaleProjectSaveError(error: unknown) {
+  return friendlyError(error).includes("stale project copy refused");
+}
+
+function savedStateUpdatedAt(serialized: string) {
+  return parseSavedAircraftState(serialized)?.updatedAt;
+}
+
+function parseSavedAircraftState(serialized: string) {
+  if (!serialized) return undefined;
+  try {
+    return JSON.parse(serialized) as AircraftMasterState;
+  } catch {
+    return undefined;
+  }
+}
+
+function aircraftStateFingerprint(state: AircraftMasterState) {
+  return JSON.stringify({
+    id: state.id,
+    name: state.name,
+    project: state.project,
+    propulsion: state.propulsion,
+    schemaVersion: state.schemaVersion,
+    sizing: state.sizing,
+  });
+}
+
+function changedSinceLastSave<T>(base: T | undefined, pending: T) {
+  return JSON.stringify(base) !== JSON.stringify(pending);
+}
+
+function projectWithoutSizing(project: CadProject) {
+  const { sizing: _sizing, ...rest } = project;
+  return rest;
+}
+
+function mergePendingAircraftChanges(
+  base: AircraftMasterState | undefined,
+  pending: AircraftMasterState,
+  latest: AircraftMasterState,
+): AircraftMasterState {
+  if (!base) return pending;
+
+  const nextSizing: SizingProject = { ...latest.sizing };
+  const pendingSizing = pending.sizing;
+  const baseSizing = base.sizing;
+
+  if (changedSinceLastSave(baseSizing.mission, pendingSizing.mission)) {
+    nextSizing.mission = { ...latest.sizing.mission, ...pendingSizing.mission };
+  }
+  if (changedSinceLastSave(baseSizing.shapes, pendingSizing.shapes)) nextSizing.shapes = pendingSizing.shapes;
+  if (changedSinceLastSave(baseSizing.dimensions, pendingSizing.dimensions)) nextSizing.dimensions = pendingSizing.dimensions;
+  if (changedSinceLastSave(baseSizing.sizingReferenceShapes, pendingSizing.sizingReferenceShapes)) {
+    nextSizing.sizingReferenceShapes = pendingSizing.sizingReferenceShapes;
+  }
+  if (changedSinceLastSave(baseSizing.showSizingReference, pendingSizing.showSizingReference)) {
+    nextSizing.showSizingReference = pendingSizing.showSizingReference;
+  }
+  if (changedSinceLastSave(baseSizing.sketchCanvasView, pendingSizing.sketchCanvasView)) {
+    nextSizing.sketchCanvasView = pendingSizing.sketchCanvasView;
+  }
+  if (changedSinceLastSave(baseSizing.sketchScaleUnit, pendingSizing.sketchScaleUnit)) {
+    nextSizing.sketchScaleUnit = pendingSizing.sketchScaleUnit;
+  }
+  if (changedSinceLastSave(baseSizing.selectedShapeId, pendingSizing.selectedShapeId)) nextSizing.selectedShapeId = pendingSizing.selectedShapeId;
+  if (changedSinceLastSave(baseSizing.activeRole, pendingSizing.activeRole)) nextSizing.activeRole = pendingSizing.activeRole;
+  if (changedSinceLastSave(baseSizing.drawMode, pendingSizing.drawMode)) nextSizing.drawMode = pendingSizing.drawMode;
+  if (changedSinceLastSave(baseSizing.analysis, pendingSizing.analysis)) nextSizing.analysis = pendingSizing.analysis;
+
+  const nextProject = changedSinceLastSave(projectWithoutSizing(base.project), projectWithoutSizing(pending.project))
+    ? { ...pending.project, name: latest.name, sizing: nextSizing }
+    : { ...latest.project, sizing: nextSizing };
+  const nextPropulsion = changedSinceLastSave(base.propulsion, pending.propulsion) ? pending.propulsion : latest.propulsion;
+  const nextName = changedSinceLastSave(base.name, pending.name) ? pending.name : latest.name;
+
+  return {
+    ...latest,
+    name: nextName,
+    project: { ...nextProject, name: nextName, sizing: nextSizing },
+    propulsion: nextPropulsion,
+    sizing: nextSizing,
+    updatedAt: Date.now(),
+  };
+}
+
 export default function App() {
+  const [initialAircraftState] = useState(() => loadStoredAircraftState());
   const [appMode, setAppMode] = useState<AppMode>(() => loadStoredAppMode());
-  const [project, setProject] = useState<CadProject>(() => loadStoredProject() ?? fallbackProject());
+  const [project, setProject] = useState<CadProject>(() => initialAircraftState?.project ?? loadStoredProject() ?? fallbackProject());
   const [sizingProject, setSizingProject] = useState<SizingProject>(() =>
-    normalizeSizingProject(loadStoredProject()?.sizing),
+    normalizeSizingProject(initialAircraftState?.sizing ?? loadStoredProject()?.sizing),
   );
-  const [propulsionState, setPropulsionState] = useState<PropulsionTabState>(defaultPropulsionTabState);
+  const [propulsionState, setPropulsionState] = useState<PropulsionTabState>(() =>
+    normalizePropulsionTabState(initialAircraftState?.propulsion),
+  );
   const [prompt, setPrompt] = useState(examplePrompt);
   const [chatLog, setChatLog] = useState([
     {
@@ -123,12 +203,15 @@ export default function App() {
   const [selectedGeometry, setSelectedGeometry] = useState<SelectedGeometry | null>(null);
   const [status, setStatus] = useState("Ready");
   const [aircraftProjects, setAircraftProjects] = useState<AircraftProjectEntry[]>([]);
-  const [activeAircraftProjectId, setActiveAircraftProjectId] = useState(() => localStorage.getItem("cadex.activeAircraftProjectId") ?? "");
+  const [activeAircraftProjectId, setActiveAircraftProjectId] = useState(
+    () => localStorage.getItem("cadex.activeAircraftProjectId") ?? initialAircraftState?.id ?? "",
+  );
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const activeAircraftProject = aircraftProjects.find((entry) => entry.id === activeAircraftProjectId);
   const saveTimerRef = useRef<number | undefined>(undefined);
   const lastSavedStateRef = useRef("");
   const loadedAircraftProjectIdRef = useRef("");
+  const projectSyncInFlightRef = useRef(false);
 
   useEffect(() => {
     localStorage.setItem(appModeStorageKey, appMode);
@@ -143,8 +226,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (activeAircraftProjectId) {
+      const state = buildAircraftMasterState(activeAircraftProjectId, activeAircraftProject?.name ?? project.name, project, sizingProject, propulsionState);
+      localStorage.setItem(projectStorageKey, JSON.stringify(state));
+      return;
+    }
     localStorage.setItem(projectStorageKey, JSON.stringify(project));
-  }, [project]);
+  }, [activeAircraftProject?.name, activeAircraftProjectId, project, propulsionState, sizingProject]);
 
   useEffect(() => {
     void refreshAircraftProjects();
@@ -156,8 +244,6 @@ export default function App() {
     if (!currentName) return;
     const matchingProject = aircraftProjects.find((entry) => entry.name.trim().toLowerCase() === currentName);
     if (!matchingProject) return;
-    loadedAircraftProjectIdRef.current = matchingProject.id;
-    lastSavedStateRef.current = "";
     setActiveAircraftProjectId(matchingProject.id);
   }, [activeAircraftProjectId, aircraftProjects, project.name]);
 
@@ -179,15 +265,69 @@ export default function App() {
 
   useEffect(() => {
     if (!activeAircraftProjectId) return;
+    if (loadedAircraftProjectIdRef.current !== activeAircraftProjectId) return;
     const state = buildAircraftMasterState(activeAircraftProjectId, activeAircraftProject?.name ?? project.name, project, sizingProject, propulsionState);
     const serialized = JSON.stringify(state);
     if (serialized === lastSavedStateRef.current) return;
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = undefined;
       void saveAircraftProject(activeAircraftProjectId, state);
     }, 450);
     return () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = undefined;
+      }
+    };
+  }, [activeAircraftProject?.name, activeAircraftProjectId, project, propulsionState, sizingProject]);
+
+  useEffect(() => {
+    if (!activeAircraftProjectId) return undefined;
+    if (loadedAircraftProjectIdRef.current !== activeAircraftProjectId) return undefined;
+    let cancelled = false;
+
+    async function syncLatestProject() {
+      if (projectSyncInFlightRef.current) return;
+      projectSyncInFlightRef.current = true;
+      try {
+        const latest = await fetchAircraftProject(activeAircraftProjectId);
+        if (cancelled || loadedAircraftProjectIdRef.current !== activeAircraftProjectId) return;
+        const remoteUpdatedAt = latest.state.updatedAt ?? latest.project.updatedAtMs;
+        const localUpdatedAt = savedStateUpdatedAt(lastSavedStateRef.current);
+        if (!remoteUpdatedAt || !localUpdatedAt || remoteUpdatedAt <= localUpdatedAt) return;
+
+        const localState = buildAircraftMasterState(activeAircraftProjectId, activeAircraftProject?.name ?? project.name, project, sizingProject, propulsionState);
+        const savedState = parseSavedAircraftState(lastSavedStateRef.current);
+        const hasLocalEdits =
+          !savedState ||
+          aircraftStateFingerprint(localState) !== aircraftStateFingerprint(savedState) ||
+          saveTimerRef.current !== undefined;
+        setAircraftProjects((current) => upsertAircraftProject(current, latest.project));
+
+        if (hasLocalEdits) {
+          setStatus(`Newer ${latest.project.name} available in another browser; reload before editing further`);
+          return;
+        }
+
+        applyAircraftMasterState(latest.state);
+        loadedAircraftProjectIdRef.current = latest.project.id;
+        lastSavedStateRef.current = JSON.stringify(latest.state);
+        setStatus(`Reloaded latest ${latest.project.name}`);
+      } catch {
+        // Keep the current local copy if the bridge is momentarily unavailable.
+      } finally {
+        projectSyncInFlightRef.current = false;
+      }
+    }
+
+    void syncLatestProject();
+    const timer = window.setInterval(() => {
+      void syncLatestProject();
+    }, 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
     };
   }, [activeAircraftProject?.name, activeAircraftProjectId, project, propulsionState, sizingProject]);
 
@@ -449,12 +589,38 @@ export default function App() {
   }
 
   async function saveAircraftProject(projectId: string, state: AircraftMasterState) {
+    const baseState = parseSavedAircraftState(lastSavedStateRef.current);
     try {
-      const result = await persistAircraftProject(projectId, state);
+      const expectedUpdatedAt = lastSavedStateRef.current
+        ? baseState?.updatedAt
+        : undefined;
+      const result = await persistAircraftProject(projectId, state, expectedUpdatedAt);
       lastSavedStateRef.current = JSON.stringify(result.state);
       setAircraftProjects((current) => upsertAircraftProject(current, result.project));
       setStatus(`Saved ${result.project.name}`);
     } catch (error) {
+      if (isStaleProjectSaveError(error)) {
+        try {
+          const latest = await fetchAircraftProject(projectId);
+          setAircraftProjects((current) => upsertAircraftProject(current, latest.project));
+          const merged = mergePendingAircraftChanges(baseState, state, latest.state);
+          if (aircraftStateFingerprint(merged) === aircraftStateFingerprint(latest.state)) {
+            applyAircraftMasterState(latest.state);
+            lastSavedStateRef.current = JSON.stringify(latest.state);
+            setStatus("Reloaded latest aircraft");
+            return;
+          }
+          const retry = await persistAircraftProject(projectId, merged, latest.state.updatedAt);
+          applyAircraftMasterState(retry.state);
+          lastSavedStateRef.current = JSON.stringify(retry.state);
+          setAircraftProjects((current) => upsertAircraftProject(current, retry.project));
+          setStatus(`Saved ${retry.project.name}`);
+          return;
+        } catch (retryError) {
+          setStatus(`Project save failed: ${friendlyError(retryError)}`);
+          return;
+        }
+      }
       setStatus(`Project save failed: ${friendlyError(error)}`);
     }
   }
@@ -581,6 +747,12 @@ export default function App() {
             <button className={appMode === "propulsion" ? "active" : ""} onClick={() => setAppMode("propulsion")}>
               Propulsion
             </button>
+            <button className={appMode === "jet" ? "active" : ""} onClick={() => setAppMode("jet")}>
+              Jet
+            </button>
+            <button className={appMode === "max" ? "active" : ""} onClick={() => setAppMode("max")}>
+              Max
+            </button>
             <button className={appMode === "design" ? "active" : ""} onClick={() => setAppMode("design")}>
               Design
             </button>
@@ -621,27 +793,7 @@ export default function App() {
               Clear
             </button>
           </>
-        ) : appMode === "propulsion" ? (
-          <div className="size-toolbar-label">
-            <Fan size={17} />
-            Motor and rotor sizing
-          </div>
-        ) : appMode === "sizing" ? (
-          <div className="size-toolbar-label">
-            <Gauge size={17} />
-            Aircraft sizing
-          </div>
-        ) : appMode === "compute" ? (
-          <div className="size-toolbar-label">
-            <Gauge size={17} />
-            Live aero analysis
-          </div>
-        ) : (
-          <div className="size-toolbar-label">
-            <Ruler size={17} />
-            Aircraft sketch canvas
-          </div>
-        )}
+        ) : null}
         <div className="status-pill">{status}</div>
         <button className="tool-button toolbar-settings-button" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings">
           <Settings size={18} />
@@ -763,31 +915,39 @@ export default function App() {
             sizingProject={sizingProject}
             onPropulsionStateChange={setPropulsionState}
           />
+        </>
+      ) : appMode === "jet" ? (
+        <>
+          <JetDashboard
+            aircraftMassKg={liveSizingAnalysis?.totalMassKg ?? 0}
+            batteryEnergyDensityWhKg={sizingProject.mission.batteryEnergyDensityWhKg}
+            propulsionState={propulsionState}
+            sizingProject={sizingProject}
+            onSizingProjectChange={updateSizingProject}
+          />
+        </>
+      ) : appMode === "max" ? (
+        <>
+          <MaxDashboard
+            aircraftMassKg={liveSizingAnalysis?.totalMassKg ?? 0}
+            batteryEnergyDensityWhKg={sizingProject.mission.batteryEnergyDensityWhKg}
+            propulsionState={propulsionState}
+            sizingProject={sizingProject}
+          />
           <footer className="timeline size-footer">
             <div className="timeline-title">
-              <Fan size={17} />
-              <span>Propulsion result</span>
+              <Rocket size={17} />
+              <span>Max result</span>
             </div>
             <div className="timeline-events">
-              <span>Mass {(liveSizingAnalysis?.totalMassKg ?? 0).toFixed(2)} kg</span>
-              <span>{fixedAircraftMotorCount} motors</span>
+              <span>Fixed aircraft and payload</span>
+              <span>Battery, motor, prop, jet, fuel sweep</span>
             </div>
           </footer>
         </>
       ) : appMode === "compute" ? (
         <>
           <ComputeDashboard project={sizingProject} projectName={activeAircraftProject?.name ?? project.name} />
-          <footer className="timeline size-footer">
-            <div className="timeline-title">
-              <Gauge size={17} />
-              <span>Aero result</span>
-            </div>
-            <div className="timeline-events">
-              <span>CL {computeSketchFooterValue(sizingProject, "cl")}</span>
-              <span>CD {computeSketchFooterValue(sizingProject, "cd")}</span>
-              <span>L/D {computeSketchFooterValue(sizingProject, "ld")}</span>
-            </div>
-          </footer>
         </>
       ) : (
         <>
@@ -796,15 +956,6 @@ export default function App() {
             onChange={updateSizingProject}
             onOpenVspAnalysis={runOpenVspSizing}
           />
-          <footer className="timeline size-footer">
-            <div className="timeline-title">
-              <Ruler size={17} />
-              <span>Sketch result</span>
-            </div>
-            <div className="timeline-events">
-              <SketchSummaryFooter analysis={liveSizingAnalysis} />
-            </div>
-          </footer>
         </>
       )}
       {settingsOpen ? (

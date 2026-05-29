@@ -1,0 +1,336 @@
+{
+  "id": "dart10kg",
+  "name": "Dart10kg",
+  "project": {
+    "id": "c6d19770-36e2-494d-93f9-00ff3dda59ac",
+    "name": "Dart10kg",
+    "objects": [],
+    "sizing": {
+      "activeRole": "body",
+      "dimensions": [],
+      "drawMode": "spline",
+      "mission": {
+        "aspectRatio": 2.8,
+        "batteryEnergyDensityWhKg": 190,
+        "cruiseLiftCoefficient": 0.55,
+        "cruiseSpeedMS": 17,
+        "diskLoadingNpm2": 65,
+        "enduranceMin": 20,
+        "hoverTimeMin": 2,
+        "lengthRatio": 0.8,
+        "motorCount": 2,
+        "payloadKg": 10,
+        "reservePct": 10,
+        "rotorBladeCount": 4,
+        "tailVolumeTarget": 0.55,
+        "takeoffThrustToWeight": 1.4,
+        "turbineEngineId": "swiwin-sw60b",
+        "turbineFuelMin": 20
+      },
+      "selectedShapeId": "body-53fe66f7-1e1b-48c0-a197-53bcd11569ab",
+      "shapes": [
+        {
+          "bodyMaterial": "carbonFibre",
+          "bodyThicknessMm": 1.2,
+          "cadGeometry": {
+            "axisM": [
+              1,
+              0,
+              0
+            ],
+            "centerM": [
+              -0.45249587234559385,
+              0,
+              0
+            ],
+            "kind": "revolvedBody",
+            "lengthM": 0.8985340230456131,
+            "profile": [
+              {
+                "curveMode": "spline",
+                "segmentOutMode": "spline",
+                "tangentOut": {
+                  "xM": 0.03709200820475597,
+                  "yM": -0.012391131166363315
+                },
+                "xM": 0,
+                "yM": -0.003228860822787283
+              },
+              {
+                "curveMode": "spline",
+                "segmentInMode": "spline",
+                "tangentIn": {
+                  "xM": -0.009459807997166477,
+                  "yM": 0.07615483507530477
+                },
+                "xM": 0.09922830046460526,
+                "yM": -0.13631170704325973
+              },
+              {
+                "curveMode": "spline",
+                "segmentOutMode": "spline",
+                "tangentOut": {
+                  "xM": 0.0007099378098355119,
+                  "yM": -0.05687836629761367
+                },
+                "xM": 0.1,
+                "yM": -0.8
+              },
+              {
+                "curveMode": "spline",
+                "segmentInMode": "spline",
+                "tangentIn": {
+                  "xM": 0.03473497975964044,
+                  "yM": 0.011335099705828355
+                },
+                "xM": 0,
+                "yM": -0.9017628838684004
+              }
+            ],
+            "radiusM": 0.1
+          },
+          "drawMode": "spline",
+          "id": "body-53fe66f7-1e1b-48c0-a197-53bcd11569ab",
+          "label": "Fuselage",
+          "massKg": 0.5,
+          "points": [
+            {
+              "curveMode": "spline",
+              "segmentOutMode": "spline",
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "implicit-x-axis-mirror",
+                "t": 0.4999983855695886
+              },
+              "tangentOut": {
+                "xM": 0.03709200820475597,
+                "yM": -0.012391131166363315
+              },
+              "xM": 0,
+              "yM": -0.003228860822787283
+            },
+            {
+              "curveMode": "spline",
+              "segmentInMode": "spline",
+              "tangentIn": {
+                "xM": -0.009459807997166477,
+                "yM": 0.07615483507530477
+              },
+              "xM": 0.09922830046460526,
+              "yM": -0.13631170704325973
+            },
+            {
+              "curveMode": "spline",
+              "segmentOutMode": "spline",
+              "tangentOut": {
+                "xM": 0.0007099378098355119,
+                "yM": -0.05687836629761367
+              },
+              "xM": 0.1,
+              "yM": -0.8
+            },
+            {
+              "curveMode": "spline",
+              "segmentInMode": "spline",
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "implicit-x-axis-mirror",
+                "t": 0.4995491185580658
+              },
+              "tangentIn": {
+                "xM": 0.03473497975964044,
+                "yM": 0.011335099705828355
+              },
+              "xM": 0,
+              "yM": -0.9017628838684004
+            }
+          ],
+          "role": "body"
+        }
+      ],
+      "showSizingReference": true,
+      "sizingReferenceShapes": [],
+      "sketchCanvasView": {
+        "height": 874,
+        "originX": 242.72412302022548,
+        "originY": 102.24415774078368,
+        "scale": 691.1531068596881,
+        "width": 900
+      }
+    },
+    "timeline": [
+      {
+        "detail": "Ready for a parametric CAD command.",
+        "id": "4ecb39a9-0d8b-44c1-b02c-3fcd455d2642",
+        "label": "Project created"
+      }
+    ],
+    "units": "m"
+  },
+  "propulsion": {
+    "selectedBatteryId": "pack-8s-8ah-25c",
+    "selectedMotorId": "motor-4225-390kv",
+    "selectedPropellerId": "apc-20x10e",
+    "targetEnduranceMin": 20,
+    "targetThrustToWeight": 1.3
+  },
+  "schemaVersion": 1,
+  "sizing": {
+    "activeRole": "body",
+    "dimensions": [],
+    "drawMode": "spline",
+    "mission": {
+      "aspectRatio": 2.8,
+      "batteryEnergyDensityWhKg": 190,
+      "cruiseLiftCoefficient": 0.55,
+      "cruiseSpeedMS": 17,
+      "diskLoadingNpm2": 65,
+      "enduranceMin": 20,
+      "hoverTimeMin": 2,
+      "lengthRatio": 0.8,
+      "motorCount": 2,
+      "payloadKg": 10,
+      "reservePct": 10,
+      "rotorBladeCount": 4,
+      "tailVolumeTarget": 0.55,
+      "takeoffThrustToWeight": 1.4,
+      "turbineEngineId": "swiwin-sw60b",
+      "turbineFuelMin": 20
+    },
+    "selectedShapeId": "body-53fe66f7-1e1b-48c0-a197-53bcd11569ab",
+    "shapes": [
+      {
+        "bodyMaterial": "carbonFibre",
+        "bodyThicknessMm": 1.2,
+        "cadGeometry": {
+          "axisM": [
+            1,
+            0,
+            0
+          ],
+          "centerM": [
+            -0.45249587234559385,
+            0,
+            0
+          ],
+          "kind": "revolvedBody",
+          "lengthM": 0.8985340230456131,
+          "profile": [
+            {
+              "curveMode": "spline",
+              "segmentOutMode": "spline",
+              "tangentOut": {
+                "xM": 0.03709200820475597,
+                "yM": -0.012391131166363315
+              },
+              "xM": 0,
+              "yM": -0.003228860822787283
+            },
+            {
+              "curveMode": "spline",
+              "segmentInMode": "spline",
+              "tangentIn": {
+                "xM": -0.009459807997166477,
+                "yM": 0.07615483507530477
+              },
+              "xM": 0.09922830046460526,
+              "yM": -0.13631170704325973
+            },
+            {
+              "curveMode": "spline",
+              "segmentOutMode": "spline",
+              "tangentOut": {
+                "xM": 0.0007099378098355119,
+                "yM": -0.05687836629761367
+              },
+              "xM": 0.1,
+              "yM": -0.8
+            },
+            {
+              "curveMode": "spline",
+              "segmentInMode": "spline",
+              "tangentIn": {
+                "xM": 0.03473497975964044,
+                "yM": 0.011335099705828355
+              },
+              "xM": 0,
+              "yM": -0.9017628838684004
+            }
+          ],
+          "radiusM": 0.1
+        },
+        "drawMode": "spline",
+        "id": "body-53fe66f7-1e1b-48c0-a197-53bcd11569ab",
+        "label": "Fuselage",
+        "massKg": 0.5,
+        "points": [
+          {
+            "curveMode": "spline",
+            "segmentOutMode": "spline",
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "implicit-x-axis-mirror",
+              "t": 0.4999983855695886
+            },
+            "tangentOut": {
+              "xM": 0.03709200820475597,
+              "yM": -0.012391131166363315
+            },
+            "xM": 0,
+            "yM": -0.003228860822787283
+          },
+          {
+            "curveMode": "spline",
+            "segmentInMode": "spline",
+            "tangentIn": {
+              "xM": -0.009459807997166477,
+              "yM": 0.07615483507530477
+            },
+            "xM": 0.09922830046460526,
+            "yM": -0.13631170704325973
+          },
+          {
+            "curveMode": "spline",
+            "segmentOutMode": "spline",
+            "tangentOut": {
+              "xM": 0.0007099378098355119,
+              "yM": -0.05687836629761367
+            },
+            "xM": 0.1,
+            "yM": -0.8
+          },
+          {
+            "curveMode": "spline",
+            "segmentInMode": "spline",
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "implicit-x-axis-mirror",
+              "t": 0.4995491185580658
+            },
+            "tangentIn": {
+              "xM": 0.03473497975964044,
+              "yM": 0.011335099705828355
+            },
+            "xM": 0,
+            "yM": -0.9017628838684004
+          }
+        ],
+        "role": "body"
+      }
+    ],
+    "showSizingReference": true,
+    "sizingReferenceShapes": [],
+    "sketchCanvasView": {
+      "height": 874,
+      "originX": 242.72412302022548,
+      "originY": 102.24415774078368,
+      "scale": 691.1531068596881,
+      "width": 900
+    }
+  },
+  "updatedAt": 1780053696864
+}

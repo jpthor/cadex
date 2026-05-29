@@ -79,6 +79,7 @@ export function SketchCanvas({
   pendingDimensionValue,
   activePartType,
   initialCanvasView,
+  initialScaleUnit,
   showSizingReference,
   sizingReferenceShapes,
   analysis,
@@ -95,6 +96,7 @@ export function SketchCanvas({
   onSetDimensionToolActive,
   onSetPreviewPoint,
   onCanvasViewChange,
+  onScaleUnitChange,
   onToggleSizingReference,
   onMoveDraftPoint,
   onMoveShapePoint,
@@ -116,6 +118,7 @@ export function SketchCanvas({
   onToggleDraftPoint,
   onInsertShapePoint,
   onDeleteShapePoint,
+  onUnsnapShapePoint,
 }: {
   shapes: SizeShape[];
   selectedShapeId: string;
@@ -132,6 +135,7 @@ export function SketchCanvas({
   pendingDimensionValue: string;
   activePartType: PartType;
   initialCanvasView?: CanvasView;
+  initialScaleUnit?: ScaleUnit;
   showSizingReference: boolean;
   sizingReferenceShapes: SizeShape[];
   analysis?: SizingAnalysis;
@@ -148,6 +152,7 @@ export function SketchCanvas({
   onSetDimensionToolActive: (active: boolean) => void;
   onSetPreviewPoint: (point: SizePoint | null) => void;
   onCanvasViewChange: (view: CanvasView) => void;
+  onScaleUnitChange: (unit: ScaleUnit) => void;
   onToggleSizingReference: () => void;
 	  onMoveDraftPoint: (index: number, point: SizePoint) => void;
 	  onMoveShapePoint: (shapeId: string, index: number, point: SizePoint) => void;
@@ -169,10 +174,11 @@ export function SketchCanvas({
 	  onToggleDraftPoint: (index: number) => void;
   onInsertShapePoint: (shapeId: string, point: SizePoint) => void;
   onDeleteShapePoint: (shapeId: string, index: number) => void;
+  onUnsnapShapePoint: (shapeId: string, index: number) => void;
 }) {
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
   const [canvasView, setCanvasView] = useState<CanvasView>(() => initialCanvasView ?? fitCanvasView(shapes));
-  const [scaleUnit, setScaleUnit] = useState<ScaleUnit>("cm");
+  const [scaleUnit, setScaleUnit] = useState<ScaleUnit>(initialScaleUnit ?? "cm");
   const [viewMode, setViewMode] = useState<CanvasViewMode>("top");
   const [renderViewMode, setRenderViewMode] = useState<CanvasViewMode>("top");
   const [isViewTransitioning, setIsViewTransitioning] = useState(false);
@@ -207,9 +213,11 @@ export function SketchCanvas({
       ? visibleReferenceShapes.map((shape) => projectedShape(shape, 1, shapes, renderViewMode))
       : visibleReferenceShapes;
   const renderedShapes = [...displayShapes].sort((a, b) => {
+    const selectedOrder = Number(a.id === selectedShapeId) - Number(b.id === selectedShapeId);
+    if (selectedOrder) return selectedOrder;
     const referenceOrder = Number(referenceRoles.includes(a.role)) - Number(referenceRoles.includes(b.role));
     if (referenceOrder) return referenceOrder;
-    return Number(a.id === selectedShapeId) - Number(b.id === selectedShapeId);
+    return 0;
   });
   const canDrawDirectlyInSideView = drawActive && viewMode === "side";
   const topDraftPoints = draftRole === "part"
@@ -229,7 +237,6 @@ export function SketchCanvas({
         .filter((plane) => plane.sketchViewMode === renderViewMode || (renderViewMode === "front" && plane.sketchViewMode === "side"))
         .map((plane) => (plane.sketchViewMode && plane.sketchViewMode !== renderViewMode ? projectedShape(plane, 1, shapes, renderViewMode) : plane));
   const drawIsSplineTool = drawActive && !referenceRoles.includes(draftRole);
-  const selectedMotorId = shapes.find((shape) => shape.id === selectedShapeId && shape.role === "part" && shape.partType === "motor")?.id ?? "";
   const draggedPartShape = draggedPartDimensionShape(dragTarget, shapes);
   const dimensionPrompt = dimensionToolActive && !pendingDimension
     ? dimensionDraft
@@ -249,6 +256,10 @@ export function SketchCanvas({
     initialCanvasView?.scale,
     initialCanvasView?.width,
   ]);
+
+  useEffect(() => {
+    if (initialScaleUnit) setScaleUnit(initialScaleUnit);
+  }, [initialScaleUnit]);
 
   useEffect(() => {
     if (drawActive && viewMode !== "top" && viewMode !== "side") transitionToView("top");
@@ -288,6 +299,11 @@ export function SketchCanvas({
       onCanvasViewChange(resolved);
       return resolved;
     });
+  }
+
+  function updateScaleUnit(unit: ScaleUnit) {
+    setScaleUnit(unit);
+    onScaleUnitChange(unit);
   }
 
   function transitionToView(nextViewMode: CanvasViewMode) {
@@ -339,7 +355,8 @@ export function SketchCanvas({
       return;
     }
     if ((event.target as Element).closest(".shape-node") && !drawActive) return;
-    if ((event.target as Element).closest(".curve-toggle")) return;
+    if ((event.target as Element).closest(".shape-node-unsnap") && !drawActive) return;
+    if ((event.target as Element).closest(".curve-toggle, .curve-toggle-hit")) return;
     if ((event.target as Element).closest(".tangent-handle")) return;
     if (!canEditCanvas) {
       if (!drawActive) onSelect("");
@@ -363,7 +380,7 @@ export function SketchCanvas({
   function handleCanvasPointerDown(event: PointerEvent<SVGSVGElement>) {
     if (!canEditCanvas) return;
     if (!drawActive || event.button !== 0) return;
-    if ((event.target as Element).closest(".curve-toggle, .tangent-handle, .axis-unit-option")) return;
+    if ((event.target as Element).closest(".curve-toggle, .curve-toggle-hit, .tangent-handle, .axis-unit-option")) return;
     pointPlacedOnPress.current = true;
     onAddPoint(pointFromEvent(event), viewMode);
   }
@@ -371,7 +388,7 @@ export function SketchCanvas({
   function handleCanvasMouseDown(event: MouseEvent<SVGSVGElement>) {
     if (!canEditCanvas) return;
     if (!drawActive || event.button !== 0 || pointPlacedOnPress.current) return;
-    if ((event.target as Element).closest(".curve-toggle, .tangent-handle, .axis-unit-option")) return;
+    if ((event.target as Element).closest(".curve-toggle, .curve-toggle-hit, .tangent-handle, .axis-unit-option")) return;
     pointPlacedOnPress.current = true;
     onAddPoint(pointFromEvent(event), viewMode);
   }
@@ -527,9 +544,11 @@ export function SketchCanvas({
           <button
             className={`canvas-view-button canvas-view-button-right ${!freeOrbitActive && viewMode === "side" ? "active" : ""}`}
             onClick={() => transitionToView("side")}
+            title="Side (Left)"
             type="button"
           >
-            Side
+            <span>Side</span>
+            <span className="canvas-view-button-sub">(LEFT)</span>
           </button>
         </>
       ) : (
@@ -548,8 +567,9 @@ export function SketchCanvas({
               Top
             </button>
           ) : (
-            <button className="canvas-view-button canvas-view-button-right" onClick={() => transitionToView("side")} type="button">
-              Side
+            <button className="canvas-view-button canvas-view-button-right" onClick={() => transitionToView("side")} title="Side (Left)" type="button">
+              <span>Side</span>
+              <span className="canvas-view-button-sub">(LEFT)</span>
             </button>
           )}
         </>
@@ -707,7 +727,7 @@ export function SketchCanvas({
         aria-label={renderViewMode === "top" ? "Top down half aircraft sketch" : `${renderViewMode} projected aircraft sizing reference`}
       >
       <SizingGrid
-        onSetUnit={setScaleUnit}
+        onSetUnit={updateScaleUnit}
         unit={scaleUnit}
         view={displayView}
         xAxisLabel={renderViewMode === "side" ? "Z" : renderViewMode === "top" ? "Y" : "X"}
@@ -745,7 +765,6 @@ export function SketchCanvas({
             onSelect={() => onSelect(shape.id)}
             readOnly={!canEditCanvas && shape.sketchViewMode !== renderViewMode}
             selected={shape.id === selectedShapeId}
-            selectedMotorId={selectedMotorId}
             shape={shape}
             showOriginMirror={renderViewMode !== "side"}
             mirrorPlanes={mirrorPlanesForView}
@@ -795,6 +814,10 @@ export function SketchCanvas({
             onActiveAirfoilStationChange={onActiveAirfoilStationChange}
             onInsertPoint={(point) => onInsertShapePoint(shape.id, point)}
             onDeletePoint={(index) => onDeleteShapePoint(shape.id, index)}
+            onUnsnapPoint={(index) => {
+              onBeginUndoableEdit();
+              onUnsnapShapePoint(shape.id, index);
+            }}
             joinSourcePoint={joinSourcePoint?.shapeId === shape.id ? joinSourcePoint : null}
 	            view={displayView}
 	          />
@@ -1010,8 +1033,8 @@ function draftBounds(points: SizePoint[]) {
 }
 
 function inferredDraftBatteryHeight(lengthM: number, widthM: number) {
-  const smaller = Math.min(Math.abs(lengthM), Math.abs(widthM));
-  return Math.min(0.08, Math.max(0.012, smaller * 0.28));
+  void lengthM;
+  return Math.max(0.012, Math.abs(widthM));
 }
 
 function liveDimensionAnchor(points: SizePoint[], previewPoint: SizePoint | null, view: CanvasView) {

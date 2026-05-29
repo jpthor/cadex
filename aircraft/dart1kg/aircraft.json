@@ -1,0 +1,80 @@
+{
+  "id": "dart1kg",
+  "name": "Dart1kg",
+  "project": {
+    "id": "e7e3e9c9-f631-4add-b6d6-de3bef8c69fa",
+    "name": "Dart1kg",
+    "objects": [],
+    "sizing": {
+      "activeRole": "body",
+      "dimensions": [],
+      "drawMode": "spline",
+      "mission": {
+        "aspectRatio": 4,
+        "batteryEnergyDensityWhKg": 190,
+        "cruiseLiftCoefficient": 0.55,
+        "cruiseSpeedMS": 17,
+        "diskLoadingNpm2": 65,
+        "enduranceMin": 20,
+        "hoverTimeMin": 2,
+        "lengthRatio": 0.8,
+        "motorCount": 2,
+        "payloadKg": 1,
+        "reservePct": 10,
+        "rotorBladeCount": 4,
+        "tailVolumeTarget": 0.55,
+        "takeoffThrustToWeight": 1.4,
+        "turbineEngineId": "swiwin-sw60b",
+        "turbineFuelMin": 20
+      },
+      "selectedShapeId": "",
+      "shapes": [],
+      "showSizingReference": true,
+      "sizingReferenceShapes": []
+    },
+    "timeline": [
+      {
+        "detail": "Ready for a parametric CAD command.",
+        "id": "da7245d5-0cd1-4294-8dc7-e06065899ae3",
+        "label": "Project created"
+      }
+    ],
+    "units": "m"
+  },
+  "propulsion": {
+    "selectedBatteryId": "pack-8s-8ah-25c",
+    "selectedMotorId": "motor-4225-390kv",
+    "selectedPropellerId": "apc-20x10e",
+    "targetEnduranceMin": 20,
+    "targetThrustToWeight": 1.3
+  },
+  "schemaVersion": 1,
+  "sizing": {
+    "activeRole": "body",
+    "dimensions": [],
+    "drawMode": "spline",
+    "mission": {
+      "aspectRatio": 4,
+      "batteryEnergyDensityWhKg": 190,
+      "cruiseLiftCoefficient": 0.55,
+      "cruiseSpeedMS": 17,
+      "diskLoadingNpm2": 65,
+      "enduranceMin": 20,
+      "hoverTimeMin": 2,
+      "lengthRatio": 0.8,
+      "motorCount": 2,
+      "payloadKg": 1,
+      "reservePct": 10,
+      "rotorBladeCount": 4,
+      "tailVolumeTarget": 0.55,
+      "takeoffThrustToWeight": 1.4,
+      "turbineEngineId": "swiwin-sw60b",
+      "turbineFuelMin": 20
+    },
+    "selectedShapeId": "",
+    "shapes": [],
+    "showSizingReference": true,
+    "sizingReferenceShapes": []
+  },
+  "updatedAt": 1780049853290
+}

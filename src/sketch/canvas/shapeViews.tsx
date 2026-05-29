@@ -81,7 +81,6 @@ export function SketchShape({
   shape,
   showOriginMirror = true,
   selected,
-  selectedMotorId,
   view,
   joinSourcePoint,
   onSelect,
@@ -97,6 +96,7 @@ export function SketchShape({
   onSetSegmentMode,
   onInsertPoint,
   onDeletePoint,
+  onUnsnapPoint,
 }: {
   activeAirfoilStation: AirfoilStation;
   drawActive: boolean;
@@ -107,7 +107,6 @@ export function SketchShape({
   shape: SizeShape;
   showOriginMirror?: boolean;
   selected: boolean;
-  selectedMotorId: string;
   view: CanvasView;
   joinSourcePoint: JoinPointSelection | null;
   onSelect: () => void;
@@ -123,6 +122,7 @@ export function SketchShape({
   onSetSegmentMode: (index: number, side: "in" | "out", mode: "corner" | "spline") => void;
   onInsertPoint: (point: SizePoint) => void;
   onDeletePoint: (index: number) => void;
+  onUnsnapPoint: (index: number) => void;
 }) {
   const lastNodeTapRef = useRef<{ index: number; time: number; x: number; y: number } | null>(null);
   const armedInsertShapeRef = useRef<string | null>(null);
@@ -181,10 +181,6 @@ export function SketchShape({
       onSelectDimensionTarget(nearestSegmentTarget(shape, pointFromShapePointerEvent(event, view)));
       return;
     }
-    if (selectedMotorId && shape.id !== selectedMotorId) {
-      onJoinToSegment(pointFromShapePointerEvent(event, view));
-      return;
-    }
     if (!referenceRoles.includes(shape.role)) {
       if (!selected) onSelect();
       if (selected && shape.role === "part") {
@@ -212,9 +208,6 @@ export function SketchShape({
         if (event.shiftKey) return;
         if (suppressClickAfterDeleteRef.current) {
           suppressClickAfterDeleteRef.current = false;
-          return;
-        }
-        if (selectedMotorId && shape.id !== selectedMotorId && (event.target as Element).closest(".shape-hit, .shape-node")) {
           return;
         }
         if (!isTypedPart && !readOnly && selected && (event.target as Element).closest(".shape-hit")) {
@@ -291,7 +284,6 @@ export function SketchShape({
               onClick={(event) => {
                 event.stopPropagation();
                 if (event.shiftKey) return;
-                if (selectedMotorId && shape.id !== selectedMotorId) return;
                 if (!isTypedPart && !readOnly && event.detail >= 2) {
                   onDeletePoint(pointIndex);
                   return;
@@ -307,10 +299,6 @@ export function SketchShape({
                 }
                 if (dimensionToolActive) {
                   onSelectDimensionTarget({ kind: "node", shapeId: shape.id, pointIndex });
-                  return;
-                }
-                if (selectedMotorId && shape.id !== selectedMotorId) {
-                  onJoinToPoint(pointIndex);
                   return;
                 }
                 const now = Date.now();
@@ -338,6 +326,27 @@ export function SketchShape({
               }}
               r="4"
             />
+            {selected && point.snapAttachment ? (
+              <g
+                aria-label={`Unsnap ${shape.label} node ${pointIndex + 1}`}
+                className="shape-node-unsnap"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectPoint(pointIndex);
+                  onUnsnapPoint(pointIndex);
+                }}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+                role="button"
+                tabIndex={0}
+                transform={`translate(${canvasPoint.x + 10} ${canvasPoint.y - 10})`}
+              >
+                <circle r="7" />
+                <line x1="-3" y1="-3" x2="3" y2="3" />
+                <line x1="3" y1="-3" x2="-3" y2="3" />
+              </g>
+            ) : null}
           </g>
         );
       }) : null}
@@ -531,18 +540,32 @@ export function NodeCurveControls({
 
   return (
     <g className="curve-toggles">
-      {controls.map((control) => (
-        <path
-          className={`curve-toggle ${control.mode === "spline" ? "spline" : "corner"}`}
-          d={halfMoonPath(control.side)}
-          key={control.side}
-          onClick={(event) => {
-            event.stopPropagation();
-            onSetSegmentMode(index, control.side, control.mode === "spline" ? "corner" : "spline");
-          }}
-          transform={`translate(${control.x} ${control.y}) rotate(${control.angleDeg})`}
-        />
-      ))}
+      {controls.map((control) => {
+        const toggleSegmentMode = (event: { stopPropagation: () => void }) => {
+          event.stopPropagation();
+          onSetSegmentMode(index, control.side, control.mode === "spline" ? "corner" : "spline");
+        };
+        return (
+          <g key={control.side} transform={`translate(${control.x} ${control.y}) rotate(${control.angleDeg})`}>
+            <path
+              className="curve-toggle-hit"
+              d={halfMoonPath(control.side)}
+              onClick={toggleSegmentMode}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+            />
+            <path
+              className={`curve-toggle ${control.mode === "spline" ? "spline" : "corner"}`}
+              d={halfMoonPath(control.side)}
+              onClick={toggleSegmentMode}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+            />
+          </g>
+        );
+      })}
     </g>
   );
 }

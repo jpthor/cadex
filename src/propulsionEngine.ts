@@ -29,7 +29,12 @@ export const motorSamples: MotorSample[] = [
   { id: "motor-8017-170kv", name: "8017 170 Kv", kvRpmV: 170, continuousPowerW: 5200, maxCurrentA: 140, massG: 1280 },
   { id: "motor-9225-150kv", name: "9225 150 Kv", kvRpmV: 150, continuousPowerW: 7600, maxCurrentA: 170, massG: 1780 },
   { id: "motor-10020-120kv", name: "10020 120 Kv", kvRpmV: 120, continuousPowerW: 9800, maxCurrentA: 210, massG: 2400 },
+  { id: "motor-af120-100kv-10kw", name: "Axial flux 120 100 Kv", kvRpmV: 100, continuousPowerW: 10000, maxCurrentA: 180, massG: 3200 },
+  { id: "motor-af140-90kv-12kw", name: "Axial flux 140 90 Kv", kvRpmV: 90, continuousPowerW: 12000, maxCurrentA: 220, massG: 3900 },
+  { id: "motor-af160-75kv-15kw", name: "Axial flux 160 75 Kv", kvRpmV: 75, continuousPowerW: 15000, maxCurrentA: 260, massG: 4800 },
   { id: "motor-12030-90kv", name: "12030 90 Kv", kvRpmV: 90, continuousPowerW: 14500, maxCurrentA: 260, massG: 3900 },
+  { id: "motor-16035-70kv", name: "16035 70 Kv", kvRpmV: 70, continuousPowerW: 22000, maxCurrentA: 320, massG: 6200 },
+  { id: "motor-20040-55kv", name: "20040 55 Kv", kvRpmV: 55, continuousPowerW: 32000, maxCurrentA: 420, massG: 9200 },
 ];
 
 export type PropellerSample = {
@@ -64,6 +69,14 @@ export const propellerSamples: PropellerSample[] = [
   { id: "apc-28x14e", name: "APC 28x14E", diameterIn: 28, pitchIn: 14, staticRpm: 4200, staticThrustN: 218, staticPowerW: 4700, peakEfficiency: 0.76, peakEfficiencyRpm: 6200, peakEfficiencyMph: 82, peakPowerW: 9800, peakThrustN: 168, source: "scaled APC electric reference" },
   { id: "apc-30x15e", name: "APC 30x15E", diameterIn: 30, pitchIn: 15, staticRpm: 3800, staticThrustN: 270, staticPowerW: 6400, peakEfficiency: 0.75, peakEfficiencyRpm: 5600, peakEfficiencyMph: 79, peakPowerW: 12200, peakThrustN: 202, source: "scaled APC electric reference" },
   { id: "apc-32x16e", name: "APC 32x16E", diameterIn: 32, pitchIn: 16, staticRpm: 3400, staticThrustN: 330, staticPowerW: 8500, peakEfficiency: 0.74, peakEfficiencyRpm: 5100, peakEfficiencyMph: 77, peakPowerW: 15000, peakThrustN: 238, source: "scaled APC electric reference" },
+  { id: "uav-40x18", name: "UAV 40x18 CF", diameterIn: 40, pitchIn: 18, staticRpm: 2600, staticThrustN: 520, staticPowerW: 12500, peakEfficiency: 0.76, peakEfficiencyRpm: 3600, peakEfficiencyMph: 64, peakPowerW: 22000, peakThrustN: 410, source: "scaled large UAV carbon prop reference" },
+  { id: "uav-48x20", name: "UAV 48x20 CF", diameterIn: 48, pitchIn: 20, staticRpm: 2100, staticThrustN: 760, staticPowerW: 18500, peakEfficiency: 0.77, peakEfficiencyRpm: 3000, peakEfficiencyMph: 62, peakPowerW: 31000, peakThrustN: 590, source: "scaled large UAV carbon prop reference" },
+  { id: "uav-52x22", name: "UAV 52x22 CF", diameterIn: 52, pitchIn: 22, staticRpm: 1900, staticThrustN: 910, staticPowerW: 23500, peakEfficiency: 0.77, peakEfficiencyRpm: 2700, peakEfficiencyMph: 62, peakPowerW: 38000, peakThrustN: 700, source: "scaled large UAV carbon prop reference" },
+  { id: "uav-56x24", name: "UAV 56x24 CF", diameterIn: 56, pitchIn: 24, staticRpm: 1700, staticThrustN: 1080, staticPowerW: 30000, peakEfficiency: 0.78, peakEfficiencyRpm: 2400, peakEfficiencyMph: 61, peakPowerW: 47000, peakThrustN: 820, source: "scaled large UAV carbon prop reference" },
+  { id: "uav-56x30", name: "UAV 56x30 CF", diameterIn: 56, pitchIn: 30, staticRpm: 1900, staticThrustN: 1120, staticPowerW: 31500, peakEfficiency: 0.79, peakEfficiencyRpm: 2700, peakEfficiencyMph: 74, peakPowerW: 52000, peakThrustN: 840, source: "Maytech 56x30 foldable prop reference, scaled performance" },
+  { id: "fw-48x48", name: "Fixed-wing 48x48 CF", diameterIn: 48, pitchIn: 48, staticRpm: 3400, staticThrustN: 720, staticPowerW: 26000, peakEfficiency: 0.82, peakEfficiencyRpm: 3600, peakEfficiencyMph: 150, peakPowerW: 36000, peakThrustN: 560, source: "Sensenich/Ultra-Prop fixed-wing UAV high-speed range, estimated" },
+  { id: "fw-52x56", name: "Fixed-wing 52x56 CF", diameterIn: 52, pitchIn: 56, staticRpm: 3200, staticThrustN: 820, staticPowerW: 28500, peakEfficiency: 0.82, peakEfficiencyRpm: 3400, peakEfficiencyMph: 165, peakPowerW: 42000, peakThrustN: 620, source: "Sensenich/Ultra-Prop fixed-wing UAV high-speed range, estimated" },
+  { id: "fw-56x60", name: "Fixed-wing 56x60 CF", diameterIn: 56, pitchIn: 60, staticRpm: 3000, staticThrustN: 920, staticPowerW: 30000, peakEfficiency: 0.81, peakEfficiencyRpm: 3200, peakEfficiencyMph: 175, peakPowerW: 48000, peakThrustN: 700, source: "Sensenich/Ultra-Prop fixed-wing UAV high-speed range, estimated" },
 ];
 
 export type BatteryInputs = {
@@ -100,6 +113,11 @@ export const batterySamples: BatterySample[] = [
   { id: "pack-14s-24ah-15c", name: "14S 24Ah 15C", cells: 14, capacityAh: 24, cRating: 15, massKg: 7.4 },
   { id: "pack-16s-20ah-20c", name: "16S 20Ah 20C", cells: 16, capacityAh: 20, cRating: 20, massKg: 7.1 },
   { id: "pack-16s-30ah-12c", name: "16S 30Ah 12C", cells: 16, capacityAh: 30, cRating: 12, massKg: 10.2 },
+  { id: "pack-18s-40ah-12c", name: "18S 40Ah 12C", cells: 18, capacityAh: 40, cRating: 12, massKg: 13.8 },
+  { id: "pack-20s-45ah-10c", name: "20S 45Ah 10C", cells: 20, capacityAh: 45, cRating: 10, massKg: 17.5 },
+  { id: "pack-24s-50ah-10c", name: "24S 50Ah 10C", cells: 24, capacityAh: 50, cRating: 10, massKg: 23.4 },
+  { id: "pack-24s-65ah-8c", name: "24S 65Ah 8C", cells: 24, capacityAh: 65, cRating: 8, massKg: 30.0 },
+  { id: "pack-24s-80ah-6c", name: "24S 80Ah 6C", cells: 24, capacityAh: 80, cRating: 6, massKg: 37.5 },
 ];
 
 export type RotorDefinition = {

@@ -48,6 +48,7 @@ struct ProjectLoadRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProjectSaveRequest {
+    expected_updated_at: Option<u128>,
     id: String,
     state: Value,
 }
@@ -185,7 +186,9 @@ fn create_aircraft_project(body: &str) -> Result<Value, String> {
     let state = stamp_project_state(request.state, &id, name);
     let path = aircraft_project_path(&id)?;
     write_project_file(&path, &state)?;
+    append_project_journal(&path, &state, "create")?;
     git_add(&path);
+    git_add(&project_journal_path(&path));
     Ok(json!({ "project": project_entry_from_state(&state, &path), "state": state }))
 }
 
@@ -204,16 +207,28 @@ fn save_aircraft_project(body: &str) -> Result<Value, String> {
     let current = fs::read_to_string(&path)
         .ok()
         .and_then(|text| serde_json::from_str::<Value>(&text).ok());
-    let name = request
-        .state
-        .get("name")
+    if let Some(expected_updated_at) = request.expected_updated_at {
+        let current_updated_at = current
+            .as_ref()
+            .and_then(|value| value.get("updatedAt"))
+            .and_then(|value| value.as_u64())
+            .map(u128::from);
+        if current_updated_at.is_some() && current_updated_at != Some(expected_updated_at) {
+            return Err("stale project copy refused; reload the latest aircraft before saving".to_string());
+        }
+    }
+    let name = current
+        .as_ref()
+        .and_then(|value| value.get("name"))
         .and_then(|value| value.as_str())
-        .or_else(|| current.as_ref().and_then(|value| value.get("name")).and_then(|value| value.as_str()))
+        .or_else(|| request.state.get("name").and_then(|value| value.as_str()))
         .unwrap_or("Untitled aircraft")
         .to_string();
     let state = stamp_project_state(request.state, &id, &name);
     write_project_file(&path, &state)?;
+    append_project_journal(&path, &state, "save")?;
     git_add(&path);
+    git_add(&project_journal_path(&path));
     Ok(json!({ "project": project_entry_from_state(&state, &path), "state": state }))
 }
 
@@ -264,6 +279,32 @@ fn write_project_file(path: &Path, state: &Value) -> Result<(), String> {
     }
     let text = serde_json::to_string_pretty(state).map_err(|error| error.to_string())?;
     fs::write(path, format!("{text}\n")).map_err(|error| error.to_string())
+}
+
+fn append_project_journal(path: &Path, state: &Value, event: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let journal_path = project_journal_path(path);
+    let entry = json!({
+        "event": event,
+        "id": state.get("id").and_then(|value| value.as_str()).unwrap_or("aircraft"),
+        "name": state.get("name").and_then(|value| value.as_str()).unwrap_or("Untitled aircraft"),
+        "savedAt": chrono_like_timestamp_ms(),
+        "state": state,
+    });
+    let line = serde_json::to_string(&entry).map_err(|error| error.to_string())?;
+    use std::io::Write;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&journal_path)
+        .map_err(|error| error.to_string())?;
+    writeln!(file, "{line}").map_err(|error| error.to_string())
+}
+
+fn project_journal_path(path: &Path) -> PathBuf {
+    path.with_file_name("aircraft.jsonl")
 }
 
 fn aircraft_root() -> Result<PathBuf, String> {

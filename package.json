@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
-    "test": "npm run validate:sizing && npm run validate:propulsion && npm run validate:sketch",
+    "test": "npm run validate:sizing && npm run validate:propulsion && npm run validate:jet && npm run validate:sketch",
     "validate:sizing": "node --experimental-strip-types scripts/validate-sizing-engine.mjs",
     "validate:propulsion": "node --experimental-strip-types scripts/validate-propulsion-engine.mjs",
+    "validate:jet": "node --experimental-strip-types scripts/validate-jet-engine.mjs",
     "validate:sketch": "node --experimental-strip-types scripts/validate-sketch-projection.mjs",
     "export:openvsp": "node scripts/export-openvsp-faithful.mjs",
     "export:openvsp:analysis": "node scripts/export-openvsp-analysis.mjs",

@@ -1,4 +1,4 @@
-import { Ruler, Sparkles } from "lucide-react";
+import { Ruler } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   batteryMassEstimate,
@@ -30,7 +30,7 @@ import type {
   SizingProject,
 } from "../sizing";
 import { SketchCanvas } from "./canvas/SketchCanvas";
-import { drawablePartTypes, referenceRoles } from "./constants";
+import { defaultAirfoilForLiftingSurface, drawablePartTypes, referenceRoles } from "./constants";
 import {
   axisAlignedPoint,
   cleanPartDraftPoint,
@@ -53,10 +53,12 @@ import {
   projectPointToShapeSegment,
   referenceEndpointPoint,
   resolveAttachedShapes,
+  setPointCurveMode,
   setSegmentMode,
   setTangentVector,
   shapeTouchesMirrorPlane,
   updateShapePointForJoin,
+  verticalReferenceX,
 } from "./geometry";
 import { AircraftPanel } from "./panels/aircraftPanel";
 import { ShapeEditor, ShapeSelector } from "./panels/shapeEditor";
@@ -97,13 +99,11 @@ export function SketchWorkspace({
   const computedSizingDraft = useMemo(() => computeSizingDraft(sizing), [sizing]);
   const mirrorPlanes = useMemo(() => sizing.shapes.filter((shape) => shape.role === "mirrorPlane" && shape.points.length >= 2), [sizing.shapes]);
   const sizingReferenceShapes = sizing.sizingReferenceShapes ?? [];
-  const suggestedShapeSource = sizingReferenceShapes.length ? sizingReferenceShapes : computedSizingDraft.shapes;
-  const selectedSuggestedShapeSource = sizingReferenceShapes.length
-    ? [...sizingReferenceShapes, ...computedSizingDraft.shapes]
-    : computedSizingDraft.shapes;
+  const suggestedShapeSource = computedSizingDraft.shapes;
+  const selectedSuggestedShapeSource = computedSizingDraft.shapes;
   const selectedTarget = selected ? selectedSuggestedTarget(selected) : undefined;
   const matchedSuggestedRows = selected
-    ? suggestedRowsForSelectedShape(selected, selectedSuggestedShapeSource, computedSizingDraft.rotorDiameterM)
+    ? suggestedRowsForSelectedShape(selected, selectedSuggestedShapeSource, computedSizingDraft)
     : [];
   const selectedSuggestedRows = matchedSuggestedRows.length
     ? matchedSuggestedRows
@@ -325,13 +325,15 @@ export function SketchWorkspace({
     const lockedPoints = points.length >= 2 ? [points[0], axisAlignedPoint(points[0], points[1])] : points;
     const count = sizing.shapes.filter((shape) => shape.role === activeRole).length + 1;
     const sketchViewMode = referenceRoles.includes(activeRole) && viewMode !== "top" ? viewMode : undefined;
+    const inheritedStation = inheritedStationPatchFromSnaps(lockedPoints, viewMode);
     const shape: SizeShape = {
       id: `${activeRole}-${crypto.randomUUID()}`,
       role: activeRole,
       label: `${roleLabels[activeRole]} ${count}`,
       drawMode: "line",
       sketchViewMode,
-      sideViewStationId: sketchViewMode === "side" ? implicitMirrorShapeId : undefined,
+      sideViewStationId: sketchViewMode === "side" ? inheritedStation.sideViewStationId ?? implicitMirrorShapeId : undefined,
+      zStationId: viewMode === "top" ? inheritedStation.zStationId : undefined,
       points: lockedPoints.map((point) => ({
         ...point,
         xM: viewMode === "side" ? point.xM : Math.abs(point.xM),
@@ -364,15 +366,18 @@ export function SketchWorkspace({
         (activeRole !== "liftingSurface" || (shape.liftingSurfaceKind ?? "wing") === newLiftingSurfaceKind),
     ).length + 1;
     const labelBase = activeRole === "liftingSurface" ? liftingSurfaceKindLabels[newLiftingSurfaceKind] : roleLabels[activeRole];
+    const defaultAirfoil = defaultAirfoilForLiftingSurface(newLiftingSurfaceKind);
+    const shapePoints = viewMode === "side" ? draftPoints : closeIfNearCenterline(draftPoints);
+    const inheritedStation = inheritedStationPatchFromSnaps(shapePoints, viewMode);
     const shape: SizeShape = {
       id: `${activeRole}-${crypto.randomUUID()}`,
       role: activeRole,
       label: `${labelBase} ${count}`,
       drawMode: "spline",
-      points: viewMode === "side" ? draftPoints : closeIfNearCenterline(draftPoints),
-      airfoil: activeRole === "liftingSurface" ? "NACA 0012" : undefined,
+      points: shapePoints,
+      airfoil: activeRole === "liftingSurface" ? defaultAirfoil : undefined,
       liftingSurfaceKind: activeRole === "liftingSurface" ? newLiftingSurfaceKind : undefined,
-      airfoilStations: activeRole === "liftingSurface" ? { root: "NACA 0012", tip: "NACA 0012" } : undefined,
+      airfoilStations: activeRole === "liftingSurface" ? { root: defaultAirfoil, tip: defaultAirfoil } : undefined,
       incidenceDeg: activeRole === "liftingSurface" ? 0 : undefined,
       incidenceStationsDeg: activeRole === "liftingSurface" ? { root: 0, tip: 0 } : undefined,
       massKg: activeRole === "body" ? 0.5 : activeRole === "liftingSurface" ? 0.15 : 0,
@@ -381,7 +386,8 @@ export function SketchWorkspace({
       partType: undefined,
       rotorBladeCount: undefined,
       sketchViewMode: viewMode !== "top" ? viewMode : undefined,
-      sideViewStationId: viewMode === "side" ? implicitMirrorShapeId : undefined,
+      sideViewStationId: viewMode === "side" ? inheritedStation.sideViewStationId ?? implicitMirrorShapeId : undefined,
+      zStationId: viewMode === "top" ? inheritedStation.zStationId : undefined,
     };
     shape.cadGeometry = cadGeometryForShape(shape, [...sizing.shapes, shape]);
     setDraftPoints([]);
@@ -398,17 +404,19 @@ export function SketchWorkspace({
       return;
     }
     const count = sizing.shapes.filter((shape) => shape.role === "part" && (shape.partType ?? "payload") === activePartType).length + 1;
+    const inheritedStation = inheritedStationPatchFromSnaps(points, viewMode);
     const shape: SizeShape = {
       id: `part-${crypto.randomUUID()}`,
       role: "part",
-      label: `${partTypeLabels[activePartType]} ${count}`,
+      label: defaultPartLabel(activePartType, count),
       drawMode: "line",
       points: partPoints,
-      massKg: 0,
+      massKg: activePartType === "payload" ? Math.max(sizing.mission.payloadKg, 0) : 0,
       partType: activePartType,
       rotorBladeCount: activePartType === "rotor" ? sizing.mission.rotorBladeCount : undefined,
       sketchViewMode: viewMode !== "top" ? viewMode : undefined,
-      sideViewStationId: viewMode === "side" ? implicitMirrorShapeId : undefined,
+      sideViewStationId: viewMode === "side" ? inheritedStation.sideViewStationId ?? implicitMirrorShapeId : undefined,
+      zStationId: viewMode === "top" ? inheritedStation.zStationId : undefined,
     };
     shape.cadGeometry = cadGeometryForShape(shape, [...sizing.shapes, shape]);
     setDraftPoints([]);
@@ -416,6 +424,36 @@ export function SketchWorkspace({
     setDraftViewMode("top");
     setDrawActive(false);
     updateShapes([...sizing.shapes, shape], shape.id);
+  }
+
+  function defaultPartLabel(partType: PartType, count: number) {
+    const base = partTypeLabels[partType];
+    return count <= 1 ? base : `${base} ${count}`;
+  }
+
+  function inheritedStationPatchFromSnaps(points: SizePoint[], viewMode: CanvasViewMode): Pick<SizeShape, "sideViewStationId" | "zStationId"> {
+    for (const point of points) {
+      const source = snappedReferenceShape(point);
+      if (!source) continue;
+      if (viewMode === "top") {
+        if (source.sketchViewMode === "side" && verticalReferenceX(source) !== undefined) return { zStationId: source.id };
+        if (source.zStationId) return { zStationId: source.zStationId };
+      }
+      if (viewMode === "side") {
+        if ((source.sketchViewMode ?? "top") === "top" && verticalReferenceX(source) !== undefined) {
+          return { sideViewStationId: source.id };
+        }
+        if (source.sideViewStationId) return { sideViewStationId: source.sideViewStationId };
+      }
+    }
+    return {};
+  }
+
+  function snappedReferenceShape(point: SizePoint) {
+    const sourceId = point.snapAttachment?.shapeId;
+    if (!sourceId || isImplicitMirrorShapeId(sourceId)) return undefined;
+    const source = sizing.shapes.find((shape) => shape.id === sourceId);
+    return source && referenceRoles.includes(source.role) ? source : undefined;
   }
 
   function cancelDraft() {
@@ -427,11 +465,7 @@ export function SketchWorkspace({
 
   function toggleDraftPoint(index: number) {
     setDraftPoints((points) =>
-      points.map((point, pointIndex) =>
-        pointIndex === index
-          ? { ...point, curveMode: point.curveMode === "corner" ? ("spline" as const) : ("corner" as const) }
-          : point,
-      ),
+      setPointCurveMode(points, index, points[index]?.curveMode === "corner" ? "spline" : "corner"),
     );
   }
 
@@ -466,6 +500,25 @@ export function SketchWorkspace({
       ),
       shapeId,
     );
+  }
+
+  function unsnapShapePoint(shapeId: string, index: number) {
+    const target = sizing.shapes.find((shape) => shape.id === shapeId);
+    if (!target?.points[index]?.snapAttachment) return;
+    updateShapes(
+      sizing.shapes.map((shape) =>
+        shape.id === shapeId
+          ? {
+              ...shape,
+              points: shape.points.map((point, pointIndex) =>
+                pointIndex === index ? { ...point, snapAttachment: undefined } : point,
+              ),
+            }
+          : shape,
+      ),
+      shapeId,
+    );
+    setJoinSourcePoint({ shapeId, pointIndex: index });
   }
 
   function moveDraftPoint(index: number, point: SizePoint) {
@@ -707,9 +760,11 @@ export function SketchWorkspace({
           pendingDimensionValue={pendingDimensionValue}
           activePartType={activePartType}
           initialCanvasView={sizing.sketchCanvasView}
+          initialScaleUnit={sizing.sketchScaleUnit}
           showSizingReference={showSizingReference}
           sizingReferenceShapes={sizingReferenceShapes}
           onCanvasViewChange={(sketchCanvasView) => update({ sketchCanvasView }, false)}
+          onScaleUnitChange={(sketchScaleUnit) => update({ sketchScaleUnit }, false)}
           onToggleSizingReference={toggleSizingReference}
           onActiveRoleChange={(activeRole) => update({ activeRole }, false)}
           activeLiftingSurfaceKind={activeLiftingSurfaceKind}
@@ -754,6 +809,7 @@ export function SketchWorkspace({
           onToggleDraftPoint={toggleDraftPoint}
           onInsertShapePoint={insertShapePoint}
           onDeleteShapePoint={deleteShapePoint}
+          onUnsnapShapePoint={unsnapShapePoint}
           selectedShapeId={sizing.selectedShapeId}
           joinSourcePoint={joinSourcePoint}
           shapes={sizing.shapes}
@@ -771,7 +827,6 @@ export function SketchWorkspace({
             Shape
           </button>
           <button className={rightPaneTab === "aircraft" ? "active" : ""} onClick={() => setRightPaneTab("aircraft")}>
-            <Sparkles size={15} />
             Aircraft
           </button>
         </div>
@@ -780,7 +835,7 @@ export function SketchWorkspace({
         ) : rightPaneTab === "suggested" ? (
           <SuggestedDimensionsPanel
             currentShapes={sizing.shapes}
-            sizingRotorDiameterM={computedSizingDraft.rotorDiameterM}
+            computedSizingDraft={computedSizingDraft}
             suggestedShapes={suggestedShapeSource}
           />
         ) : (
@@ -812,12 +867,12 @@ export function SketchWorkspace({
 }
 
 function SuggestedDimensionsPanel({
+  computedSizingDraft,
   currentShapes,
-  sizingRotorDiameterM,
   suggestedShapes,
 }: {
+  computedSizingDraft: ReturnType<typeof computeSizingDraft>;
   currentShapes: SizeShape[];
-  sizingRotorDiameterM: number;
   suggestedShapes: SizeShape[];
 }) {
   const sourceShapes = suggestedShapes.length ? suggestedShapes : currentShapes;
@@ -837,11 +892,10 @@ function SuggestedDimensionsPanel({
   const otherBodies = bodies.filter((shape) => shape.id.includes("tail-boom"));
   const wings = lifting.filter((shape) => (shape.liftingSurfaceKind ?? "wing") === "wing");
   const otherLifting = lifting.filter((shape) => (shape.liftingSurfaceKind ?? "wing") !== "wing");
-  const totalLengthM = totalShapeLengthM(usefulShapes);
-  const wingRootDepthM = wingRootDepthFromNoseM(usefulShapes);
   const aircraftRows = [
-    { label: "Total length", value: formatDimension(totalLengthM) },
-    ...(wingRootDepthM === null ? [] : [{ label: "Wing root depth", value: `${formatDimension(wingRootDepthM)} from nose` }]),
+    { label: "Total length", value: formatDimension(computedSizingDraft.totalLengthM) },
+    { label: "Sized battery mass", value: `${computedSizingDraft.batteryMassKg.toFixed(2)} kg` },
+    { label: "Wing root depth", value: `${formatDimension(computedSizingDraft.wingRootDepthM)} from nose` },
   ];
   return (
     <div className="aircraft-panel suggested-dimensions-panel">
@@ -851,16 +905,16 @@ function SuggestedDimensionsPanel({
         <SuggestedShapeCard key={shape.id} title={suggestedShapeTitle(shape)} rows={bodyDimensionRows(shape)} />
       ))}
       {wings.map((shape) => (
-        <SuggestedShapeCard key={shape.id} title={suggestedShapeTitle(shape)} rows={liftingDimensionRows(shape, sourceShapes)} />
+        <SuggestedShapeCard key={shape.id} title={suggestedShapeTitle(shape)} rows={liftingDimensionRows(shape, sourceShapes, computedSizingDraft)} />
       ))}
       {parts.map((shape) => (
-        <SuggestedShapeCard key={shape.id} title={suggestedShapeTitle(shape)} rows={partDimensionRows(shape, sourceShapes, sizingRotorDiameterM)} />
+        <SuggestedShapeCard key={shape.id} title={suggestedShapeTitle(shape)} rows={partDimensionRows(shape, sourceShapes, computedSizingDraft)} />
       ))}
       {otherBodies.map((shape) => (
         <SuggestedShapeCard key={shape.id} title={suggestedShapeTitle(shape)} rows={bodyDimensionRows(shape)} />
       ))}
       {otherLifting.map((shape) => (
-        <SuggestedShapeCard key={shape.id} title={suggestedShapeTitle(shape)} rows={liftingDimensionRows(shape, sourceShapes)} />
+        <SuggestedShapeCard key={shape.id} title={suggestedShapeTitle(shape)} rows={liftingDimensionRows(shape, sourceShapes, computedSizingDraft)} />
       ))}
     </div>
   );
@@ -875,22 +929,6 @@ function SuggestedShapeCard({ rows, title }: { rows: Array<{ label: string; valu
       ))}
     </section>
   );
-}
-
-function totalShapeLengthM(shapes: SizeShape[]) {
-  const bounds = shapes.map(shapeBounds);
-  const minY = Math.min(...bounds.map((entry) => entry.minY));
-  const maxY = Math.max(...bounds.map((entry) => entry.maxY));
-  return Math.max(maxY - minY, 0);
-}
-
-function wingRootDepthFromNoseM(shapes: SizeShape[]) {
-  const wing = shapes.find((shape) => shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing");
-  if (!wing || !shapes.length) return null;
-  const noseY = Math.max(...shapes.map((shape) => shapeBounds(shape).maxY));
-  const wingBounds = shapeBounds(wing);
-  const wingRootCenterY = (wingBounds.minY + wingBounds.maxY) / 2;
-  return Math.max(noseY - wingRootCenterY, 0);
 }
 
 function suggestedShapeTitle(shape: SizeShape) {
@@ -912,7 +950,7 @@ function bodyDimensionRows(shape: SizeShape) {
   ];
 }
 
-function liftingDimensionRows(shape: SizeShape, shapes: SizeShape[]) {
+function liftingDimensionRows(shape: SizeShape, shapes: SizeShape[], computedSizingDraft?: ReturnType<typeof computeSizingDraft>) {
   const stats = liftingSurfaceStats(shape, shapes);
   const kind = shape.liftingSurfaceKind ?? "wing";
   const totalAreaLabel = kind === "tailplane" ? "Total tailplane area" : kind === "wing" ? "Total wing area" : kind === "lex" ? "Total LEX area" : "Total area";
@@ -932,8 +970,8 @@ function liftingDimensionRows(shape: SizeShape, shapes: SizeShape[]) {
     return [
       { label: "Height", value: formatDimension(bounds.maxX - bounds.minX) },
       { label: "Chord", value: formatDimension(bounds.maxY - bounds.minY) },
-      { label: "Area / fin", value: `${Math.max(areaPerFinM2, 0).toFixed(3)} m2` },
-      { label: "Total fin area", value: `${Math.max(stats.areaM2, 0).toFixed(3)} m2` },
+      { label: "Area (one fin)", value: `${Math.max(areaPerFinM2, 0).toFixed(3)} m2` },
+      { label: "Total area (2 fins)", value: `${Math.max(stats.areaM2, 0).toFixed(3)} m2` },
       { label: "Airfoil", value: shape.airfoil ?? "NACA 0012" },
     ];
   }
@@ -941,10 +979,10 @@ function liftingDimensionRows(shape: SizeShape, shapes: SizeShape[]) {
     const spanPerTailplaneM = Math.max(bounds.maxX - bounds.minX, 0.05);
     const areaPerTailplaneM2 = mirroredPair ? stats.areaM2 / 2 : stats.areaM2;
     return [
-      { label: "Span / tailplane", value: formatDimension(spanPerTailplaneM) },
-      { label: "Mean chord / tailplane", value: formatDimension(areaPerTailplaneM2 / Math.max(spanPerTailplaneM, 0.01)) },
-      { label: totalAreaLabel, value: `${stats.areaM2.toFixed(3)} m2` },
-      ...(mirroredPair ? [{ label: "Area / tailplane", value: `${areaPerTailplaneM2.toFixed(3)} m2` }] : []),
+      { label: "Span (one tailplane)", value: formatDimension(spanPerTailplaneM) },
+      { label: "Mean chord (one tailplane)", value: formatDimension(areaPerTailplaneM2 / Math.max(spanPerTailplaneM, 0.01)) },
+      { label: "Area (one tailplane)", value: `${areaPerTailplaneM2.toFixed(3)} m2` },
+      { label: "Total area (2 tailplanes)", value: `${stats.areaM2.toFixed(3)} m2` },
       { label: "Airfoil", value: shape.airfoil ?? "NACA 0012" },
     ];
   }
@@ -959,13 +997,14 @@ function liftingDimensionRows(shape: SizeShape, shapes: SizeShape[]) {
   return [
     { label: "Span", value: formatDimension(stats.spanM) },
     { label: "Half-span", value: formatDimension(stats.spanM / 2) },
+    ...(computedSizingDraft ? [{ label: "Root depth", value: `${formatDimension(computedSizingDraft.wingRootDepthM)} from nose` }] : []),
     { label: "Mean chord", value: formatDimension(stats.chordM) },
     { label: totalAreaLabel, value: `${stats.areaM2.toFixed(3)} m2` },
     { label: "Airfoil", value: shape.airfoil ?? "NACA 0012" },
   ];
 }
 
-function partDimensionRows(shape: SizeShape, shapes: SizeShape[], sizingRotorDiameterM?: number) {
+function partDimensionRows(shape: SizeShape, shapes: SizeShape[], computedSizingDraft?: ReturnType<typeof computeSizingDraft>) {
   const bounds = shapeBounds(shape);
   const baseRows = [
     { label: "Length", value: formatDimension(bounds.maxY - bounds.minY) },
@@ -981,7 +1020,7 @@ function partDimensionRows(shape: SizeShape, shapes: SizeShape[], sizingRotorDia
     ];
   }
   if (shape.partType === "rotor") {
-    const diameterM = shape.id.startsWith("sizing-ref-") && sizingRotorDiameterM ? sizingRotorDiameterM : rotorDiameterEstimate(shape, shapes);
+    const diameterM = shape.id.startsWith("sizing-ref-") && computedSizingDraft?.rotorDiameterM ? computedSizingDraft.rotorDiameterM : rotorDiameterEstimate(shape, shapes);
     return [
       { label: "Diameter", value: formatDimension(diameterM) },
       { label: "Blades", value: `${Math.max(1, Math.round(shape.rotorBladeCount ?? 2))}` },
@@ -1005,10 +1044,11 @@ function batteryDimensionRowsFromDraft(draft: ReturnType<typeof computeSizingDra
     { label: "Width", value: formatDimension(draft.batteryEnvelope.widthM) },
     { label: "Height", value: formatDimension(draft.batteryEnvelope.heightM) },
     { label: "Mass", value: `${draft.batteryMassKg.toFixed(3)} kg` },
+    { label: "Mission energy", value: `${draft.batteryEnergyWh.toFixed(0)} Wh` },
   ];
 }
 
-function suggestedRowsForSelectedShape(selected: SizeShape, suggestedShapes: SizeShape[], sizingRotorDiameterM: number) {
+function suggestedRowsForSelectedShape(selected: SizeShape, suggestedShapes: SizeShape[], computedSizingDraft: ReturnType<typeof computeSizingDraft>) {
   const target = selectedSuggestedTarget(selected);
   if (!target) return [];
   const suggested = suggestedShapes.find((shape) => {
@@ -1018,8 +1058,8 @@ function suggestedRowsForSelectedShape(selected: SizeShape, suggestedShapes: Siz
     return shape.role === "part" && (shape.partType ?? "payload") === target.partType;
   });
   if (!suggested) return [];
-  if (suggested.role === "liftingSurface") return liftingDimensionRows(suggested, suggestedShapes);
-  if (suggested.role === "part") return partDimensionRows(suggested, suggestedShapes, sizingRotorDiameterM);
+  if (suggested.role === "liftingSurface") return liftingDimensionRows(suggested, suggestedShapes, computedSizingDraft);
+  if (suggested.role === "part") return partDimensionRows(suggested, suggestedShapes, computedSizingDraft);
   return [];
 }
 

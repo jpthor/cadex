@@ -1,10 +1,9 @@
-import { Gauge } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { Battery, Plane, Ruler, Scale, Settings2, Wind, Zap } from "lucide-react";
+import { useMemo } from "react";
 import type { ReactNode } from "react";
 import { auditedSizingAssumptions, computeSizingAnalysis } from "../../sizing/auditedSizingEngine";
 import { fixedAircraftFinCount, fixedAircraftMotorCount, fixedAircraftTailplaneCount, metersPerSecondPerKnot } from "../../app/constants";
 import type { SizingProject } from "../../sizing";
-import { defaultTurbineCount, turbineEngineOptions } from "../../sketch/constants";
 import { Metric } from "../ui/Metric";
 import { PropulsionNumberField } from "../propulsion/fields";
 
@@ -20,112 +19,138 @@ export function SizingDashboard({
 }) {
   const computedDraft = useMemo(() => computeSizingDraft(project), [project]);
   const hardwarePick = computedDraft?.hardware ?? null;
+  const targetLengthM = computedDraft.totalWidthM * clampNumber(project.mission.lengthRatio, 0.45, 2);
+  const actualLengthRatio = computedDraft.totalLengthM / Math.max(computedDraft.totalWidthM, 0.01);
+  const lengthConstraint = computedDraft.totalLengthM > targetLengthM + 0.01 ? "Minimum tail arm" : "Target ratio";
   function updateMission(patch: Partial<SizingProject["mission"]>) {
     const nextProject = { ...project, mission: { ...project.mission, ...patch } };
     onProjectChange(nextProject);
   }
-  const updateEnginePayload = useCallback((payloadKg: number) => {
-    if (project.mission.payloadKg === payloadKg) return;
-    updateMission({ payloadKg });
-  }, [project]);
   return (
     <main className="sizing-dashboard">
-      <SizingJetComputePanel onPayloadChange={updateEnginePayload} />
       <section className="sizing-dashboard-panel sizing-dashboard-requirements">
-        <h2>Twin tailsitter requirements</h2>
+        <PanelTitle icon={<Settings2 size={16} />} title="Mission Inputs" />
         <p className="dashboard-muted">Electric VTOL, 2 rotors, 2 motors, dual empennage surfaces in rotor wake.</p>
-        <PropulsionNumberField
-          label="Payload"
-          suffix="kg"
-          step={0.1}
-          value={project.mission.payloadKg}
-          onChange={(payloadKg) => updateMission({ payloadKg: Math.max(0, payloadKg) })}
-        />
-        <PropulsionNumberField
-          label="Takeoff T/W"
-          step={0.1}
-          value={project.mission.takeoffThrustToWeight}
-          onChange={(takeoffThrustToWeight) => updateMission({ takeoffThrustToWeight: Math.max(0.1, takeoffThrustToWeight) })}
-        />
-        <PropulsionNumberField
-          label="Cruise speed"
-          suffix="kt"
-          step={1}
-          value={roundInputValue(msToKnots(project.mission.cruiseSpeedMS))}
-          onChange={(cruiseSpeedKt) => updateMission({ cruiseSpeedMS: Math.max(1, knotsToMS(cruiseSpeedKt)) })}
-        />
-        <PropulsionNumberField
-          label="Aspect ratio"
-          step={0.1}
-          value={project.mission.aspectRatio}
-          onChange={(aspectRatio) => updateMission({ aspectRatio: Math.min(12, Math.max(2.2, aspectRatio)) })}
-        />
-        <PropulsionNumberField
-          label="Length ratio"
-          step={0.05}
-          value={project.mission.lengthRatio}
-          onChange={(lengthRatio) => updateMission({ lengthRatio: Math.min(2, Math.max(0.45, lengthRatio)) })}
-        />
-        <PropulsionNumberField
-          label="Endurance"
-          suffix="min"
-          step={1}
-          value={project.mission.enduranceMin}
-          onChange={(enduranceMin) => updateMission({ enduranceMin: Math.max(1, enduranceMin) })}
-        />
-        <PropulsionNumberField
-          label="Hover allowance"
-          suffix="min"
-          step={0.5}
-          value={project.mission.hoverTimeMin}
-          onChange={(hoverTimeMin) => updateMission({ hoverTimeMin: Math.max(0, hoverTimeMin) })}
-        />
-        <PropulsionNumberField
-          label="Reserve"
-          suffix="%"
-          step={5}
-          value={project.mission.reservePct}
-          onChange={(reservePct) => updateMission({ reservePct: Math.max(0, reservePct) })}
-        />
-        <label className="propulsion-field">
-          <span>Rotor blades</span>
-          <div>
-            <select
-              value={project.mission.rotorBladeCount}
-              onChange={(event) => updateMission({ rotorBladeCount: normalizeSizingRotorBladeCount(Number(event.target.value)) })}
-            >
-              <option value={2}>2 blades</option>
-              <option value={3}>3 blades</option>
-              <option value={4}>4 blades</option>
-            </select>
-          </div>
-        </label>
+        <div className="sizing-input-grid">
+          <PropulsionNumberField
+            label="Payload"
+            suffix="kg"
+            step={0.1}
+            value={project.mission.payloadKg}
+            onChange={(payloadKg) => updateMission({ payloadKg: Math.max(0, payloadKg) })}
+          />
+          <PropulsionNumberField
+            label="Takeoff T/W"
+            step={0.1}
+            value={project.mission.takeoffThrustToWeight}
+            onChange={(takeoffThrustToWeight) => updateMission({ takeoffThrustToWeight: Math.max(0.1, takeoffThrustToWeight) })}
+          />
+          <PropulsionNumberField
+            label="Cruise speed"
+            suffix="kt"
+            step={1}
+            value={roundInputValue(msToKnots(project.mission.cruiseSpeedMS))}
+            onChange={(cruiseSpeedKt) => updateMission({ cruiseSpeedMS: Math.max(1, knotsToMS(cruiseSpeedKt)) })}
+          />
+          <PropulsionNumberField
+            label="Target cruise CL"
+            step={0.05}
+            value={project.mission.cruiseLiftCoefficient}
+            onChange={(cruiseLiftCoefficient) => updateMission({ cruiseLiftCoefficient: clampNumber(cruiseLiftCoefficient, 0.25, 1.4) })}
+          />
+          <PropulsionNumberField
+            label="Aspect ratio"
+            step={0.1}
+            value={project.mission.aspectRatio}
+            onChange={(aspectRatio) => updateMission({ aspectRatio: Math.min(12, Math.max(2.2, aspectRatio)) })}
+          />
+          <PropulsionNumberField
+            label="Length ratio"
+            step={0.05}
+            value={project.mission.lengthRatio}
+            onChange={(lengthRatio) => updateMission({ lengthRatio: Math.min(2, Math.max(0.45, lengthRatio)) })}
+          />
+          <PropulsionNumberField
+            label="Endurance"
+            suffix="min"
+            step={1}
+            value={project.mission.enduranceMin}
+            onChange={(enduranceMin) => updateMission({ enduranceMin: Math.max(1, enduranceMin) })}
+          />
+          <PropulsionNumberField
+            label="Hover allowance"
+            suffix="min"
+            step={0.5}
+            value={project.mission.hoverTimeMin}
+            onChange={(hoverTimeMin) => updateMission({ hoverTimeMin: Math.max(0, hoverTimeMin) })}
+          />
+          <PropulsionNumberField
+            label="Reserve"
+            suffix="%"
+            step={5}
+            value={project.mission.reservePct}
+            onChange={(reservePct) => updateMission({ reservePct: Math.max(0, reservePct) })}
+          />
+          <label className="propulsion-field">
+            <span>Rotor blades</span>
+            <div>
+              <select
+                value={project.mission.rotorBladeCount}
+                onChange={(event) => updateMission({ rotorBladeCount: normalizeSizingRotorBladeCount(Number(event.target.value)) })}
+              >
+                <option value={2}>2 blades</option>
+                <option value={3}>3 blades</option>
+                <option value={4}>4 blades</option>
+              </select>
+            </div>
+          </label>
+        </div>
+      </section>
+      <section className="sizing-dashboard-panel sizing-dashboard-summary sizing-result-strip">
+        <PanelTitle icon={<Plane size={16} />} title="Sizing Result" />
+        <div className="sizing-summary-grid">
+          <Metric label="Estimated mass" value={`${computedDraft.massKg.toFixed(2)} kg`} />
+          <Metric label="Sized takeoff mass" value={`${computedDraft.massKg.toFixed(2)} kg`} />
+          <Metric label="Wing area" value={`${computedDraft.wingAreaM2.toFixed(3)} m2`} />
+          <Metric label="Battery mass" value={`${computedDraft.batteryMassKg.toFixed(2)} kg`} />
+          <Metric label="Rotor diameter" value={`${(computedDraft.rotorDiameterM * 1000).toFixed(0)} mm`} />
+        </div>
       </section>
       <section className="sizing-dashboard-panel sizing-dashboard-data">
-        <h2>Suggested Aircraft</h2>
-        <>
-            <SizingDataGroup title="Mass">
-              <Metric label="Estimated mass" value={`${computedDraft.massKg.toFixed(2)} kg`} />
-              <Metric label="Total length" value={`${computedDraft.totalLengthM.toFixed(2)} m`} />
-              <Metric label="Payload" value={`${computedDraft.payloadKg.toFixed(2)} kg`} />
+            <SizingDataGroup icon={<Scale size={15} />} title="Mass Build-Up">
               <Metric label="Structure" value={`${computedDraft.structureMassKg.toFixed(2)} kg`} />
               <Metric label="Total motor mass" value={`${computedDraft.motorMassKg.toFixed(2)} kg`} />
               <Metric label="Rotor mass" value={`${computedDraft.rotorMassKg.toFixed(2)} kg`} />
               <Metric label="Battery mass" value={`${computedDraft.batteryMassKg.toFixed(2)} kg`} />
-              <Metric label="Energy required" value={`${computedDraft.batteryEnergyWh.toFixed(0)} Wh`} />
-              <Metric label="Battery L x W" value={`${(computedDraft.batteryEnvelope.lengthM * 1000).toFixed(0)} x ${(computedDraft.batteryEnvelope.widthM * 1000).toFixed(0)} mm`} />
-              <Metric label="Battery bay package" value={`${(computedDraft.fuselageLengthM * 1000).toFixed(0)} x ${(computedDraft.fuselageWidthM * 1000).toFixed(0)} mm`} />
               <Metric label="Electronics" value={`${computedDraft.electronicsMassKg.toFixed(2)} kg`} />
             </SizingDataGroup>
-            <SizingDataGroup title="Wing">
-              <Metric label="Wing area" value={`${computedDraft.wingAreaM2.toFixed(3)} m2`} />
+            <SizingDataGroup icon={<Battery size={15} />} title="Battery & Energy">
+              <Metric label="Mission energy" value={`${computedDraft.batteryEnergyWh.toFixed(0)} Wh`} />
+              <Metric label="Sized usable energy" value={`${computedDraft.batteryEnergyAvailableWh.toFixed(0)} Wh`} />
+              <Metric label="Flight target" value={`${project.mission.enduranceMin.toFixed(0)} min + ${project.mission.hoverTimeMin.toFixed(0)} min takeoff`} />
+              <Metric label="Reserve" value={`${project.mission.reservePct.toFixed(0)}% included`} />
+              <Metric label="Battery L x W" value={`${(computedDraft.batteryEnvelope.lengthM * 1000).toFixed(0)} x ${(computedDraft.batteryEnvelope.widthM * 1000).toFixed(0)} mm`} />
+            </SizingDataGroup>
+            <SizingDataGroup icon={<Ruler size={15} />} title="Planform Geometry">
+              <Metric label="Total length" value={`${computedDraft.totalLengthM.toFixed(2)} m`} />
+              <Metric label="Target length" value={`${targetLengthM.toFixed(2)} m`} />
+              <Metric label="Actual L/span" value={`${actualLengthRatio.toFixed(2)}`} />
+              <Metric label="Length driver" value={lengthConstraint} />
               <Metric label="Wingspan" value={`${computedDraft.wingSpanM.toFixed(2)} m`} />
+              <Metric label="Fuselage L x W" value={`${(computedDraft.fuselageLengthM * 1000).toFixed(0)} x ${(computedDraft.fuselageWidthM * 1000).toFixed(0)} mm`} />
+            </SizingDataGroup>
+            <SizingDataGroup icon={<Wind size={15} />} title="Wing & Aero">
+              <Metric label="Wing area" value={`${computedDraft.wingAreaM2.toFixed(3)} m2`} />
               <Metric label="Wing chord" value={`${computedDraft.meanChordM.toFixed(3)} m`} />
               <Metric label="Wing root depth" value={`${computedDraft.wingRootDepthM.toFixed(2)} m from nose`} />
               <Metric label="Suggested aerofoil" value={computedDraft.wingAirfoil} />
               <Metric label="Design cruise CL" value={`${computedDraft.cruiseLiftCoefficient.toFixed(2)}`} />
+              <Metric label="Wing loading" value={`${computedDraft.wingLoadingKgM2.toFixed(1)} kg/m2`} />
+              <Metric label="Stall speed" value={`${msToKnots(computedDraft.stallSpeedMS).toFixed(0)} kt`} />
             </SizingDataGroup>
-            <SizingDataGroup title="Tail">
+            <SizingDataGroup icon={<Ruler size={15} />} title="Tail Surfaces">
+              <Metric label="Tail aerofoil" value={computedDraft.tailAirfoil} />
+              <Metric label="Fin aerofoil" value={computedDraft.finAirfoil} />
               <Metric label="Tail area total" value={`${computedDraft.tailAreaM2.toFixed(3)} m2`} />
               <Metric label="Tail area / tailplane" value={`${computedDraft.tailAreaPerEmpennageM2.toFixed(3)} m2`} />
               <Metric label="Tail arm" value={`${computedDraft.tailArmM.toFixed(2)} m`} />
@@ -134,8 +159,9 @@ export function SizingDashboard({
               <Metric label="Fin height x chord" value={`${computedDraft.finHeightM.toFixed(2)} m x ${computedDraft.finChordM.toFixed(2)} m`} />
               <Metric label="Tail volume ratio" value={`${computedDraft.tailVolumeRatio.toFixed(2)} unitless`} />
             </SizingDataGroup>
-            <SizingDataGroup title="Power & Propulsion">
+            <SizingDataGroup icon={<Zap size={15} />} title="Power & Propulsion">
               <Metric label="Hover power" value={`${formatPower(computedDraft.hoverPowerTotalW)} total`} />
+              <Metric label="Takeoff power" value={`${formatPower(computedDraft.takeoffPowerTotalW)} total`} />
               <Metric label="Cruise power" value={formatPower(computedDraft.cruisePowerW)} />
               <Metric label="Hover motor power" value={`${formatPower(computedDraft.powerPerMotorW)} each`} />
               <Metric label="Rotor blades" value={`${computedDraft.rotorBladeCount}`} />
@@ -149,72 +175,27 @@ export function SizingDashboard({
                 </>
               ) : null}
             </SizingDataGroup>
-            <SizingDataGroup title="Checks">
-              <Metric label="Target disk rotor" value={`${(computedDraft.idealRotorDiameterM * 1000).toFixed(0)} mm`} />
-              <Metric label="Thrust margin" value={`${computedDraft.thrustMarginPct.toFixed(0)}% over target`} />
-              <Metric label="Extra Payload Available" value={`${computedDraft.maxExtraPayloadKg.toFixed(2)} kg`} />
-              <Metric label="Wing loading" value={`${computedDraft.wingLoadingKgM2.toFixed(1)} kg/m2`} />
-              <Metric label="Stall speed" value={`${msToKnots(computedDraft.stallSpeedMS).toFixed(0)} kt`} />
-            </SizingDataGroup>
-            <SizingDataGroup title="Assumptions">
-              <Metric label="Configuration" value="electric twin-rotor tailsitter" />
-              <Metric label="Build" value="carbon fibre shell / spar" />
-              <Metric label="Empennage" value={`${fixedAircraftTailplaneCount} tailplanes + ${fixedAircraftFinCount} fins`} />
-              <Metric label="Cruise L/D" value={`${computedDraft.cruiseLiftToDrag.toFixed(1)}`} />
-              <Metric label="Hover figure of merit" value={`${computedDraft.hoverFigureOfMerit.toFixed(2)}`} />
-              <Metric label="Structure factor" value={`${(computedDraft.structureFraction * 100).toFixed(0)}% of installed mass`} />
-            </SizingDataGroup>
-        </>
       </section>
     </main>
   );
 }
 
-export function SizingJetComputePanel({ onPayloadChange }: { onPayloadChange: (payloadKg: number) => void }) {
-  const [engineId, setEngineId] = useState("swiwin-sw60b");
-  const [enduranceMin, setEnduranceMin] = useState(20);
-  const selectedEngine = turbineEngineOptions.find((engine) => engine.id === engineId) ?? turbineEngineOptions[0];
-  const safeEnduranceMin = Number.isFinite(enduranceMin) ? Math.max(0, enduranceMin) : 0;
-  const engineWeightKg = selectedEngine.engineWeightKg * defaultTurbineCount;
-  const fuelWeightKg = selectedEngine.fuelKgPerMin * safeEnduranceMin * defaultTurbineCount;
-  const totalWeightKg = engineWeightKg + fuelWeightKg;
-  const roundedPayloadKg = Math.ceil(totalWeightKg);
-
+function PanelTitle({ icon, title }: { icon: ReactNode; title: string }) {
   return (
-    <section className="sizing-dashboard-panel sizing-dashboard-engine engine-compute-panel">
-      <h2>Engine Payload</h2>
-      <label className="propulsion-field">
-        <span>Engine</span>
-        <div>
-          <select value={engineId} onChange={(event) => setEngineId(event.target.value)}>
-            {turbineEngineOptions.map((engine) => (
-              <option key={engine.id} value={engine.id}>
-                {engine.maker} {engine.model} - {engine.thrustN} N
-              </option>
-            ))}
-          </select>
-        </div>
-      </label>
-      <PropulsionNumberField label="Endurance time" suffix="min" step={1} value={enduranceMin} onChange={setEnduranceMin} />
-      <div className="engine-compute-spec">
-        <span>{selectedEngine.maker} {selectedEngine.model}</span>
-        <strong>{selectedEngine.thrustN * defaultTurbineCount} N total thrust</strong>
-      </div>
-      <Metric label="Engine weight x2" value={`${engineWeightKg.toFixed(2)} kg`} />
-      <Metric label="Fuel weight x2" value={`${fuelWeightKg.toFixed(2)} kg`} />
-      <div className="metric-tile engine-compute-total">
-        <span>Total weight</span>
-        <strong>{totalWeightKg.toFixed(2)} kg</strong>
-      </div>
-      <p className="engine-compute-note">Fuel uses full-power published burn where available. Source: {selectedEngine.source}.</p>
-    </section>
+    <div className="sizing-panel-title">
+      {icon}
+      <h2>{title}</h2>
+    </div>
   );
 }
 
-function SizingDataGroup({ children, title }: { children: ReactNode; title: string }) {
+function SizingDataGroup({ children, icon, title }: { children: ReactNode; icon: ReactNode; title: string }) {
   return (
     <div className="sizing-data-group">
-      <h3>{title}</h3>
+      <div className="sizing-data-heading">
+        {icon}
+        <h3>{title}</h3>
+      </div>
       <div>{children}</div>
     </div>
   );
@@ -340,10 +321,11 @@ function selectActualHardwareFor({
   const bladeCount = normalizeSizingRotorBladeCount(rotorBladeCount);
   const thrustTargetKg = Math.max(takeoffTargetKg * 1.2, takeoffTargetKg + 0.5);
   const pair = actualHardwarePairs.find((candidate) => candidate.motor.maxThrustKg >= thrustTargetKg) ?? actualHardwarePairs[actualHardwarePairs.length - 1];
-  const motorMassKg = Math.max(0.25, (powerPerMotorW ?? 0) / indicativeAxialFluxPowerDensityWKg, thrustTargetKg * 0.012);
-  const motorDiameterM = indicativeAxialFluxDiameterM * Math.pow(motorMassKg / indicativeAxialFluxMassKg, 0.38);
-  const motorPlanformAreaM2 = Math.PI * Math.pow(motorDiameterM / 2, 2);
-  const motorLengthM = motorMassKg / Math.max(motorPlanformAreaM2 * auditedSizingAssumptions.brushlessMotorDensityKgM3, 1e-6);
+  const powerSizedMassKg = (powerPerMotorW ?? 0) / catalogueMotorPowerDensityWKg;
+  const motorMassKg = Math.max(pair.motor.massKg, powerSizedMassKg, thrustTargetKg * 0.012);
+  const motorScale = Math.cbrt(motorMassKg / Math.max(pair.motor.massKg, 0.01));
+  const motorDiameterM = pair.motor.diameterM * motorScale;
+  const motorLengthM = pair.motor.lengthM * motorScale;
   const motor: HardwareMotor = {
     ...pair.motor,
     diameterM: motorDiameterM,
@@ -351,8 +333,8 @@ function selectActualHardwareFor({
     lengthM: motorLengthM,
     massKg: motorMassKg,
     maxThrustKg: thrustTargetKg,
-    name: "Indicative motor envelope",
-    source: `${pair.motor.source}; axial-flux power-density envelope for initial sizing`,
+    name: pair.motor.name,
+    source: `${pair.motor.source}; scaled only if power demand exceeds catalogue envelope`,
   };
   const lowDiskDiameterM = Math.max(idealRotorDiameterM ?? pair.rotor.diameterIn * 0.0254, 0.25);
   const bladeCountDiameterScale = Math.pow(baselineRotorBladeCount / bladeCount, propDiameterThrustExponent);
@@ -385,19 +367,19 @@ function selectActualHardwareFor({
 const batterySelectionMargin = 1.2;
 const baselineRotorBladeCount = 2;
 const propDiameterThrustExponent = 0.25;
-const indicativeAxialFluxMassKg = 15;
-const indicativeAxialFluxPowerDensityWKg = 23000 / indicativeAxialFluxMassKg;
-const indicativeAxialFluxDiameterM = 0.28;
-const indicativeAxialFluxLengthM = 0.08;
+const catalogueMotorPowerDensityWKg = 5200;
 const propMassDiameterExponent = 2.15;
 
 function scaledBatteryEnvelope(referenceBattery: HardwareBattery, targetMassKg: number) {
-  const scale = Math.cbrt(Math.max(targetMassKg, 0.01) / Math.max(referenceBattery.massKg, 0.01));
+  const massKg = Math.max(targetMassKg, 0.01);
+  const targetVolumeM3 = massKg / auditedSizingAssumptions.lipoPackDensityKgM3;
+  const referenceAspect = Math.max(referenceBattery.lengthM / Math.max(referenceBattery.widthM, 0.001), 1);
+  const widthM = Math.cbrt(targetVolumeM3 / Math.max(referenceAspect, 0.001));
   return {
-    heightM: referenceBattery.heightM * scale,
-    lengthM: referenceBattery.lengthM * scale,
-    massKg: targetMassKg,
-    widthM: referenceBattery.widthM * scale,
+    heightM: widthM,
+    lengthM: widthM * referenceAspect,
+    massKg,
+    widthM,
   };
 }
 
@@ -411,12 +393,13 @@ export function computeSizingDraft(project: SizingProject) {
   const hoverTimeMin = Math.max(project.mission.hoverTimeMin, 0);
   const reserveFactor = 1 + Math.max(project.mission.reservePct, 0) / 100;
   const batteryEnergyDensityWhKg = Math.max(project.mission.batteryEnergyDensityWhKg, 1);
+  const initialMassGuessKg = Math.max(payloadKg / 0.5, payloadKg + 2.5);
   const targetAspectRatio = clampNumber(numberOr(project.mission.aspectRatio, 2.8), 2.2, 12);
   const lengthRatio = clampNumber(numberOr(project.mission.lengthRatio, 0.8), 0.45, 2);
   const idealDiskLoadingNpm2 = bestGuessDiskLoadingNpm2({ cruiseSpeedMS, enduranceMin, hoverTimeMin });
-  const cruiseLiftCoefficient = bestGuessCruiseLiftCoefficient({ cruiseSpeedMS });
+  const cruiseLiftCoefficient = clampNumber(numberOr(project.mission.cruiseLiftCoefficient, bestGuessCruiseLiftCoefficient({ cruiseSpeedMS })), 0.25, 1.4);
   const wingAirfoil = suggestWingAirfoil({ cruiseLiftCoefficient, cruiseSpeedMS });
-  const tailVolumeRatio = bestGuessTailVolumeTarget({ hoverTimeMin });
+  const tailVolumeRatio = clampNumber(numberOr(project.mission.tailVolumeTarget, bestGuessTailVolumeTarget({ hoverTimeMin })), 0.25, 1.2);
   const rhoKgM3 = 1.225;
   const hoverFigureOfMerit = hoverFigureOfMeritForBladeCount(rotorBladeCount);
   const cruiseLiftToDrag = 8.2;
@@ -424,7 +407,7 @@ export function computeSizingDraft(project: SizingProject) {
   const maximumWingLoadingKgM2 = 34;
   const structureFraction = 0.25;
   const electronicsMassKg = 0.9;
-  let massKg = Math.max(payloadKg / 0.22, payloadKg + 2.5);
+  let massKg = initialMassGuessKg;
   let wingAreaM2 = 0.1;
   let wingSpanM = 0.1;
   let meanChordM = 0.1;
@@ -432,6 +415,7 @@ export function computeSizingDraft(project: SizingProject) {
   let idealRotorDiameterM = 0.1;
   let actualDiskLoadingNpm2 = 0;
   let hoverPowerTotalW = 0;
+  let takeoffPowerTotalW = 0;
   let cruisePowerW = 0;
   let batteryEnergyWh = 0;
   let batteryMassKg = 0;
@@ -457,8 +441,9 @@ export function computeSizingDraft(project: SizingProject) {
     const totalRotorDiskAreaM2 = motorCount * rotorDiskAreaPerMotorM2;
     actualDiskLoadingNpm2 = thrustPerMotorN / Math.max(rotorDiskAreaPerMotorM2, 0.001);
     hoverPowerTotalW = Math.pow(weightN, 1.5) / Math.sqrt(2 * rhoKgM3 * totalRotorDiskAreaM2) / hoverFigureOfMerit;
+    takeoffPowerTotalW = hoverPowerTotalW * Math.pow(takeoffThrustToWeight, 1.5);
     cruisePowerW = (weightN / cruiseLiftToDrag) * cruiseSpeedMS / cruisePropulsiveEfficiency;
-    batteryEnergyWh = (hoverPowerTotalW * (hoverTimeMin / 60) + cruisePowerW * (enduranceMin / 60)) * reserveFactor;
+    batteryEnergyWh = (takeoffPowerTotalW * (hoverTimeMin / 60) + cruisePowerW * (enduranceMin / 60)) * reserveFactor;
     hardware = selectActualHardwareFor({ energyRequiredWh: batteryEnergyWh, idealRotorDiameterM, powerPerMotorW: hoverPowerTotalW / motorCount, rotorBladeCount, takeoffTargetKg: thrustPerMotorN / 9.80665 });
     batteryMassKg = batteryEnergyWh / batteryEnergyDensityWhKg;
     motorMassKg = hardware.motor.massKg * motorCount;
@@ -477,10 +462,12 @@ export function computeSizingDraft(project: SizingProject) {
   const finalWeightN = massKg * 9.80665;
   const finalTotalRotorDiskAreaM2 = motorCount * rotorDiskAreaPerMotorM2;
   hoverPowerTotalW = Math.pow(finalWeightN, 1.5) / Math.sqrt(2 * rhoKgM3 * finalTotalRotorDiskAreaM2) / hoverFigureOfMerit;
+  takeoffPowerTotalW = hoverPowerTotalW * Math.pow(takeoffThrustToWeight, 1.5);
   cruisePowerW = (finalWeightN / cruiseLiftToDrag) * cruiseSpeedMS / cruisePropulsiveEfficiency;
-  batteryEnergyWh = (hoverPowerTotalW * (hoverTimeMin / 60) + cruisePowerW * (enduranceMin / 60)) * reserveFactor;
+  batteryEnergyWh = (takeoffPowerTotalW * (hoverTimeMin / 60) + cruisePowerW * (enduranceMin / 60)) * reserveFactor;
   hardware = selectActualHardwareFor({ energyRequiredWh: batteryEnergyWh, idealRotorDiameterM, powerPerMotorW: hoverPowerTotalW / motorCount, rotorBladeCount, takeoffTargetKg: thrustPerMotorN / 9.80665 });
-  batteryMassKg = batteryEnergyWh / batteryEnergyDensityWhKg;
+  const batteryMassRequiredKg = batteryEnergyWh / batteryEnergyDensityWhKg;
+  batteryMassKg = batteryMassRequiredKg;
   motorMassKg = hardware.motor.massKg * motorCount;
   rotorMassKg = hardware.rotorMassPerAssemblyKg * motorCount;
   const batteryEnvelope = scaledBatteryEnvelope(hardware.battery, batteryMassKg);
@@ -492,6 +479,8 @@ export function computeSizingDraft(project: SizingProject) {
   wingSpanM = Math.max(Math.sqrt(wingAreaM2 * targetAspectRatio), rotorContainmentSpanM);
   meanChordM = wingAreaM2 / Math.max(wingSpanM, 0.01);
   const finalWingAirfoil = suggestWingAirfoil({ cruiseLiftCoefficient: actualCruiseLiftCoefficient, cruiseSpeedMS });
+  const tailAirfoil = suggestTailAirfoil();
+  const finAirfoil = suggestFinAirfoil();
   const powerPerMotorW = hoverPowerTotalW / motorCount;
   fuselageLengthM = Math.max(batteryEnvelope.lengthM + 0.08, 0.24);
   fuselageWidthM = Math.max(batteryEnvelope.widthM + 0.06, 0.12);
@@ -514,19 +503,19 @@ export function computeSizingDraft(project: SizingProject) {
   const tailChordM = tailSizing.tailChordM;
   const motorX = wingSpanM / 2 - rotorDiameterM / 2 - rotorInsideWingMarginM;
   const totalLengthM = wingRootDepthM + tailArmM + tailChordM;
-  const finAreaTotalM2 = wingAreaM2 * 0.2;
+  fuselageLengthM = Math.max(fuselageLengthM, totalLengthM * 0.7);
+  const finVolumeRatio = bestGuessFinVolumeTarget();
+  const finAreaTotalM2 = (finVolumeRatio * wingAreaM2 * wingSpanM) / Math.max(tailArmM, 0.1);
   const finAreaPerFinM2 = finAreaTotalM2 / fixedAircraftFinCount;
   const finHeightM = Math.sqrt(finAreaPerFinM2 * 1.35);
   const finChordM = finAreaPerFinM2 / Math.max(finHeightM, 0.01);
   const wingLoadingKgM2 = massKg / Math.max(wingAreaM2, 0.01);
   const actualAspectRatio = Math.pow(wingSpanM, 2) / Math.max(wingAreaM2, 0.01);
   const stallSpeedMS = Math.sqrt((2 * massKg * 9.80665) / (rhoKgM3 * Math.max(wingAreaM2, 0.01) * finiteWingMaxLiftCoefficient(finalWingAirfoil)));
-  const batteryMarginPct = ((hardware.battery.energyWh / Math.max(batteryEnergyWh, 1)) - 1) * 100;
   const takeoffTargetKg = thrustPerMotorN / 9.80665;
   const thrustMarginPct = ((hardware.motor.maxThrustKg / Math.max(takeoffTargetKg, 0.1)) - 1) * 100;
-  const spareBatteryWh = Math.max(0, hardware.battery.energyWh - batteryEnergyWh);
-  const maxExtraEnduranceMin = spareBatteryWh / Math.max((cruisePowerW / 60) * reserveFactor, 0.001);
-  const maxExtraPayloadKg = Math.max(0, ((hardware.motor.maxThrustKg * motorCount) / takeoffThrustToWeight - massKg) / (1 + structureFraction));
+  const propulsionMtowKg = (hardware.motor.maxThrustKg * motorCount) / Math.max(takeoffThrustToWeight, 0.1);
+  const batteryEnergyAvailableWh = batteryMassKg * batteryEnergyDensityWhKg;
   const hardwareWithLoads = {
     ...hardware,
     hoverLoadKg: massKg / motorCount,
@@ -537,8 +526,9 @@ export function computeSizingDraft(project: SizingProject) {
     aspectRatio: actualAspectRatio,
     batteryEnvelope,
     batteryEnergyWh,
-    batteryMarginPct,
+    batteryEnergyAvailableWh,
     batteryMassKg,
+    batteryMassRequiredKg,
     cruiseLiftCoefficient: actualCruiseLiftCoefficient,
     cruiseLiftToDrag,
     cruisePowerW,
@@ -547,18 +537,19 @@ export function computeSizingDraft(project: SizingProject) {
     finAreaPerFinM2,
     finChordM,
     finHeightM,
+    finVolumeRatio,
     fuselageLengthM,
     fuselageWidthM,
     hardware: hardwareWithLoads,
     hoverPowerTotalW,
+    takeoffPowerTotalW,
     hoverFigureOfMerit,
     idealRotorDiameterM,
     massKg,
-    maxExtraEnduranceMin,
-    maxExtraPayloadKg,
     meanChordM,
     motorMassKg,
     powerPerMotorW,
+    propulsionMtowKg,
     payloadKg,
     rotorBladeCount,
     rotorDiameterM,
@@ -566,7 +557,9 @@ export function computeSizingDraft(project: SizingProject) {
     stallSpeedMS,
     structureMassKg,
     structureFraction,
+    finAirfoil,
     tailAreaPerEmpennageM2,
+    tailAirfoil,
     tailAreaM2,
     tailArmM,
     tailVolumeRatio,
@@ -590,8 +583,11 @@ export function computeSizingDraft(project: SizingProject) {
       finHeightM,
       rotorBladeCount,
       rotorDiameterM,
+      finAirfoil,
       tailAreaM2,
+      tailAirfoil,
       tailArmM,
+      wingAirfoil: finalWingAirfoil,
       wingAreaM2,
       wingSpanM,
     }),
@@ -601,6 +597,7 @@ export function computeSizingDraft(project: SizingProject) {
 export function sizingDraftReferenceShapes({
   fuselageLengthM,
   fuselageWidthM,
+  finAirfoil,
   finChordM,
   finHeightM,
   meanChordM,
@@ -608,13 +605,16 @@ export function sizingDraftReferenceShapes({
   motorLengthM,
   rotorDiameterM,
   rotorBladeCount,
+  tailAirfoil,
   tailAreaM2,
   tailArmM,
+  wingAirfoil,
   wingAreaM2,
   wingSpanM,
 }: {
   fuselageLengthM: number;
   fuselageWidthM: number;
+  finAirfoil: string;
   finChordM: number;
   finHeightM: number;
   meanChordM: number;
@@ -622,8 +622,10 @@ export function sizingDraftReferenceShapes({
   motorLengthM?: number;
   rotorDiameterM: number;
   rotorBladeCount: number;
+  tailAirfoil: string;
   tailAreaM2: number;
   tailArmM: number;
+  wingAirfoil: string;
   wingAreaM2: number;
   wingSpanM: number;
 }): SizingProject["shapes"] {
@@ -663,6 +665,8 @@ export function sizingDraftReferenceShapes({
         { xM: halfSpan, yM: -meanChordM * 0.48, curveMode: "corner" },
         { xM: 0, yM: -meanChordM * 0.5, curveMode: "corner" },
       ],
+      airfoil: wingAirfoil,
+      airfoilStations: { root: wingAirfoil, tip: wingAirfoil },
     },
     {
       id: "sizing-ref-tail-boom",
@@ -688,6 +692,8 @@ export function sizingDraftReferenceShapes({
         { xM: motorX + tailSpan / 2, yM: tailY - tailChord * 0.45, curveMode: "corner" },
         { xM: motorX - tailSpan / 2, yM: tailY - tailChord * 0.5, curveMode: "corner" },
       ],
+      airfoil: tailAirfoil,
+      airfoilStations: { root: tailAirfoil, tip: tailAirfoil },
     },
     {
       id: "sizing-ref-fin",
@@ -703,8 +709,8 @@ export function sizingDraftReferenceShapes({
         { xM: finHeightM, yM: tailY - finChordM * 0.5, curveMode: "corner" },
         { xM: 0, yM: tailY - finChordM * 0.55, curveMode: "corner" },
       ],
-      airfoil: "NACA 0012",
-      airfoilStations: { root: "NACA 0012", tip: "NACA 0012" },
+      airfoil: finAirfoil,
+      airfoilStations: { root: finAirfoil, tip: finAirfoil },
       incidenceDeg: 0,
       incidenceStationsDeg: { root: 0, tip: 0 },
       bodyMaterial: "carbonFibre",
@@ -844,6 +850,14 @@ export function suggestWingAirfoil({
   return "NACA 2412";
 }
 
+export function suggestTailAirfoil() {
+  return "NACA 0012";
+}
+
+export function suggestFinAirfoil() {
+  return "NACA 0010";
+}
+
 function finiteWingMaxLiftCoefficient(airfoil: string) {
   if (airfoil === "Selig S1223") return 1.8;
   if (airfoil === "Clark Y") return 1.45;
@@ -853,6 +867,10 @@ function finiteWingMaxLiftCoefficient(airfoil: string) {
 
 export function bestGuessTailVolumeTarget({ hoverTimeMin }: { hoverTimeMin: number }) {
   return hoverTimeMin >= 3 ? 1.05 : 0.95;
+}
+
+export function bestGuessFinVolumeTarget() {
+  return 0.04;
 }
 
 export function knotsToMS(valueKt: number) {

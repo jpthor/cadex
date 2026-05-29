@@ -7,7 +7,6 @@ import { Metric, MetricTile, ResultGroup } from "../ui/Metric";
 import {
   batterySamples,
   computePropulsionSizing,
-  findBestPropulsionCombo,
   motorSamples,
   propellerMassEstimate,
   propellerSamples,
@@ -54,13 +53,13 @@ export function PropulsionWorkspace({
     () => propulsionDemandFromAircraft({
       aircraftMassKg,
       aircraftCompute,
-      battery: selectedBattery,
-      motor: selectedMotor,
+      missionEnduranceMin: sizingProject.mission.enduranceMin,
+      missionReservePct: sizingProject.mission.reservePct,
+      missionTakeoffMin: sizingProject.mission.hoverTimeMin,
       rotorCount,
-      targetEnduranceMin,
       targetThrustToWeight,
     }),
-    [aircraftCompute, aircraftMassKg, rotorCount, selectedBattery, selectedMotor, targetEnduranceMin, targetThrustToWeight],
+    [aircraftCompute, aircraftMassKg, rotorCount, sizingProject.mission.enduranceMin, sizingProject.mission.hoverTimeMin, sizingProject.mission.reservePct, targetThrustToWeight],
   );
   const comboCandidates = useMemo(
     () => rankedPropulsionCombos({
@@ -77,107 +76,76 @@ export function PropulsionWorkspace({
   );
   const selectedPropDiameterM = selectedPropeller.diameterIn * 0.0254;
   const rotorDiameterMargin = rotorDefinition.diameterM > 0 ? rotorDefinition.diameterM / selectedPropDiameterM : 1;
+  const selectedBatteryVoltage = selectedBattery.cells * 3.7;
+  const selectedBatteryEnergyWh = selectedBatteryVoltage * selectedBattery.capacityAh;
+  const selectedBatteryMaxCurrentA = selectedBattery.capacityAh * selectedBattery.cRating;
+  const selectedPeakCurrentA = propulsionDemand.peakElectricalPowerW / Math.max(selectedBatteryVoltage, 1);
+  const missionReserveFactor = 1 + Math.max(sizingProject.mission.reservePct, 0) / 100;
+  const selectedUsableEnergyWh = selectedBatteryEnergyWh / missionReserveFactor;
+  const missionTakeoffEnergyWh = propulsionDemand.peakElectricalPowerW * (Math.max(sizingProject.mission.hoverTimeMin, 0) / 60);
+  const selectedCruiseEnergyWh = Math.max(0, selectedUsableEnergyWh - missionTakeoffEnergyWh);
+  const selectedMissionEnduranceMin = propulsionDemand.cruisePowerW > 0 ? (selectedCruiseEnergyWh / propulsionDemand.cruisePowerW) * 60 : 0;
   const motorPowerMargin = propulsionDemand.peakElectricalPowerW > 0 ? (selectedMotor.continuousPowerW * rotorCount) / propulsionDemand.peakElectricalPowerW : 0;
-  const batteryEnergyMargin = propulsionDemand.requiredEnergyWh > 0 ? propulsionDemand.availableEnergyWh / propulsionDemand.requiredEnergyWh : 0;
-  const batteryCurrentMargin = propulsionDemand.peakCurrentA > 0 ? propulsionDemand.batteryMaxCurrentA / propulsionDemand.peakCurrentA : 0;
+  const batteryEnergyMargin = propulsionDemand.requiredEnergyWh > 0 ? selectedBatteryEnergyWh / propulsionDemand.requiredEnergyWh : 0;
+  const batteryCurrentMargin = selectedPeakCurrentA > 0 ? selectedBatteryMaxCurrentA / selectedPeakCurrentA : 0;
   const rotorShapes = sizingProject.shapes.filter((shape) => shape.role === "part" && shape.partType === "rotor");
   const hasActualBattery = sizingProject.shapes.some((shape) => shape.role === "part" && shape.partType === "battery");
   const rotorCountSource = rotorShapes.length ? "Actual" : "Sizing";
   const rotorDiameterSource = rotorDefinition.diameterM > 0 ? "Actual" : "Sizing";
   const batterySource = hasActualBattery ? "Actual" : "Sizing";
-  function findBestCombo() {
-    const best = findBestPropulsionCombo({
-      aircraftMassKg,
-      batteryEnergyDensityWhKg,
-      batteryMassKg,
-      bladeCount,
-      rotorDefinition,
-      target: { minEnduranceMin: targetEnduranceMin, targetThrustToWeight },
-    });
-    if (!best) return;
-    onPropulsionStateChange({
-      ...propulsionState,
-      selectedBatteryId: best.batteryPack.id,
-      selectedMotorId: best.motor.id,
-      selectedPropellerId: best.propeller.id,
-    });
-    setFeedbackMessage(`Selected ${best.motor.name}, ${best.propeller.name}, ${best.batteryPack.name}.`);
-  }
-
   return (
     <main className="propulsion-workspace">
-      <section className="propulsion-panel propulsion-summary-panel">
+      <section className="propulsion-panel propulsion-requirements-panel">
         <div className="propulsion-title">
           <Fan size={20} />
-          <h2>Aircraft Inputs</h2>
+          <h2>Requirements</h2>
         </div>
-        <div className="propulsion-readouts">
-          <MetricTile label="Mass (Actual)" value={`${aircraftMassKg.toFixed(2)} kg`} />
-          <MetricTile label={`Rotors (${rotorCountSource})`} value={`${rotorCount}`} />
-          <MetricTile label="Blades (Sizing)" value={`${bladeCount}`} />
-          <MetricTile label={`Diameter (${rotorDiameterSource})`} value={formatMetersAsMm(rotorDefinition.diameterM)} />
-          <MetricTile label={`Battery (${batterySource})`} value={`${batteryMassKg.toFixed(2)} kg`} />
+        <p className="propulsion-demand-explainer">
+          Aircraft facts and mission targets from the sketch and sizing inputs, plus the power, current, and energy the selected propulsion system needs to satisfy.
+        </p>
+        <div className="propulsion-requirements-top">
+          <div className="propulsion-readouts">
+            <MetricTile label="Mass (Actual)" value={`${aircraftMassKg.toFixed(2)} kg`} />
+            <MetricTile label={`Rotors (${rotorCountSource})`} value={`${rotorCount}`} />
+            <MetricTile label="Blades (Sizing)" value={`${bladeCount}`} />
+            <MetricTile label={`Diameter (${rotorDiameterSource})`} value={formatMetersAsMm(rotorDefinition.diameterM)} />
+            <MetricTile label={`Battery (${batterySource})`} value={`${batteryMassKg.toFixed(2)} kg`} />
+          </div>
+          <div className="propulsion-optimizer">
+            <PropulsionNumberField
+              label="Target T/W (Sizing)"
+              step={0.1}
+              value={targetThrustToWeight}
+              onChange={(targetThrustToWeight) => onPropulsionStateChange({ ...propulsionState, targetThrustToWeight })}
+            />
+            <PropulsionNumberField
+              label="Min endurance (Sizing)"
+              suffix="min"
+              step={1}
+              value={targetEnduranceMin}
+              onChange={(targetEnduranceMin) => onPropulsionStateChange({ ...propulsionState, targetEnduranceMin })}
+            />
+          </div>
         </div>
-        <div className="propulsion-optimizer">
-          <PropulsionNumberField
-            label="Target T/W (Sizing)"
-            step={0.1}
-            value={targetThrustToWeight}
-            onChange={(targetThrustToWeight) => onPropulsionStateChange({ ...propulsionState, targetThrustToWeight })}
-          />
-          <PropulsionNumberField
-            label="Min endurance (Sizing)"
-            suffix="min"
-            step={1}
-            value={targetEnduranceMin}
-            onChange={(targetEnduranceMin) => onPropulsionStateChange({ ...propulsionState, targetEnduranceMin })}
-          />
-          <button className="primary-action" onClick={findBestCombo} type="button">
-            Find Best Combo
-          </button>
-        </div>
-        {feedbackMessage ? <p className="propulsion-inline-note">{feedbackMessage}</p> : null}
-      </section>
-
-      <section className="propulsion-panel propulsion-demand-panel">
-        <div className="propulsion-title">
-          <Gauge size={20} />
-          <h2>Aircraft Demand</h2>
-        </div>
-        <div className="propulsion-result-groups compact">
-          <ResultGroup title="From Aero">
-            <Metric label="Cruise power" note={demandVerdict(propulsionDemand.cruisePowerW, 0, 3000, 7000).text} noteTone={demandVerdict(propulsionDemand.cruisePowerW, 0, 3000, 7000).tone} value={formatWatts(propulsionDemand.cruisePowerW)} />
-            <Metric label="Hover power" note={demandVerdict(propulsionDemand.hoverPowerW, 0, 6000, 14000).text} noteTone={demandVerdict(propulsionDemand.hoverPowerW, 0, 6000, 14000).tone} value={formatWatts(propulsionDemand.hoverPowerW)} />
+        <div className="propulsion-result-groups compact propulsion-requirements-groups">
+          <ResultGroup title="Power And Energy">
+            <Metric label="Cruise power" value={formatWatts(propulsionDemand.cruisePowerW)} />
+            <Metric label="Hover power" value={formatWatts(propulsionDemand.hoverPowerW)} />
             <Metric label="Peak electrical" value={formatWatts(propulsionDemand.peakElectricalPowerW)} />
             <Metric label="Mission energy" value={`${propulsionDemand.requiredEnergyWh.toFixed(0)} Wh`} />
+            <Metric label="Takeoff time" value={`${Math.max(sizingProject.mission.hoverTimeMin, 0).toFixed(1)} min`} />
+            <Metric label="Reserve" value={`${Math.max(sizingProject.mission.reservePct, 0).toFixed(0)}%`} />
           </ResultGroup>
           <ResultGroup title="Selected Margins">
-            <Metric label="Motor power margin" note={ratioVerdict(motorPowerMargin, 1.25, 1.05).text} noteTone={ratioVerdict(motorPowerMargin, 1.25, 1.05).tone} value={`${motorPowerMargin.toFixed(2)}x`} />
-            <Metric label="Battery energy margin" note={ratioVerdict(batteryEnergyMargin, 1.2, 1.0).text} noteTone={ratioVerdict(batteryEnergyMargin, 1.2, 1.0).tone} value={`${batteryEnergyMargin.toFixed(2)}x`} />
-            <Metric label="Battery current margin" note={ratioVerdict(batteryCurrentMargin, 1.3, 1.05).text} noteTone={ratioVerdict(batteryCurrentMargin, 1.3, 1.05).tone} value={`${batteryCurrentMargin.toFixed(2)}x`} />
-            <Metric label="Rotor diameter fit" note={ratioVerdict(rotorDiameterMargin, 1.0, 0.92).text} noteTone={ratioVerdict(rotorDiameterMargin, 1.0, 0.92).tone} value={rotorDefinition.diameterM > 0 ? `${(selectedPropDiameterM * 1000).toFixed(0)} / ${(rotorDefinition.diameterM * 1000).toFixed(0)} mm` : "not drawn"} />
+            <Metric label="Peak demand / motor" value={formatWatts(propulsionDemand.peakElectricalPowerW / rotorCount)} />
+            <Metric label="Motor rating / motor" value={formatWatts(selectedMotor.continuousPowerW)} />
+            <Metric label="Motor power margin" note={ratioVerdict(motorPowerMargin, 1.5, 1.2).text} noteTone={ratioVerdict(motorPowerMargin, 1.5, 1.2).tone} value={`${motorPowerMargin.toFixed(2)}x`} />
+            <Metric label="Battery energy margin" value={`${batteryEnergyMargin.toFixed(2)}x`} />
+            <Metric label="Battery current margin" value={`${batteryCurrentMargin.toFixed(2)}x`} />
+            <Metric label="Rotor diameter fit" value={rotorDefinition.diameterM > 0 ? `${(selectedPropDiameterM * 1000).toFixed(0)} / ${(rotorDefinition.diameterM * 1000).toFixed(0)} mm` : "not drawn"} />
           </ResultGroup>
         </div>
-      </section>
-
-      <section className="propulsion-panel">
-        <div className="propulsion-title">
-          <Gauge size={20} />
-          <h2>Motor Setup</h2>
-        </div>
-        <div className="propulsion-input-grid">
-          <MotorSelect
-            motors={motorSamples}
-            selectedMotor={selectedMotor}
-            onChange={(selectedMotorId) => onPropulsionStateChange({ ...propulsionState, selectedMotorId })}
-          />
-        </div>
-        <div className="propulsion-readouts">
-          <MetricTile label="Kv" value={`${selectedMotor.kvRpmV} rpm/V`} />
-          <MetricTile label="Continuous power" value={`${selectedMotor.continuousPowerW} W`} />
-          <MetricTile label="Max current" value={`${selectedMotor.maxCurrentA} A`} />
-          <MetricTile label="Loaded RPM" value={`${result.motorLoadedRpm.toFixed(0)}`} />
-        </div>
+        {feedbackMessage ? <p className="propulsion-inline-note">{feedbackMessage}</p> : null}
       </section>
 
       <section className="propulsion-panel propulsion-selection-panel">
@@ -212,6 +180,26 @@ export function PropulsionWorkspace({
       <section className="propulsion-panel">
         <div className="propulsion-title">
           <Gauge size={20} />
+          <h2>Motor Setup</h2>
+        </div>
+        <div className="propulsion-input-grid">
+          <MotorSelect
+            motors={motorSamples}
+            selectedMotor={selectedMotor}
+            onChange={(selectedMotorId) => onPropulsionStateChange({ ...propulsionState, selectedMotorId })}
+          />
+        </div>
+        <div className="propulsion-readouts">
+          <MetricTile label="Kv" value={`${selectedMotor.kvRpmV} rpm/V`} />
+          <MetricTile label="Continuous power" value={formatWatts(selectedMotor.continuousPowerW)} />
+          <MetricTile label="Max current" value={`${selectedMotor.maxCurrentA} A`} />
+          <MetricTile label="Loaded RPM" value={`${result.motorLoadedRpm.toFixed(0)}`} />
+        </div>
+      </section>
+
+      <section className="propulsion-panel">
+        <div className="propulsion-title">
+          <Gauge size={20} />
           <h2>Propeller Setup</h2>
         </div>
         <div className="propulsion-input-grid">
@@ -224,7 +212,7 @@ export function PropulsionWorkspace({
         <div className="propulsion-readouts">
           <MetricTile label="Diameter" value={formatInchesAsMm(selectedPropeller.diameterIn)} />
           <MetricTile label="Pitch" value={formatInchesAsMm(selectedPropeller.pitchIn)} />
-          <MetricTile label="APC static" value={`${selectedPropeller.staticThrustN.toFixed(1)} N @ ${selectedPropeller.staticRpm}`} />
+          <MetricTile label="Static thrust" value={`${selectedPropeller.staticThrustN.toFixed(1)} N @ ${selectedPropeller.staticRpm}`} />
           <MetricTile label="Peak efficiency" value={`${(selectedPropeller.peakEfficiency * 100).toFixed(1)}%`} />
         </div>
       </section>
@@ -265,25 +253,28 @@ export function PropulsionWorkspace({
             <Metric label="Disk area / rotor" value={`${result.diskAreaPerRotorM2.toFixed(3)} m2`} />
             <Metric label="Disk loading" value={`${result.effectiveDiskLoadingNpm2.toFixed(1)} N/m2`} />
             <Metric label="Operating RPM" value={`${result.motorLoadedRpm.toFixed(0)}`} />
-            <Metric label="Pitch speed" value={`${result.pitchSpeedMS.toFixed(1)} m/s (${result.pitchSpeedKmh.toFixed(0)} km/h)`} />
-            <Metric label="Cruise estimate" value={`${result.cruiseSpeedLowMS.toFixed(1)}-${result.cruiseSpeedHighMS.toFixed(1)} m/s`} />
+            <Metric label="Pitch speed" value={`${formatSpeedKt(result.pitchSpeedMS)}`} />
+            <Metric label="Cruise estimate" value={`${formatSpeedKt(result.cruiseSpeedLowMS)}-${formatSpeedKt(result.cruiseSpeedHighMS)}`} />
           </ResultGroup>
           <ResultGroup title="Electrical">
-            <Metric label="Power / motor" note={ratioVerdict(selectedMotor.continuousPowerW / Math.max(result.powerPerMotorW, 1), 1.25, 1.05).text} noteTone={ratioVerdict(selectedMotor.continuousPowerW / Math.max(result.powerPerMotorW, 1), 1.25, 1.05).tone} value={`${result.powerPerMotorW.toFixed(0)} W`} />
-            <Metric label="Total shaft power" value={`${result.totalPowerW.toFixed(0)} W`} />
-            <Metric label="Current / motor" note={ratioVerdict(selectedMotor.maxCurrentA / Math.max(result.currentPerMotorA, 1), 1.25, 1.05).text} noteTone={ratioVerdict(selectedMotor.maxCurrentA / Math.max(result.currentPerMotorA, 1), 1.25, 1.05).tone} value={`${result.currentPerMotorA.toFixed(1)} A`} />
+            <Metric label="Max prop power / motor" value={formatWatts(result.powerPerMotorW)} />
+            <Metric label="Total available shaft" value={formatWatts(result.totalPowerW)} />
+            <Metric label="Max prop current / motor" value={`${result.currentPerMotorA.toFixed(1)} A`} />
             <Metric label="ESC rating" value={`${result.recommendedEscA.toFixed(0)} A`} />
           </ResultGroup>
           <ResultGroup title="Battery">
-            <Metric label="Battery max current" note={ratioVerdict(batteryCurrentMargin, 1.3, 1.05).text} noteTone={ratioVerdict(batteryCurrentMargin, 1.3, 1.05).tone} value={`${result.batteryMaxCurrentA.toFixed(0)} A`} />
+            <Metric label="Battery max current" note={ratioVerdict(result.batteryMaxCurrentA / Math.max(result.takeoffCurrentA, 1), 1.3, 1.05).text} noteTone={ratioVerdict(result.batteryMaxCurrentA / Math.max(result.takeoffCurrentA, 1), 1.3, 1.05).tone} value={`${result.batteryMaxCurrentA.toFixed(0)} A`} />
             <Metric label="Takeoff current" value={`${result.takeoffCurrentA.toFixed(1)} A`} />
             <Metric label="Cruise current" value={`${result.cruiseCurrentA.toFixed(1)} A`} />
-            <Metric label="Endurance" note={ratioVerdict(result.enduranceMin / Math.max(targetEnduranceMin, 1), 1.15, 1).text} noteTone={ratioVerdict(result.enduranceMin / Math.max(targetEnduranceMin, 1), 1.15, 1).tone} value={`${result.enduranceMin.toFixed(1)} min`} />
+            <Metric label="Usable energy after reserve" value={`${selectedUsableEnergyWh.toFixed(0)} Wh`} />
+            <Metric label="Takeoff energy" value={`${missionTakeoffEnergyWh.toFixed(0)} Wh`} />
+            <Metric label="Cruise energy left" value={`${selectedCruiseEnergyWh.toFixed(0)} Wh`} />
+            <Metric label="Mission endurance" note={ratioVerdict(selectedMissionEnduranceMin / Math.max(sizingProject.mission.enduranceMin, 1), 1.15, 1).text} noteTone={ratioVerdict(selectedMissionEnduranceMin / Math.max(sizingProject.mission.enduranceMin, 1), 1.15, 1).tone} value={`${selectedMissionEnduranceMin.toFixed(1)} min`} />
           </ResultGroup>
         </div>
         <p className="propulsion-note">
           Propeller samples use APC performance files for diameter, pitch, static thrust, static power, and peak efficiency.
-          Endurance assumes 20% of battery capacity is used at takeoff current and the remaining 80% at cruise current.
+          Mission endurance uses the sizing mission: selected battery energy after reserve, minus takeoff energy, then remaining cruise energy divided by cruise power.
         </p>
       </section>
     </main>
@@ -306,13 +297,13 @@ export function MotorSelect({
         <select value={selectedMotor.id} onChange={(event) => onChange(event.target.value)}>
           {motors.map((motor) => (
             <option key={motor.id} value={motor.id}>
-              {motor.name}
+              {motor.name} - {formatWattsAsKw(motor.continuousPowerW)}
             </option>
           ))}
         </select>
       </div>
       <small>
-        {selectedMotor.kvRpmV} Kv, {selectedMotor.continuousPowerW} W continuous, {selectedMotor.maxCurrentA} A max
+        {selectedMotor.kvRpmV} Kv, {formatWatts(selectedMotor.continuousPowerW)} continuous, {selectedMotor.maxCurrentA} A max
       </small>
     </label>
   );
@@ -334,7 +325,7 @@ export function BatterySelect({
         <select value={selectedBattery.id} onChange={(event) => onChange(event.target.value)}>
           {batteries.map((battery) => (
             <option key={battery.id} value={battery.id}>
-              {battery.name}
+              {battery.name} - {battery.massKg.toFixed(1)} kg
             </option>
           ))}
         </select>
@@ -362,7 +353,7 @@ export function PropellerSelect({
         <select value={selectedPropeller.id} onChange={(event) => onChange(event.target.value)}>
           {propellers.map((propeller) => (
             <option key={propeller.id} value={propeller.id}>
-              {propeller.name}
+              {propeller.name} - {formatInchesAsMeters(propeller.diameterIn)}
             </option>
           ))}
         </select>
@@ -379,6 +370,14 @@ export function formatInchesAsMm(valueIn: number) {
   return `${(valueIn * 25.4).toFixed(0)} mm`;
 }
 
+function formatInchesAsMeters(valueIn: number) {
+  return `${(valueIn * 0.0254).toFixed(2)} m`;
+}
+
+function formatWattsAsKw(valueW: number) {
+  return `${(valueW / 1000).toFixed(valueW >= 10000 ? 0 : 1)} kW`;
+}
+
 export function formatMetersAsMm(valueM: number) {
   return valueM > 0 ? `${(valueM * 1000).toFixed(0)} mm` : "not set";
 }
@@ -388,37 +387,29 @@ type Tone = "good" | "caution" | "bad" | "neutral";
 function propulsionDemandFromAircraft({
   aircraftCompute,
   aircraftMassKg,
-  battery,
-  motor,
+  missionEnduranceMin,
+  missionReservePct,
+  missionTakeoffMin,
   rotorCount,
-  targetEnduranceMin,
   targetThrustToWeight,
 }: {
   aircraftCompute: ReturnType<typeof computeSketchAerodynamics> | undefined;
   aircraftMassKg: number;
-  battery: BatterySample;
-  motor: MotorSample;
+  missionEnduranceMin: number;
+  missionReservePct: number;
+  missionTakeoffMin: number;
   rotorCount: number;
-  targetEnduranceMin: number;
   targetThrustToWeight: number;
 }) {
   const cruisePowerW = Math.max(aircraftCompute?.aerodynamics.cruisePowerW ?? 0, 0);
   const hoverPowerW = Math.max(aircraftCompute?.propulsion.hoverPowerTotalW ?? 0, aircraftMassKg * 9.80665 * 10);
   const takeoffPowerW = Math.max(hoverPowerW * Math.max(targetThrustToWeight, 1), cruisePowerW * 1.6);
-  const voltage = battery.cells * 3.7;
-  const availableEnergyWh = voltage * battery.capacityAh;
-  const hoverAllowanceMin = 2;
-  const reserveFactor = 1.2;
-  const requiredEnergyWh = (cruisePowerW * targetEnduranceMin) / 60 * reserveFactor + (hoverPowerW * hoverAllowanceMin) / 60;
-  const peakElectricalPowerW = Math.max(takeoffPowerW, motor.continuousPowerW * rotorCount * 0.35);
-  const peakCurrentA = peakElectricalPowerW / Math.max(voltage, 1);
-  const batteryMaxCurrentA = battery.capacityAh * battery.cRating;
+  const reserveFactor = 1 + Math.max(missionReservePct, 0) / 100;
+  const requiredEnergyWh = (takeoffPowerW * (Math.max(missionTakeoffMin, 0) / 60) + cruisePowerW * (Math.max(missionEnduranceMin, 1) / 60)) * reserveFactor;
+  const peakElectricalPowerW = takeoffPowerW;
   return {
-    availableEnergyWh,
-    batteryMaxCurrentA,
     cruisePowerW,
     hoverPowerW,
-    peakCurrentA,
     peakElectricalPowerW,
     requiredEnergyWh,
   };
@@ -465,7 +456,8 @@ function rankedPropulsionCombos({
           const thrustRatio = result.availableThrustToWeight / Math.max(targetThrustToWeight, 0.1);
           const motorPowerRatio = (motor.continuousPowerW * rotorCount) / Math.max(demand.peakElectricalPowerW, result.totalPowerW, 1);
           const energyRatio = (battery.cells * 3.7 * battery.capacityAh) / Math.max(demand.requiredEnergyWh, 1);
-          const currentRatio = (battery.capacityAh * battery.cRating) / Math.max(demand.peakCurrentA, result.takeoffCurrentA, 1);
+          const demandCurrentA = demand.peakElectricalPowerW / Math.max(battery.cells * 3.7, 1);
+          const currentRatio = (battery.capacityAh * battery.cRating) / Math.max(demandCurrentA, result.takeoffCurrentA, 1);
           const enduranceRatio = result.enduranceMin / Math.max(targetEnduranceMin, 1);
           const pass = diameterFit && thrustRatio >= 1 && motorPowerRatio >= 1.05 && energyRatio >= 1 && currentRatio >= 1.05;
           const caution = diameterFit && thrustRatio >= 0.85 && motorPowerRatio >= 0.85 && currentRatio >= 0.85;
@@ -491,19 +483,18 @@ function ratioVerdict(value: number, good: number, caution: number): { text: str
   if (!Number.isFinite(value) || value <= 0) return { text: "not available", tone: "neutral" };
   if (value >= good) return { text: "good margin", tone: "good" };
   if (value >= caution) return { text: "tight margin", tone: "caution" };
+  if (value >= 1) return { text: "at limit", tone: "caution" };
   return { text: "undersized", tone: "bad" };
-}
-
-function demandVerdict(value: number, _good: number, caution: number, bad: number): { text: string; tone: Tone } {
-  if (!Number.isFinite(value) || value <= 0) return { text: "not available", tone: "neutral" };
-  if (value <= caution) return { text: "reasonable", tone: "good" };
-  if (value <= bad) return { text: "demanding", tone: "caution" };
-  return { text: "very demanding", tone: "bad" };
 }
 
 function formatWatts(value: number) {
   if (!Number.isFinite(value)) return "--";
   return value >= 1000 ? `${(value / 1000).toFixed(2)} kW` : `${value.toFixed(0)} W`;
+}
+
+function formatSpeedKt(valueMS: number) {
+  if (!Number.isFinite(valueMS)) return "--";
+  return `${(valueMS / metersPerSecondPerKnot).toFixed(1)} kt`;
 }
 
 export function PropulsionNumberField({

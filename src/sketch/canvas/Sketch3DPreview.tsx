@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { ArcballControls } from "three/examples/jsm/controls/ArcballControls.js";
 import type { SizeCadGeometry, SizePoint, SizeShape } from "../../sizing";
 import type { CanvasViewMode } from "../types";
 import {
@@ -10,10 +10,12 @@ import {
   chordExtentsAtX,
   effectiveZOffsetM,
   incidenceAtStation,
+  liftingSurfaceCenterZAtX,
   nacaSymmetricHalfThickness,
   shapeTouchesMirrorAxis,
   shapeTouchesMirrorPlane,
   sideViewStationX,
+  topViewReferenceLine3DPoints,
   verticalReferenceX,
 } from "../geometry";
 
@@ -91,7 +93,7 @@ export function Sketch3DPreview({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
-  const controlsRef = useRef<OrbitControls | null>(null);
+  const controlsRef = useRef<ArcballControls | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
   const referenceGroupRef = useRef<THREE.Group | null>(null);
   const hasFitRef = useRef(false);
@@ -122,13 +124,19 @@ export function Sketch3DPreview({
     renderer.domElement.className = "sketch-3d-canvas";
     host.appendChild(renderer.domElement);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
+    const controls = new ArcballControls(camera, renderer.domElement, scene);
+    controls.adjustNearFar = true;
+    controls.cursorZoom = true;
+    controls.dampingFactor = 18;
+    controls.enableAnimations = true;
+    controls.enableFocus = false;
     controls.enablePan = true;
     controls.enableRotate = active;
     controls.enableZoom = true;
-    controls.target.set(0, 0, 0);
+    controls.rotateSpeed = 1.25;
+    controls.scaleFactor = 1.08;
+    controls.setGizmosVisible(false);
+    arcballTarget(controls).set(0, 0, 0);
     controlsRef.current = controls;
     controls.addEventListener("start", onOrbitStart);
 
@@ -245,7 +253,7 @@ function revolvedBodiesForPreview(shapes: SizeShape[]): RevolvedBodyPreview[] {
   return shapes.flatMap((shape) => {
     if (shape.role !== "body") return [];
     if (shape.sketchViewMode === "side") return [];
-    const geometry = shape.cadGeometry ?? cadGeometryForShape(shape, shapes);
+    const geometry = cadGeometryForShape(shape, shapes) ?? shape.cadGeometry;
     if (!geometry || geometry.kind !== "revolvedBody") return [];
     const axis = revolveAxisForShape(shape, shapes);
     const profile = geometry.profile?.length ? geometry.profile : shape.points.map((point) => ({ ...point, xM: Math.abs(point.xM) }));
@@ -258,7 +266,7 @@ function revolvedBodiesForPreview(shapes: SizeShape[]): RevolvedBodyPreview[] {
 function liftingSurfacesForPreview(shapes: SizeShape[]): LiftingSurfacePreview[] {
   return shapes.flatMap((shape) => {
     if (shape.role !== "liftingSurface" || shape.sketchViewMode === "side" || shape.points.length < 3) return [];
-    const preview = liftingSurfacePreviewFromShape(shape);
+    const preview = liftingSurfacePreviewFromShape(shape, shapes);
     if (!preview) return [];
     const localMirrors = shapes
       .filter((candidate) => candidate.role === "mirrorPlane" && candidate.id !== shape.id && shapeTouchesMirrorPlane(shape, candidate))
@@ -275,7 +283,7 @@ function partBoxesForPreview(shapes: SizeShape[]): PartBoxPreview[] {
   return shapes.flatMap((shape) => {
     const partType = shape.partType ?? "payload";
     if (shape.role !== "part" || (partType !== "payload" && partType !== "battery") || shape.points.length < 3) return [];
-    const geometry = shape.cadGeometry ?? cadGeometryForShape(shape, shapes);
+    const geometry = cadGeometryForShape(shape, shapes) ?? shape.cadGeometry;
     if (!geometry || geometry.kind !== "box") return [];
     const centerline = shapeTouchesMirrorAxis(shape);
     const centerX = centerline ? 0 : geometry.centerM[1];
@@ -309,7 +317,7 @@ function mirrorPartBoxPreview(box: PartBoxPreview): PartBoxPreview {
 function motorCylindersForPreview(shapes: SizeShape[]): MotorCylinderPreview[] {
   return shapes.flatMap((shape) => {
     if (shape.role !== "part" || shape.partType !== "motor" || shape.points.length < 2) return [];
-    const geometry = shape.cadGeometry ?? cadGeometryForShape(shape, shapes);
+    const geometry = cadGeometryForShape(shape, shapes) ?? shape.cadGeometry;
     if (!geometry || geometry.kind !== "cylinder") return [];
     const motor = {
       axis: new THREE.Vector3(geometry.axisM[1], geometry.axisM[0], geometry.axisM[2]).normalize(),
@@ -337,7 +345,7 @@ function mirrorMotorCylinderPreview(motor: MotorCylinderPreview): MotorCylinderP
 function rotorsForPreview(shapes: SizeShape[]): RotorPreview[] {
   return shapes.flatMap((shape) => {
     if (shape.role !== "part" || shape.partType !== "rotor" || shape.points.length < 2) return [];
-    const geometry = shape.cadGeometry ?? cadGeometryForShape(shape, shapes);
+    const geometry = cadGeometryForShape(shape, shapes) ?? shape.cadGeometry;
     if (!geometry || geometry.kind !== "rotor") return [];
     const radial = new THREE.Vector3(geometry.axisM[1], geometry.axisM[0], geometry.axisM[2]).normalize();
     const rotor = {
@@ -373,8 +381,8 @@ function shouldMirrorLiftingSurfaceAcrossImplicitX(shape: SizeShape) {
   return maxX > thresholdM && minX >= -thresholdM;
 }
 
-function liftingSurfacePreviewFromShape(shape: SizeShape): LiftingSurfacePreview | null {
-  if (shape.liftingSurfaceKind === "lex") return flatLexPreviewFromShape(shape);
+function liftingSurfacePreviewFromShape(shape: SizeShape, shapes: SizeShape[]): LiftingSurfacePreview | null {
+  if (shape.liftingSurfaceKind === "lex") return flatLexPreviewFromShape(shape, shapes);
   const bounds = signedShapeBounds(shape);
   const rootX = Math.abs(bounds.minX) <= 0.002 ? 0 : bounds.minX;
   const tipX = Math.abs(bounds.maxX - rootX) < 0.01 ? rootX + 0.05 : bounds.maxX;
@@ -396,17 +404,17 @@ function liftingSurfacePreviewFromShape(shape: SizeShape): LiftingSurfacePreview
       leadingY,
       tipAirfoil,
       xM,
-      zOffsetM: effectiveZOffsetM(shape, []),
+      zOffsetM: liftingSurfaceCenterZAtX(shape, shapes, xM),
     });
   });
   if (sections.some((section) => section.length < 4)) return null;
   return { id: shape.id, label: shape.label, sections };
 }
 
-function flatLexPreviewFromShape(shape: SizeShape): LiftingSurfacePreview | null {
+function flatLexPreviewFromShape(shape: SizeShape, shapes: SizeShape[]): LiftingSurfacePreview | null {
   const points = shape.points
     .filter((point) => Number.isFinite(point.xM) && Number.isFinite(point.yM))
-    .map((point) => new THREE.Vector3(point.xM, point.yM, effectiveZOffsetM(shape, [])));
+    .map((point) => new THREE.Vector3(point.xM, point.yM, liftingSurfaceCenterZAtX(shape, shapes, point.xM)));
   if (points.length < 3) return null;
   return { id: shape.id, label: shape.label, planform: points, sections: [] };
 }
@@ -814,7 +822,11 @@ function sideSketchesForPreview(shapes: SizeShape[]): SideSketchPreview[] {
       revolveAxis,
       role: shape.role,
     };
-    const localMirrors = shouldMirrorSideSketchAcrossCenterline(shape) ? [mirrorSideSketchAcrossCenterline(preview)] : [];
+    const localMirrors = touchedMirrorPlane && shape.role === "liftingSurface"
+      ? [mirrorSideSketchAcrossMirrorPlane(preview, touchedMirrorPlane, stationX, effectiveZOffsetM(touchedMirrorPlane, shapes))]
+      : shouldMirrorSideSketchAcrossCenterline(shape)
+        ? [mirrorSideSketchAcrossCenterline(preview)]
+        : [];
     const previews = [preview, ...localMirrors];
     if (Math.abs(stationX) <= 0.001) return previews;
     return [...previews, ...previews.map(mirrorSideSketchPreview)];
@@ -893,6 +905,38 @@ function mirrorSideSketchAcrossCenterline(sketch: SideSketchPreview): SideSketch
     ...sketch,
     airfoilSections: sketch.airfoilSections?.map((section) => section.map(mirrorVector)),
     id: `${sketch.id}:mirror-z`,
+    label: `${sketch.label} mirror`,
+    mirrored: true,
+    points: sketch.points.map(mirrorVector),
+    revolveAxis: sketch.revolveAxis
+      ? {
+        ...sketch.revolveAxis,
+        end: mirrorVector(sketch.revolveAxis.end),
+        start: mirrorVector(sketch.revolveAxis.start),
+      }
+      : undefined,
+  };
+}
+
+function mirrorSideSketchAcrossMirrorPlane(sketch: SideSketchPreview, plane: SizeShape, stationX: number, zOffset: number): SideSketchPreview {
+  const [start, end] = plane.points;
+  if (!start || !end) return sketch;
+  const start3 = sidePointToPreviewVector(start, stationX, zOffset);
+  const end3 = sidePointToPreviewVector(end, stationX, zOffset);
+  const dy = end3.y - start3.y;
+  const dz = end3.z - start3.z;
+  const lengthSquared = dy * dy + dz * dz;
+  if (lengthSquared <= 1e-9) return sketch;
+  const mirrorVector = (point: THREE.Vector3) => {
+    const t = ((point.y - start3.y) * dy + (point.z - start3.z) * dz) / lengthSquared;
+    const projectionY = start3.y + dy * t;
+    const projectionZ = start3.z + dz * t;
+    return new THREE.Vector3(point.x, projectionY * 2 - point.y, projectionZ * 2 - point.z);
+  };
+  return {
+    ...sketch,
+    airfoilSections: sketch.airfoilSections?.map((section) => section.map(mirrorVector)),
+    id: `${sketch.id}:mirror-side-plane`,
     label: `${sketch.label} mirror`,
     mirrored: true,
     points: sketch.points.map(mirrorVector),
@@ -1056,7 +1100,8 @@ function createRevolvedBodyGroup(body: RevolvedBodyPreview, selected: boolean) {
   const sourceProfile = body.shape.points.filter((point) => Number.isFinite(point.xM) && Number.isFinite(point.yM));
   if (sourceProfile.length < 2) return group;
 
-  const zOffsetM = effectiveZOffsetM(body.shape, []);
+  const solvedZ = body.geometry.centerM[2];
+  const zOffsetM = Number.isFinite(solvedZ) ? solvedZ : effectiveZOffsetM(body.shape, []);
   const axisStart = new THREE.Vector3(body.axis.start.xM, body.axis.start.yM, zOffsetM);
   const axisEnd = new THREE.Vector3(body.axis.end.xM, body.axis.end.yM, zOffsetM);
   const axisVector = axisEnd.clone().sub(axisStart);
@@ -1181,19 +1226,23 @@ function createScaleGrid(bounds: PreviewBounds) {
   const group = new THREE.Group();
   const gridSize = Math.max(bounds.widthM, bounds.lengthM, 0.2);
   const divisions = Math.max(8, Math.ceil(gridSize / 0.05));
+  const tickLabelHeight = Math.min(0.12, Math.max(0.06, gridSize * 0.028));
   const grid = new THREE.GridHelper(gridSize, divisions, "#2f4657", "#172633");
   grid.rotation.x = Math.PI / 2;
   grid.position.set(bounds.centerX, bounds.centerY, -0.001);
   group.add(grid);
 
   const tickStep = scaleTickStep(gridSize);
+  const xLabelY = bounds.minY - tickStep * 0.55;
+  const yLabelX = bounds.maxX + tickStep * 0.55;
   const xStart = Math.ceil(bounds.minX / tickStep) * tickStep;
   const xEnd = Math.floor(bounds.maxX / tickStep) * tickStep;
   for (let x = xStart; x <= xEnd + tickStep / 2; x += tickStep) {
     if (Math.abs(x) < tickStep / 10) continue;
-    group.add(lineFromPoints([new THREE.Vector3(x, -0.006, 0.006), new THREE.Vector3(x, 0.006, 0.006)], new THREE.LineBasicMaterial({ color: "#5f7385" })));
-    const label = createTextSprite(`${Math.round(x * 1000)}`, "#f8fbff", 0.03);
-    label.position.set(x, -tickStep * 0.5, 0.012);
+    group.add(lineFromPoints([new THREE.Vector3(x, bounds.minY, 0.006), new THREE.Vector3(x, bounds.maxY, 0.006)], new THREE.LineBasicMaterial({ color: "#355064", transparent: true, opacity: 0.34 })));
+    const label = createTextSprite(`${Math.round(x * 1000)}`, "#e5f6ff", tickLabelHeight, { background: false });
+    label.position.set(x, xLabelY, 0.02);
+    label.renderOrder = 18;
     group.add(label);
   }
 
@@ -1201,9 +1250,10 @@ function createScaleGrid(bounds: PreviewBounds) {
   const yEnd = Math.floor(bounds.maxY / tickStep) * tickStep;
   for (let y = yStart; y <= yEnd + tickStep / 2; y += tickStep) {
     if (Math.abs(y) < tickStep / 10) continue;
-    group.add(lineFromPoints([new THREE.Vector3(-0.006, y, 0.006), new THREE.Vector3(0.006, y, 0.006)], new THREE.LineBasicMaterial({ color: "#5f7385" })));
-    const label = createTextSprite(`${Math.round(y * 1000)}`, "#f8fbff", 0.03);
-    label.position.set(tickStep * 0.5, y, 0.012);
+    group.add(lineFromPoints([new THREE.Vector3(bounds.minX, y, 0.006), new THREE.Vector3(bounds.maxX, y, 0.006)], new THREE.LineBasicMaterial({ color: "#355064", transparent: true, opacity: 0.34 })));
+    const label = createTextSprite(`${Math.round(y * 1000)}`, "#e5f6ff", tickLabelHeight, { background: false });
+    label.position.set(yLabelX, y, 0.02);
+    label.renderOrder = 18;
     group.add(label);
   }
 
@@ -1215,21 +1265,83 @@ function createAxisReference(bounds: PreviewBounds) {
   const xMaterial = new THREE.LineBasicMaterial({ color: "#7dd3fc", transparent: true, opacity: 0.72 });
   const yMaterial = new THREE.LineBasicMaterial({ color: "#facc15", transparent: true, opacity: 0.78 });
   const zMaterial = new THREE.LineBasicMaterial({ color: "#34d399", transparent: true, opacity: 0.72 });
-  group.add(lineFromPoints([new THREE.Vector3(bounds.minX, 0, 0.01), new THREE.Vector3(bounds.maxX, 0, 0.01)], xMaterial));
-  group.add(lineFromPoints([new THREE.Vector3(0, bounds.minY, 0.012), new THREE.Vector3(0, bounds.maxY, 0.012)], yMaterial));
-  group.add(lineFromPoints([new THREE.Vector3(0, 0, bounds.minZ), new THREE.Vector3(0, 0, bounds.maxZ)], zMaterial));
-  const xLabel = createTextSprite("X", "#7dd3fc", 0.036);
-  xLabel.position.set(bounds.maxX, 0, 0.025);
+  const labelPad = Math.max(bounds.widthM, bounds.lengthM, bounds.maxZ - bounds.minZ, 0.2) * 0.08;
+  const axisLabelHeight = Math.min(0.28, Math.max(0.14, Math.max(bounds.widthM, bounds.lengthM, bounds.maxZ - bounds.minZ, 0.2) * 0.065));
+  group.add(lineFromPoints([new THREE.Vector3(bounds.minX - labelPad, 0, 0.01), new THREE.Vector3(bounds.maxX + labelPad, 0, 0.01)], xMaterial));
+  group.add(lineFromPoints([new THREE.Vector3(0, bounds.minY - labelPad, 0.012), new THREE.Vector3(0, bounds.maxY + labelPad, 0.012)], yMaterial));
+  group.add(lineFromPoints([new THREE.Vector3(0, 0, bounds.minZ - labelPad), new THREE.Vector3(0, 0, bounds.maxZ + labelPad)], zMaterial));
+  const xLabel = createTextSprite("X", "#7dd3fc", axisLabelHeight, { background: false });
+  xLabel.position.set(bounds.maxX + labelPad, 0, axisLabelHeight * 0.7);
+  xLabel.renderOrder = 20;
   group.add(xLabel);
-  const yLabel = createTextSprite("Y", "#facc15", 0.036);
-  yLabel.position.set(0, bounds.maxY, 0.025);
+  const yLabel = createTextSprite("Y", "#facc15", axisLabelHeight, { background: false });
+  yLabel.position.set(0, bounds.maxY + labelPad, axisLabelHeight * 0.7);
+  yLabel.renderOrder = 20;
   group.add(yLabel);
-  const zLabel = createTextSprite("Z", "#34d399", 0.036);
-  zLabel.position.set(0, 0, bounds.maxZ);
+  const zLabel = createTextSprite("Z", "#34d399", axisLabelHeight, { background: false });
+  zLabel.position.set(0, 0, bounds.maxZ + axisLabelHeight * 0.5);
+  zLabel.renderOrder = 20;
   group.add(zLabel);
-  const originLabel = createTextSprite("origin", "#dbeafe", 0.022);
+  const originLabel = createTextSprite("origin", "#dbeafe", axisLabelHeight * 0.45, { background: false });
   originLabel.position.set(0.012, 0.012, 0.016);
   group.add(originLabel);
+  group.add(createOriginAxisGizmo(bounds));
+  return group;
+}
+
+function createOriginAxisGizmo(bounds: PreviewBounds) {
+  const group = new THREE.Group();
+  const size = Math.min(0.48, Math.max(0.16, Math.max(bounds.widthM, bounds.lengthM, bounds.maxZ - bounds.minZ, 0.2) * 0.13));
+  const labelHeight = size * 0.38;
+  const arrowRadius = size * 0.035;
+  const arrowHeadLength = size * 0.18;
+  const arrowHeadWidth = size * 0.1;
+  const axes = [
+    { color: "#7dd3fc", dir: new THREE.Vector3(1, 0, 0), label: "X" },
+    { color: "#facc15", dir: new THREE.Vector3(0, 1, 0), label: "Y" },
+    { color: "#34d399", dir: new THREE.Vector3(0, 0, 1), label: "Z" },
+  ];
+  for (const axis of axes) {
+    const arrow = new THREE.ArrowHelper(axis.dir, new THREE.Vector3(0, 0, 0), size, axis.color, arrowHeadLength, arrowHeadWidth);
+    arrow.line.material = new THREE.LineBasicMaterial({ color: axis.color, depthTest: false, linewidth: arrowRadius });
+    arrow.cone.material = new THREE.MeshBasicMaterial({ color: axis.color, depthTest: false });
+    group.add(arrow);
+    const label = createTextSprite(axis.label, axis.color, labelHeight, { background: false, fontPx: 74 });
+    label.position.copy(axis.dir.clone().multiplyScalar(size + labelHeight * 0.5));
+    label.renderOrder = 30;
+    group.add(label);
+  }
+  group.add(createOriginPlanePatch([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(size * 0.55, 0, 0),
+    new THREE.Vector3(size * 0.55, size * 0.55, 0),
+    new THREE.Vector3(0, size * 0.55, 0),
+  ], "#7dd3fc"));
+  group.add(createOriginPlanePatch([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(size * 0.45, 0, 0),
+    new THREE.Vector3(size * 0.45, 0, size * 0.45),
+    new THREE.Vector3(0, 0, size * 0.45),
+  ], "#34d399"));
+  group.add(createOriginPlanePatch([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, size * 0.45, 0),
+    new THREE.Vector3(0, size * 0.45, size * 0.45),
+    new THREE.Vector3(0, 0, size * 0.45),
+  ], "#facc15"));
+  return group;
+}
+
+function createOriginPlanePatch(points: THREE.Vector3[], color: string) {
+  const group = new THREE.Group();
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  geometry.computeVertexNormals();
+  group.add(new THREE.Mesh(
+    geometry,
+    new THREE.MeshBasicMaterial({ color, depthWrite: false, opacity: 0.1, side: THREE.DoubleSide, transparent: true }),
+  ));
+  group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.65 })));
   return group;
 }
 
@@ -1250,9 +1362,10 @@ function createMirrorPlanes(shapes: SizeShape[], bounds: PreviewBounds) {
       continue;
     }
     const [start, end] = shape.points;
+    const zOffset = effectiveZOffsetM(shape, shapes);
     group.add(createVerticalMirrorPlane(
-      new THREE.Vector3(start.xM, start.yM, 0),
-      new THREE.Vector3(end.xM, end.yM, 0),
+      new THREE.Vector3(start.xM, start.yM, zOffset),
+      new THREE.Vector3(end.xM, end.yM, zOffset),
       bounds,
       shape.label,
     ));
@@ -1264,19 +1377,15 @@ function createReferenceLines(shapes: SizeShape[]) {
   const group = new THREE.Group();
   for (const shape of shapes) {
     if (shape.role !== "referenceLine" || shape.points.length < 2) continue;
-    const lineGroup = shape.sketchViewMode === "side" ? createSideViewReferenceLine(shape, shapes) : createTopViewReferenceLine(shape);
+    const lineGroup = shape.sketchViewMode === "side" ? createSideViewReferenceLine(shape, shapes) : createTopViewReferenceLine(shape, shapes);
     group.add(lineGroup);
   }
   return group;
 }
 
-function createTopViewReferenceLine(shape: SizeShape) {
+function createTopViewReferenceLine(shape: SizeShape, shapes: SizeShape[]) {
   const group = new THREE.Group();
-  const stationX = verticalReferenceX(shape);
-  const zOffset = effectiveZOffsetM(shape, []);
-  const points = stationX === undefined
-    ? shape.points.map((point) => new THREE.Vector3(point.xM, point.yM, zOffset))
-    : shape.points.map((point) => new THREE.Vector3(stationX, 0, -point.yM + zOffset));
+  const points = topViewReferenceLine3DPoints(shape, shapes).map((point) => new THREE.Vector3(point.xM, point.yM, point.zM));
   group.add(createDashedReferencePolyline(points, "#86efac", 0.9));
   if (!points.some((point) => Math.abs(point.x) <= 0.001)) {
     group.add(createDashedReferencePolyline(points.map((point) => new THREE.Vector3(-point.x, point.y, point.z)), "#86efac", 0.44));
@@ -1292,7 +1401,7 @@ function createSideViewReferenceLine(shape: SizeShape, shapes: SizeShape[]) {
   const group = new THREE.Group();
   const stationX = sideViewStationX(shape, shapes) ?? 0;
   const zOffset = effectiveZOffsetM(shape, shapes);
-  const points = shape.points.map((point) => new THREE.Vector3(stationX, point.yM, -point.xM + zOffset));
+  const points = shape.points.map((point) => new THREE.Vector3(stationX, point.yM, point.xM + zOffset));
   group.add(createDashedReferencePolyline(points, "#86efac", 0.9));
   if (Math.abs(stationX) > 0.001) {
     group.add(createDashedReferencePolyline(points.map((point) => new THREE.Vector3(-point.x, point.y, point.z)), "#86efac", 0.44));
@@ -1317,8 +1426,8 @@ function createSideViewMirrorPlane(shape: SizeShape, shapes: SizeShape[], bounds
   const [start, end] = shape.points;
   const stationX = sideViewStationX(shape, shapes) ?? 0;
   const zOffset = effectiveZOffsetM(shape, shapes);
-  const start3 = new THREE.Vector3(stationX, start.yM, -start.xM + zOffset);
-  const end3 = new THREE.Vector3(stationX, end.yM, -end.xM + zOffset);
+  const start3 = new THREE.Vector3(stationX, start.yM, start.xM + zOffset);
+  const end3 = new THREE.Vector3(stationX, end.yM, end.xM + zOffset);
   const ySpan = Math.max(Math.abs(end.yM - start.yM), 0.08);
   const zSpan = Math.max(Math.abs(end.xM - start.xM), 0.08);
   const zMin = Math.min(start3.z, end3.z) - zSpan * 0.5;
@@ -1384,7 +1493,7 @@ function lineFromPoints(points: THREE.Vector3[], material: THREE.Material) {
   return new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material);
 }
 
-function createTextSprite(text: string, color: string, heightM: number) {
+function createTextSprite(text: string, color: string, heightM: number, options: { background?: boolean; fontPx?: number } = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 128;
@@ -1392,13 +1501,22 @@ function createTextSprite(text: string, color: string, heightM: number) {
   let labelWidthPx = 80;
   if (context) {
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.font = "900 54px system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    const fontPx = options.fontPx ?? 54;
+    context.font = `900 ${fontPx}px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
     labelWidthPx = Math.min(canvas.width - 12, Math.max(54, context.measureText(text).width + 20));
-    context.fillStyle = "rgba(5, 12, 18, 0.86)";
-    context.fillRect((canvas.width - labelWidthPx) / 2, 18, labelWidthPx, 88);
+    if (options.background ?? true) {
+      context.fillStyle = "rgba(5, 12, 18, 0.86)";
+      context.fillRect((canvas.width - labelWidthPx) / 2, 18, labelWidthPx, 88);
+    }
     context.fillStyle = color;
     context.textAlign = "center";
     context.textBaseline = "middle";
+    if (!(options.background ?? true)) {
+      context.lineJoin = "round";
+      context.lineWidth = Math.max(5, fontPx * 0.11);
+      context.strokeStyle = "rgba(5, 12, 18, 0.94)";
+      context.strokeText(text, canvas.width / 2, canvas.height / 2);
+    }
     context.fillText(text, canvas.width / 2, canvas.height / 2);
   }
   const texture = new THREE.CanvasTexture(canvas);
@@ -1451,7 +1569,7 @@ function referenceBoundsForPreview(shapes: SizeShape[], bodies: RevolvedBodyPrev
       for (const point of shape.points) {
         ys.push(point.yM);
         const zOffset = effectiveZOffsetM(shape, shapes);
-        zs.push(referenceRolesForPreview(shape) ? -point.xM + zOffset : point.xM + zOffset);
+        zs.push(point.xM + zOffset);
       }
       continue;
     }
@@ -1459,9 +1577,9 @@ function referenceBoundsForPreview(shapes: SizeShape[], bodies: RevolvedBodyPrev
     const stationX = shape.role === "referenceLine" ? verticalReferenceX(shape) : undefined;
     for (const point of shape.points) {
       xs.push(stationX ?? point.xM);
-      ys.push(stationX === undefined ? point.yM : 0);
+      ys.push(point.yM);
       const zOffset = effectiveZOffsetM(shape, shapes);
-      zs.push(stationX === undefined ? zOffset : -point.yM + zOffset);
+      zs.push(zOffset);
     }
     if (shape.role === "referenceLine" && shape.points.every((point) => Math.abs(point.xM) > 0.001)) {
       for (const point of shape.points) xs.push(-point.xM);
@@ -1486,10 +1604,11 @@ function referenceBoundsForPreview(shapes: SizeShape[], bodies: RevolvedBodyPrev
 }
 
 function scaleTickStep(sizeM: number) {
-  if (sizeM <= 0.25) return 0.025;
-  if (sizeM <= 0.8) return 0.05;
-  if (sizeM <= 2) return 0.1;
-  return 0.25;
+  if (sizeM <= 0.25) return 0.05;
+  if (sizeM <= 0.8) return 0.1;
+  if (sizeM <= 2) return 0.25;
+  if (sizeM <= 5) return 0.5;
+  return 1;
 }
 
 function distancePointToAxis(point: SizePoint, start: SizePoint, end: SizePoint) {
@@ -1500,15 +1619,15 @@ function distancePointToAxis(point: SizePoint, start: SizePoint, end: SizePoint)
   return Math.abs((dy * point.xM - dx * point.yM + end.xM * start.yM - end.yM * start.xM) / length);
 }
 
-function fitCameraToGroups(camera: THREE.OrthographicCamera, controls: OrbitControls, groups: Array<THREE.Group | null>) {
+function fitCameraToGroups(camera: THREE.OrthographicCamera, controls: ArcballControls, groups: Array<THREE.Group | null>) {
   setCameraToView(camera, controls, groups, "top");
 }
 
-function setCameraToView(camera: THREE.OrthographicCamera, controls: OrbitControls, groups: Array<THREE.Group | null>, viewMode: CanvasViewMode | "orbit") {
+function setCameraToView(camera: THREE.OrthographicCamera, controls: ArcballControls, groups: Array<THREE.Group | null>, viewMode: CanvasViewMode | "orbit") {
   const box = boxForGroups(groups);
   if (box.isEmpty()) {
     camera.position.set(0, 0, 1);
-    controls.target.set(0, 0, 0);
+    arcballTarget(controls).set(0, 0, 0);
     controls.update();
     return;
   }
@@ -1540,8 +1659,12 @@ function setCameraToView(camera: THREE.OrthographicCamera, controls: OrbitContro
   camera.far = Math.max(distance * 100, 10);
   camera.zoom = 1;
   camera.updateProjectionMatrix();
-  controls.target.copy(center);
+  arcballTarget(controls).copy(center);
   controls.update();
+}
+
+function arcballTarget(controls: ArcballControls) {
+  return (controls as ArcballControls & { target: THREE.Vector3 }).target;
 }
 
 function boxForGroups(groups: Array<THREE.Group | null>) {
