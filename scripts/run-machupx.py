@@ -158,13 +158,20 @@ def main():
     high_result = solve_alpha(scene_path, high)
     if not (low_result["CL"] <= target_cl <= high_result["CL"]):
         sample = solve_alpha(scene_path, 0.0)
+        reference = high_result if target_cl > high_result["CL"] else low_result
         print(json.dumps({
             "ok": False,
             "message": "Target CL is outside the MachUpX alpha bracket.",
             "targetCL": target_cl,
+            "alphaDeg": reference["alphaDeg"],
+            "CL": reference["CL"],
+            "CD": reference["CD"],
+            "Cm": reference["Cm"],
+            "LD": reference["CL"] / reference["CD"] if abs(reference["CD"]) > 1e-12 else math.inf,
             "low": low_result,
             "high": high_result,
             "sample": sample,
+            "solverOutputs": solve_full(scene_path, reference["alphaDeg"]),
         }, default=convert))
         return
 

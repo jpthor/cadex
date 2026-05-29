@@ -36,6 +36,7 @@ export type SketchAeroComputation = {
     tailplaneArmM: number;
     finAreaM2: number;
     finArmM: number;
+    lexAreaM2: number;
     rotorDiskAreaM2: number;
     dragReferenceAreaM2: number;
   };
@@ -63,7 +64,22 @@ export type SketchAeroComputation = {
     liftToDrag: number;
     dragN: number;
     cruisePowerW: number;
+    maxLiftCoefficientClean: number;
+    maxLiftCoefficientWithLex: number;
+    stallSpeedCleanMS: number;
     stallSpeedMS: number;
+  };
+  lex: {
+    active: boolean;
+    areaM2: number;
+    areaRatio: number;
+    deltaMaxLiftCoefficient: number;
+    influencedAreaM2: number;
+    influencedAreaRatio: number;
+    influencedBodyAreaM2: number;
+    influencedWingAreaM2: number;
+    vortexStrength: number;
+    stallSpeedReductionPct: number;
   };
   propulsion: {
     rotorCount: number;
@@ -99,7 +115,10 @@ export const auditedSizingAssumptions = {
     wing: 1,
     tailplane: 0.9,
     fin: 0.7,
+    lex: 0.45,
   } satisfies Record<LiftingSurfaceKind, number>,
+  tailplaneDynamicPressureRatio: 3.45,
+  tailplaneDownwashGradient: 0,
   rhoKgM3: 1.225,
   hoverFigureOfMerit: 0.68,
   oswaldEfficiency: 0.75,
@@ -196,6 +215,7 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
   const wingStats = liftingStats.filter((stats) => stats.kind === "wing");
   const tailStats = liftingStats.filter((stats) => stats.kind === "tailplane");
   const finStats = liftingStats.filter((stats) => stats.kind === "fin");
+  const lexStats = liftingStats.filter((stats) => stats.kind === "lex");
   const referenceStats = wingStats.length ? wingStats : liftingStats;
   const wingAreaM2 = sum(referenceStats.map((stats) => stats.areaM2));
   const wingSpanM = Math.max(0, ...referenceStats.map((stats) => stats.spanM));
@@ -219,6 +239,7 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
   );
   const tailplaneAreaM2 = sum(tailStats.map((stats) => stats.areaM2));
   const finAreaM2 = sum(finStats.map((stats) => stats.areaM2));
+  const lexAreaM2 = sum(lexStats.map((stats) => stats.areaM2));
   const tailplaneArmM = Math.max(0, wingAerodynamicCenterY - tailAerodynamicCenterY);
   const finArmM = Math.max(0, wingAerodynamicCenterY - finAerodynamicCenterY);
   const tailVolumeCoefficient = tailplaneAreaM2 > 0
@@ -246,8 +267,14 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
   const dragCoefficient = hasAerodynamicReference ? parasiteDragCoefficient + inducedDragCoefficient : bluntDragCoefficient;
   const dragN = hasDragReference ? dynamicPressurePa * dragReferenceAreaM2 * dragCoefficient : 0;
   const cruisePowerW = hasDragReference ? (dragN * cruiseSpeedMS) / auditedSizingAssumptions.propulsiveEfficiency : 0;
+  const maxLiftCoefficientClean = auditedSizingAssumptions.maxLiftCoefficient;
+  const lexVortex = estimateLexVortex(project.shapes, lexStats, wingStats, wingAreaM2, wingAerodynamicCenterY);
+  const maxLiftCoefficientWithLex = maxLiftCoefficientClean + lexVortex.deltaMaxLiftCoefficient;
+  const stallSpeedCleanMS = hasAerodynamicReference
+    ? Math.sqrt((2 * weightN) / Math.max(auditedSizingAssumptions.rhoKgM3 * wingAreaM2 * maxLiftCoefficientClean, 0.001))
+    : 0;
   const stallSpeedMS = hasAerodynamicReference
-    ? Math.sqrt((2 * weightN) / Math.max(auditedSizingAssumptions.rhoKgM3 * wingAreaM2 * auditedSizingAssumptions.maxLiftCoefficient, 0.001))
+    ? Math.sqrt((2 * weightN) / Math.max(auditedSizingAssumptions.rhoKgM3 * wingAreaM2 * maxLiftCoefficientWithLex, 0.001))
     : 0;
   const rotorDiskLoadingNpm2 = rotorDiskAreaM2 > 0 ? weightN / rotorDiskAreaM2 : 0;
   const rollStabilityIndex = hasAerodynamicReference ? averageDihedralDeg * liftCoefficient : 0;
@@ -263,6 +290,9 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
     hasAerodynamicReference && rollStabilityIndex > 6 ? "Strong dihedral effect. Roll may be very self-righting and sluggish." : "",
     hasAerodynamicReference && finStats.length && finVolumeCoefficient < 0.025 ? "Fin volume is low. Directional stability may be weak in forward flight." : "",
     rotorShapes.length && rotorDiskLoadingNpm2 > 160 ? "Rotor disk loading is high. Hover power will be expensive." : "",
+    lexStats.length && !wingStats.length ? "LEX surfaces need a marked wing before vortex-lift stall estimates are meaningful." : "",
+    lexStats.length && wingStats.length && lexVortex.influencedAreaM2 <= 0.001 ? "LEX vortex corridor does not pass over downstream body or lifting area." : "",
+    lexVortex.active ? "LEX vortex lift is an estimate for medium/high AoA only; validate with CFD or testing before relying on stall margin." : "",
   ].filter(Boolean));
 
   return {
@@ -290,6 +320,7 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
       tailplaneArmM,
       finAreaM2,
       finArmM,
+      lexAreaM2,
       rotorDiskAreaM2,
       dragReferenceAreaM2,
     },
@@ -317,7 +348,22 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
       liftToDrag: dragCoefficient > 0 ? liftCoefficient / dragCoefficient : 0,
       dragN,
       cruisePowerW,
+      maxLiftCoefficientClean,
+      maxLiftCoefficientWithLex,
+      stallSpeedCleanMS,
       stallSpeedMS,
+    },
+    lex: {
+      active: lexVortex.active,
+      areaM2: lexAreaM2,
+      areaRatio: wingAreaM2 > 0 ? lexAreaM2 / wingAreaM2 : 0,
+      deltaMaxLiftCoefficient: lexVortex.deltaMaxLiftCoefficient,
+      influencedAreaM2: lexVortex.influencedAreaM2,
+      influencedAreaRatio: wingAreaM2 > 0 ? lexVortex.influencedAreaM2 / wingAreaM2 : 0,
+      influencedBodyAreaM2: lexVortex.influencedBodyAreaM2,
+      influencedWingAreaM2: lexVortex.influencedWingAreaM2,
+      vortexStrength: lexVortex.vortexStrength,
+      stallSpeedReductionPct: stallSpeedCleanMS > 0 ? (1 - stallSpeedMS / stallSpeedCleanMS) * 100 : 0,
     },
     propulsion: {
       rotorCount: analysis.rotorCount ?? 0,
@@ -328,6 +374,133 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
     inertia: analysis.inertia,
     warnings,
   };
+}
+
+function estimateLexVortex(
+  shapes: SizeShape[],
+  lexStats: LiftingStats[],
+  wingStats: LiftingStats[],
+  wingAreaM2: number,
+  wingAerodynamicCenterY: number,
+) {
+  if (!lexStats.length || !wingStats.length || wingAreaM2 <= 0) {
+    return {
+      active: false,
+      deltaMaxLiftCoefficient: 0,
+      influencedAreaM2: 0,
+      influencedBodyAreaM2: 0,
+      influencedWingAreaM2: 0,
+      vortexStrength: 0,
+    };
+  }
+  const lexShapes = shapes.filter((shape) => shape.role === "liftingSurface" && shape.liftingSurfaceKind === "lex");
+  const areaRatio = clamp(sum(lexStats.map((stats) => stats.areaM2)) / Math.max(wingAreaM2, 0.001), 0, 0.3);
+  const corridors = lexShapes.map(lexVortexCorridor).filter((entry): entry is LexVortexCorridor => Boolean(entry));
+  const influence = downstreamLexInfluence(shapes, corridors);
+  const sweepStrength = weightedValue(
+    lexShapes.map((shape, index) => {
+      const bounds = shapeBounds(shape);
+      const lateralSpanM = Math.max(bounds.maxX - bounds.minX, 0.01);
+      const longitudinalRunM = Math.max(bounds.maxY - bounds.minY, 0.01);
+      const slenderness = longitudinalRunM / lateralSpanM;
+      const sweepFactor = clamp((slenderness - 0.55) / 1.7, 0.25, 1);
+      const sharpLeadingEdgeFactor = shape.points.length <= 5 ? 1 : 0.82;
+      const centerAheadOfWingFactor = shapeCentroid(shape).yM >= wingAerodynamicCenterY ? 1 : 0.55;
+      return {
+        value: sweepFactor * sharpLeadingEdgeFactor * centerAheadOfWingFactor,
+        weight: lexStats[index]?.areaM2 ?? 0.001,
+      };
+    }),
+    0.65,
+  );
+  const influencedAreaRatio = clamp(influence.weightedAreaM2 / Math.max(wingAreaM2, 0.001), 0, 0.55);
+  const vortexStrength = clamp((areaRatio * 2.6 + influencedAreaRatio * 1.8) * sweepStrength, 0, 1);
+  const deltaMaxLiftCoefficient = clamp(0.7 * influencedAreaRatio * vortexStrength, 0, 0.45);
+  return {
+    active: deltaMaxLiftCoefficient > 0.005 && influence.totalAreaM2 > 0.001,
+    deltaMaxLiftCoefficient,
+    influencedAreaM2: influence.totalAreaM2,
+    influencedBodyAreaM2: influence.bodyAreaM2,
+    influencedWingAreaM2: influence.wingAreaM2,
+    vortexStrength,
+  };
+}
+
+type LexVortexCorridor = {
+  startX: number;
+  startY: number;
+  widthM: number;
+};
+
+function lexVortexCorridor(shape: SizeShape): LexVortexCorridor | undefined {
+  if (shape.points.length < 3) return undefined;
+  const bounds = shapeBounds(shape);
+  const leadingY = Math.max(...shape.points.map((point) => point.yM));
+  const leadingPoints = shape.points.filter((point) => Math.abs(point.yM - leadingY) <= 0.01);
+  const apex = leadingPoints.reduce((best, point) => (Math.abs(point.xM) < Math.abs(best.xM) ? point : best), leadingPoints[0] ?? shape.points[0]);
+  const halfWidthM = Math.max(bounds.maxX - bounds.minX, bounds.maxX, 0.02);
+  return {
+    startX: Math.max(0, Math.abs(apex.xM)),
+    startY: apex.yM,
+    widthM: clamp(halfWidthM * 0.45, 0.025, 0.18),
+  };
+}
+
+function downstreamLexInfluence(shapes: SizeShape[], corridors: LexVortexCorridor[]) {
+  const empty = { bodyAreaM2: 0, totalAreaM2: 0, weightedAreaM2: 0, wingAreaM2: 0 };
+  if (!corridors.length) return empty;
+  return shapes.reduce((totals, shape) => {
+    const weight = lexInfluenceWeight(shape);
+    if (weight <= 0 || shape.points.length < 3) return totals;
+    const halfAreaM2 = sampledVortexOverlapArea(shape.points, corridors);
+    const totalAreaM2 = halfAreaM2 * 2;
+    totals.totalAreaM2 += totalAreaM2;
+    totals.weightedAreaM2 += totalAreaM2 * weight;
+    if (shape.role === "body") totals.bodyAreaM2 += totalAreaM2;
+    if (shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing") totals.wingAreaM2 += totalAreaM2;
+    return totals;
+  }, empty);
+}
+
+function lexInfluenceWeight(shape: SizeShape) {
+  if (shape.role === "body") return 0.35;
+  if (shape.role !== "liftingSurface") return 0;
+  const kind = shape.liftingSurfaceKind ?? "wing";
+  if (kind === "wing") return 1;
+  if (kind === "tailplane") return 0.45;
+  return 0;
+}
+
+function sampledVortexOverlapArea(points: SizePoint[], corridors: LexVortexCorridor[]) {
+  const halfPoints = points.map((point) => ({ ...point, xM: Math.abs(point.xM) }));
+  const halfAreaM2 = polygonArea(halfPoints);
+  if (halfAreaM2 <= 0) return 0;
+  const bounds = rawPointBounds(halfPoints);
+  const xSpan = Math.max(bounds.maxX - bounds.minX, 0.001);
+  const ySpan = Math.max(bounds.maxY - bounds.minY, 0.001);
+  const xSamples = clamp(Math.ceil(xSpan / 0.025), 8, 36);
+  const ySamples = clamp(Math.ceil(ySpan / 0.025), 8, 36);
+  let insideCount = 0;
+  let coveredCount = 0;
+  for (let xi = 0; xi < xSamples; xi += 1) {
+    const xM = bounds.minX + ((xi + 0.5) / xSamples) * xSpan;
+    for (let yi = 0; yi < ySamples; yi += 1) {
+      const yM = bounds.minY + ((yi + 0.5) / ySamples) * ySpan;
+      const point = { xM, yM };
+      if (!pointInPolygon(point, halfPoints)) continue;
+      insideCount += 1;
+      if (corridors.some((corridor) => pointInLexVortexCorridor(point, corridor))) coveredCount += 1;
+    }
+  }
+  return insideCount > 0 ? halfAreaM2 * (coveredCount / insideCount) : 0;
+}
+
+function pointInLexVortexCorridor(point: SizePoint, corridor: LexVortexCorridor) {
+  const downstreamM = corridor.startY - point.yM;
+  if (downstreamM < 0) return false;
+  const centerX = corridor.startX + downstreamM * 0.12;
+  const widthM = corridor.widthM + downstreamM * 0.06;
+  return Math.abs(point.xM - centerX) <= widthM;
 }
 
 function wingShapesDihedralStats(shapes: SizeShape[]) {
@@ -365,7 +538,7 @@ function wingShapeDihedralStats(shape: SizeShape, shapes: SizeShape[]) {
 }
 
 function dihedralBreakX(shape: SizeShape, shapes: SizeShape[]) {
-  if (shape.dihedralBreakStationId === "implicit-y-axis-mirror") return 0;
+  if (shape.dihedralBreakStationId === "implicit-x-axis-mirror" || shape.dihedralBreakStationId === "implicit-y-axis-mirror") return 0;
   const station = shapes.find((candidate) => candidate.id === shape.dihedralBreakStationId);
   return station ? verticalReferenceX(station) : undefined;
 }
@@ -785,19 +958,27 @@ function liftingSurfaceAeroStats(shape: SizeShape, stats: LiftingStats) {
 }
 
 function neutralPoint(aeroStats: AeroStats[], stats: LiftingStats[]) {
-  if (!aeroStats.length) return { xM: 0, yM: 0 };
-  const totalSlopeWeight = sum(aeroStats.map((entry) => entry.liftSlopeWeight));
+  const longitudinalStats = aeroStats.filter((entry) => entry.kind !== "fin");
+  if (!longitudinalStats.length) return { xM: 0, yM: 0 };
+  const totalSlopeWeight = sum(longitudinalStats.map(longitudinalNeutralPointWeight));
   if (Math.abs(totalSlopeWeight) > 1e-9) {
     return {
       xM: 0,
-      yM: sum(aeroStats.map((entry) => entry.aerodynamicCenterY * entry.liftSlopeWeight)) / totalSlopeWeight,
+      yM: sum(longitudinalStats.map((entry) => entry.aerodynamicCenterY * longitudinalNeutralPointWeight(entry))) / totalSlopeWeight,
     };
   }
-  const totalArea = Math.max(sum(stats.map((entry) => entry.areaM2)), 0.01);
+  const longitudinalFallbackStats = stats.filter((entry) => entry.kind !== "fin");
+  const totalArea = Math.max(sum(longitudinalFallbackStats.map((entry) => entry.areaM2)), 0.01);
   return {
     xM: 0,
-    yM: sum(stats.map((entry) => entry.aerodynamicCenterY * entry.areaM2)) / totalArea,
+    yM: sum(longitudinalFallbackStats.map((entry) => entry.aerodynamicCenterY * entry.areaM2)) / totalArea,
   };
+}
+
+function longitudinalNeutralPointWeight(entry: AeroStats) {
+  if (entry.kind !== "tailplane") return entry.liftSlopeWeight;
+  const downwashFactor = clamp(1 - auditedSizingAssumptions.tailplaneDownwashGradient, 0.05, 1);
+  return entry.liftSlopeWeight * auditedSizingAssumptions.tailplaneDynamicPressureRatio * downwashFactor;
 }
 
 function blendedAirfoilProperties(shape: SizeShape) {
@@ -862,6 +1043,22 @@ function polygonArea(points: SizePoint[]) {
     return total + point.xM * next.yM - next.xM * point.yM;
   }, 0);
   return Math.abs(area) / 2;
+}
+
+function pointInPolygon(point: SizePoint, polygon: SizePoint[]) {
+  if (polygon.length < 3) return false;
+  let inside = false;
+  for (let index = 0, previousIndex = polygon.length - 1; index < polygon.length; previousIndex = index, index += 1) {
+    const current = polygon[index];
+    const previous = polygon[previousIndex];
+    const crossesY = current.yM > point.yM !== previous.yM > point.yM;
+    if (!crossesY) continue;
+    const denominator = previous.yM - current.yM;
+    if (Math.abs(denominator) <= 1e-12) continue;
+    const xAtY = ((previous.xM - current.xM) * (point.yM - current.yM)) / denominator + current.xM;
+    if (point.xM < xAtY) inside = !inside;
+  }
+  return inside;
 }
 
 function closedPerimeter(points: SizePoint[]) {

@@ -40,6 +40,7 @@ import {
   distanceBetweenPoints,
   enforceDimensions,
   implicitMirrorShapeId,
+  isImplicitMirrorShapeId,
   insertPointOnNearestSegment,
   measureDimension,
   sameDimensionTarget,
@@ -474,7 +475,7 @@ export function SketchWorkspace({
         if (activeRole === "part") return cleanPartDraftPoint(point, draftViewMode === "side");
         if (referenceRoles.includes(activeRole) && points.length >= 2) {
           const anchor = points[index === 0 ? 1 : 0];
-          return referenceEndpointPoint(points, anchor, point);
+          return referenceEndpointPoint(points, anchor, point, draftViewMode === "side");
         }
         return { ...entry, xM: draftViewMode === "side" ? point.xM : Math.abs(point.xM), yM: point.yM };
       }),
@@ -572,8 +573,8 @@ export function SketchWorkspace({
   function joinSelectedPointToSegment(masterShapeId: string, point: SizePoint) {
     const source = joinSourcePoint ?? nextMotorLockSource(masterShapeId);
     if (!source || source.shapeId === masterShapeId) return;
-    if (masterShapeId === implicitMirrorShapeId) {
-      const t = point.snapAttachment?.shapeId === implicitMirrorShapeId && point.snapAttachment.kind === "segment"
+    if (isImplicitMirrorShapeId(masterShapeId)) {
+      const t = isImplicitMirrorShapeId(point.snapAttachment?.shapeId) && point.snapAttachment?.kind === "segment"
         ? point.snapAttachment.t
         : (point.yM + 1000) / 2000;
       updateJoinedSourcePoint(source, {
@@ -825,7 +826,7 @@ function SuggestedDimensionsPanel({
     return (
       <div className="aircraft-panel suggested-dimensions-panel">
         <div className="aircraft-parameter-title">Suggested dimensions</div>
-        <p className="empty-text">Compute a suggested aircraft or draw key parts to see dimensions here.</p>
+        <p className="empty-text">Run sizing or draw key parts to see dimensions here.</p>
       </div>
     );
   }
@@ -914,7 +915,7 @@ function bodyDimensionRows(shape: SizeShape) {
 function liftingDimensionRows(shape: SizeShape, shapes: SizeShape[]) {
   const stats = liftingSurfaceStats(shape, shapes);
   const kind = shape.liftingSurfaceKind ?? "wing";
-  const totalAreaLabel = kind === "tailplane" ? "Total tailplane area" : kind === "wing" ? "Total wing area" : "Total area";
+  const totalAreaLabel = kind === "tailplane" ? "Total tailplane area" : kind === "wing" ? "Total wing area" : kind === "lex" ? "Total LEX area" : "Total area";
   const bounds = shapeBounds(shape);
   const mirroredPair = bounds.minX > 0.005;
   if (kind === "fin") {
@@ -945,6 +946,14 @@ function liftingDimensionRows(shape: SizeShape, shapes: SizeShape[]) {
       { label: totalAreaLabel, value: `${stats.areaM2.toFixed(3)} m2` },
       ...(mirroredPair ? [{ label: "Area / tailplane", value: `${areaPerTailplaneM2.toFixed(3)} m2` }] : []),
       { label: "Airfoil", value: shape.airfoil ?? "NACA 0012" },
+    ];
+  }
+  if (kind === "lex") {
+    return [
+      { label: "Length", value: formatDimension(bounds.maxY - bounds.minY) },
+      { label: "Half-width", value: formatDimension(Math.max(bounds.maxX - bounds.minX, 0)) },
+      { label: "Mirrored width", value: formatDimension(Math.max(bounds.maxX, 0) * 2) },
+      { label: totalAreaLabel, value: `${stats.areaM2.toFixed(3)} m2` },
     ];
   }
   return [
@@ -1029,7 +1038,7 @@ function selectedSuggestedTarget(shape: SizeShape):
   }
   if (shape.role === "liftingSurface") {
     const liftingSurfaceKind = shape.liftingSurfaceKind ?? "wing";
-    return liftingSurfaceKind === "wing" || liftingSurfaceKind === "tailplane" || liftingSurfaceKind === "fin" ? { role: "liftingSurface", liftingSurfaceKind } : undefined;
+    return liftingSurfaceKind === "wing" || liftingSurfaceKind === "tailplane" || liftingSurfaceKind === "fin" || liftingSurfaceKind === "lex" ? { role: "liftingSurface", liftingSurfaceKind } : undefined;
   }
   return undefined;
 }
@@ -1042,6 +1051,7 @@ function partTypeFromName(label: string): PartType | undefined {
 }
 
 function liftingKindFromName(label: string): LiftingSurfaceKind | undefined {
+  if (/\blex\b|leading\s+edge\s+extension/.test(label)) return "lex";
   if (/\btail\s*planes?\b|\btailplanes?\b/.test(label)) return "tailplane";
   if (/\bfins?\b|\bvertical\s+tails?\b/.test(label)) return "fin";
   if (/\bwings?\b/.test(label)) return "wing";

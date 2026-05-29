@@ -21,7 +21,7 @@ export function EngineComputePanel() {
 
   return (
     <div className="aircraft-panel engine-compute-panel">
-      <div className="aircraft-parameter-title">Jet compute</div>
+      <div className="aircraft-parameter-title">Jet aero</div>
       <label className="sizing-field">
         <span>Engine</span>
         <div>

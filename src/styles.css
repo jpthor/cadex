@@ -1995,14 +1995,14 @@ button {
   stroke-width: 1.5;
 }
 
-.sizing-centerline.implicit-y-mirror {
+.sizing-centerline.implicit-x-mirror {
   stroke: rgba(250, 204, 21, 0.72);
   stroke-dasharray: none;
   stroke-width: 1.4;
   vector-effect: non-scaling-stroke;
 }
 
-.implicit-y-mirror-label {
+.implicit-x-mirror-label {
   fill: #fef08a;
   font-size: 11px;
   font-weight: 900;
@@ -2870,6 +2870,150 @@ button {
   min-width: 0;
 }
 
+.compute-graphs {
+  gap: 14px;
+}
+
+.compute-graph-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.compute-speed-summary {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(125, 160, 190, 0.18);
+  border-radius: 7px;
+  background: #0b151f;
+}
+
+.compute-curve-card {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(125, 160, 190, 0.18);
+  border-radius: 7px;
+  background: #0b151f;
+}
+
+.compute-curve-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.compute-curve-title span {
+  color: #a9bdcc;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.compute-curve-title strong {
+  color: #f8fbff;
+  font-size: 15px;
+}
+
+.compute-curve-card svg {
+  width: 100%;
+  aspect-ratio: 360 / 170;
+  overflow: visible;
+}
+
+.compute-overlay-card svg {
+  aspect-ratio: 360 / 170;
+}
+
+.compute-curve-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: #92a8ba;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.compute-curve-legend span {
+  white-space: nowrap;
+}
+
+.compute-curve-legend .drag {
+  color: #fbbf24;
+}
+
+.compute-curve-legend .power {
+  color: #34d399;
+}
+
+.compute-curve-gridline {
+  stroke: rgba(148, 163, 184, 0.24);
+  stroke-width: 1;
+}
+
+.compute-curve-line {
+  stroke-width: 2.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.compute-curve-drag {
+  stroke: #fbbf24;
+}
+
+.compute-curve-power {
+  stroke: #34d399;
+}
+
+.compute-curve-stall {
+  stroke: rgba(248, 113, 113, 0.55);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+}
+
+.compute-curve-cruise {
+  stroke: rgba(226, 232, 240, 0.48);
+  stroke-dasharray: 3 5;
+  stroke-width: 1;
+}
+
+.compute-curve-best {
+  stroke: rgba(167, 139, 250, 0.7);
+  stroke-dasharray: 2 3;
+  stroke-width: 1.2;
+}
+
+.compute-curve-range {
+  stroke: rgba(251, 191, 36, 0.7);
+  stroke-dasharray: 6 4;
+  stroke-width: 1.2;
+}
+
+.compute-curve-endurance {
+  stroke: rgba(52, 211, 153, 0.72);
+  stroke-dasharray: 6 4;
+  stroke-width: 1.2;
+}
+
+.compute-curve-point {
+  stroke: #07111b;
+  stroke-width: 2;
+}
+
+.compute-curve-target-point {
+  stroke: #f8fbff;
+  stroke-width: 2;
+}
+
+.compute-curve-axis-label {
+  fill: #8fa5b6;
+  font-size: 10px;
+  font-weight: 750;
+}
+
 .compute-warnings {
   display: grid;
   gap: 8px;
@@ -3016,9 +3160,10 @@ button {
 }
 
 .propulsion-workspace {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(260px, 1fr));
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  align-content: start;
   gap: 12px;
   min-height: 0;
   overflow: auto;
@@ -3026,8 +3171,10 @@ button {
 }
 
 .propulsion-panel {
+  flex: 0 1 calc((100% - 24px) / 3);
+  min-width: 300px;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -3038,7 +3185,7 @@ button {
 }
 
 .propulsion-summary-panel {
-  grid-column: 1 / -1;
+  flex-basis: 100%;
   display: grid;
   grid-template-columns: auto minmax(480px, 1fr) auto;
   align-items: center;
@@ -3187,13 +3334,25 @@ button {
 }
 
 .propulsion-results-panel {
-  grid-column: 1 / -1;
+  flex-basis: 100%;
+}
+
+.propulsion-demand-panel {
+  flex-basis: 100%;
+}
+
+.propulsion-selection-panel {
+  flex-basis: calc((100% - 24px) / 3);
 }
 
 .propulsion-result-groups {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+}
+
+.propulsion-result-groups.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .propulsion-result-group {
@@ -3225,6 +3384,51 @@ button {
   line-height: 1.45;
 }
 
+.propulsion-candidate-list {
+  display: grid;
+  gap: 8px;
+}
+
+.propulsion-candidate {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid rgba(125, 160, 190, 0.18);
+  border-radius: 7px;
+  background: #0c1721;
+  color: inherit;
+  text-align: left;
+}
+
+.propulsion-candidate.good {
+  border-color: rgba(134, 239, 172, 0.42);
+}
+
+.propulsion-candidate.caution {
+  border-color: rgba(253, 230, 138, 0.44);
+}
+
+.propulsion-candidate.bad {
+  border-color: rgba(253, 164, 175, 0.34);
+}
+
+.propulsion-candidate strong {
+  color: #f8fbff;
+  font-size: 12px;
+}
+
+.propulsion-candidate span {
+  color: #9fb3c4;
+  font-size: 11px;
+}
+
+.propulsion-candidate em {
+  color: #7dd3fc;
+  font-size: 11px;
+  font-style: normal;
+}
+
 .analysis-metric {
   display: flex;
   justify-content: space-between;
@@ -3244,6 +3448,22 @@ button {
   font-size: 10px;
   font-weight: 750;
   line-height: 1.25;
+}
+
+.analysis-metric .metric-note.good {
+  color: #86efac;
+}
+
+.analysis-metric .metric-note.caution {
+  color: #fde68a;
+}
+
+.analysis-metric .metric-note.bad {
+  color: #fda4af;
+}
+
+.analysis-metric .metric-note.neutral {
+  color: #9fb3c4;
 }
 
 .analysis-metric strong {

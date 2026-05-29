@@ -35,7 +35,7 @@ import {
 } from "../../sizing/auditedSizingEngine";
 import { partTouchesMirrorAxis } from "../diagnostics";
 import { referenceRoles } from "../constants";
-import { cadGeometryForShape, implicitMirrorShapeId, motorDepthM, verticalReferenceX } from "../geometry";
+import { cadGeometryForShape, effectiveZOffsetM, implicitMirrorShapeId, motorDepthM, verticalReferenceX } from "../geometry";
 import { NumberField, SketchPanelTitle } from "./shared";
 export function ShapeSelector({
   selectedShapeId,
@@ -90,6 +90,8 @@ export function ShapeEditor({
   const relatedShapes = shapes.length ? shapes : mirrorPlanes;
   const sideViewStationOptions = sideViewStationAnchorOptions(shape, relatedShapes);
   const selectedSideViewStation = sideViewStationOptions.find((option) => option.id === (shape.sideViewStationId ?? implicitMirrorShapeId));
+  const zStationOptions = zStationAnchorOptions(shape, relatedShapes);
+  const selectedZStation = zStationOptions.find((option) => option.id === (shape.zStationId ?? ""));
   const dihedralStationOptions = topViewStationAnchorOptions(shape, relatedShapes);
   const cadGeometry = cadGeometryForShape(shape, relatedShapes);
   const liftingStats = shape.role === "liftingSurface" ? liftingSurfaceStats(shape, relatedShapes) : undefined;
@@ -110,9 +112,21 @@ export function ShapeEditor({
       </label>
       {shape.sketchViewMode === "side" ? (
         <label className="sizing-field">
-          <span>X station</span>
+          <span>Y station</span>
           <select value={shape.sideViewStationId ?? implicitMirrorShapeId} onChange={(event) => onChange({ sideViewStationId: event.target.value })}>
             {sideViewStationOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {(shape.sketchViewMode ?? "top") === "top" && referenceRoles.includes(shape.role) ? (
+        <label className="sizing-field">
+          <span>Z station</span>
+          <select value={shape.zStationId ?? ""} onChange={(event) => onChange({ zStationId: event.target.value || undefined })}>
+            {zStationOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.label}
               </option>
@@ -145,7 +159,7 @@ export function ShapeEditor({
           />
         </>
       ) : null}
-      {shape.role !== "referenceLine" && shape.role !== "mirrorPlane" && !(shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing") ? (
+      {shape.role !== "referenceLine" && shape.role !== "mirrorPlane" && !(shape.role === "liftingSurface" && ((shape.liftingSurfaceKind ?? "wing") === "wing" || shape.liftingSurfaceKind === "lex")) ? (
         <NumberField
           label="Z lift"
           suffix="mm"
@@ -167,7 +181,7 @@ export function ShapeEditor({
               </button>
             ))}
           </div>
-          <div className="airfoil-panel">
+          {shape.liftingSurfaceKind !== "lex" ? <div className="airfoil-panel">
             <div className="segmented-control sizing-role-control" aria-label="Aerofoil station">
               <button className={activeAirfoilStation === "root" ? "active" : ""} onClick={() => onActiveAirfoilStationChange("root")}>
                 Root
@@ -198,7 +212,7 @@ export function ShapeEditor({
                 ))}
               </select>
             </label>
-          </div>
+          </div> : null}
           <label className="sizing-field">
             <span>Material</span>
             <select
@@ -212,7 +226,7 @@ export function ShapeEditor({
               ))}
             </select>
           </label>
-          <NumberField
+          {shape.liftingSurfaceKind !== "lex" ? <NumberField
             label={`${activeAirfoilStation === "root" ? "Root" : "Tip"} incidence`}
             suffix="deg"
             value={stationIncidence(shape, activeAirfoilStation)}
@@ -228,12 +242,12 @@ export function ShapeEditor({
                 },
               })
             }
-          />
-          <div className="shape-readout">
+          /> : null}
+          {shape.liftingSurfaceKind !== "lex" ? <div className="shape-readout">
             <span>
               Twist {(stationIncidence(shape, "tip") - stationIncidence(shape, "root")).toFixed(1)} deg
             </span>
-          </div>
+          </div> : null}
           <NumberField
             label="Thickness"
             suffix="mm"
@@ -280,7 +294,8 @@ export function ShapeEditor({
       ) : referenceRoles.includes(shape.role) ? (
         <div className="shape-readout">
           <span>{shape.role === "mirrorPlane" ? "Mirrors touching geometry before origin mirror" : "Reference snap line"}</span>
-          {shape.sketchViewMode === "side" ? <span>Aircraft X station {selectedSideViewStation?.label ?? "Y-axis"}</span> : null}
+          {shape.sketchViewMode === "side" ? <span>Aircraft Y station {selectedSideViewStation?.label ?? "Y-axis"}</span> : null}
+          {(shape.sketchViewMode ?? "top") === "top" && referenceRoles.includes(shape.role) ? <span>Aircraft Z station {selectedZStation?.label ?? "Z-axis"}</span> : null}
         </div>
       ) : (
         <>
@@ -296,7 +311,7 @@ export function ShapeEditor({
               ]}
               notes={[
                 `Plan area ${batteryPlanformAreaEstimate(shape).toFixed(4)} m2`,
-                partTouchesMirrorAxis(shape) ? "1 centerline battery, mirrored from Y axis" : "2 mirrored batteries",
+                partTouchesMirrorAxis(shape) ? "1 centerline battery, mirrored from X axis" : "2 mirrored batteries",
                 "LiPo density 1.70 kg/L",
               ]}
             />
@@ -431,6 +446,20 @@ function sideViewStationAnchorOptions(shape: SizeShape, shapes: SizeShape[]) {
   return [...options, ...topViewStationAnchorOptions(shape, shapes)];
 }
 
+function zStationAnchorOptions(shape: SizeShape, shapes: SizeShape[]) {
+  const options = [{ id: "", label: "Manual / drawn" }];
+  if (shape.sketchViewMode !== "side") return options;
+  const stations = topViewStationAnchorOptions(shape, shapes).map((option) => ({
+    ...option,
+    label: option.label.replace(/^(.+) \(y=/, "$1 (z="),
+  }));
+  const missingId = shape.zStationId;
+  if (missingId && !stations.some((option) => option.id === missingId)) {
+    stations.push({ id: missingId, label: "Missing Z station" });
+  }
+  return [...options, ...stations];
+}
+
 function topViewStationAnchorOptions(shape: SizeShape, shapes: SizeShape[]) {
   const options: Array<{ id: string; label: string }> = [];
   const stations = shapes
@@ -450,8 +479,8 @@ function topViewStationAnchorOptions(shape: SizeShape, shapes: SizeShape[]) {
 
 function formatSignedMm(valueM: number) {
   const mm = Math.round(valueM * 1000);
-  if (mm === 0) return "x=0";
-  return `x=${mm > 0 ? "+" : ""}${mm} mm`;
+  if (mm === 0) return "y=0";
+  return `y=${mm > 0 ? "+" : ""}${mm} mm`;
 }
 
 function polygonAreaM2(points: SizeShape["points"]) {

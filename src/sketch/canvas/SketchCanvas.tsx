@@ -31,6 +31,7 @@ import {
   flattenPointForFrontView,
   fromCanvas,
   implicitMirrorShapeId,
+  isImplicitMirrorShapeId,
   isPointVisible,
   partShapePointsFromDraft,
   projectedShape,
@@ -38,6 +39,7 @@ import {
   svgPointFromClient,
   svgPointFromEvent,
   toCanvas,
+  topProjectionShape,
   translateReferenceLinePoints,
   translateShapePointsForDrag,
 } from "../geometry";
@@ -189,6 +191,7 @@ export function SketchCanvas({
   const shapesVisibleInCurrentView = visibleShapes.filter((shape) => {
     if (!shape.sketchViewMode) return true;
     if (shape.sketchViewMode === renderViewMode) return true;
+    if (renderViewMode === "top" && shape.sketchViewMode === "side" && referenceRoles.includes(shape.role)) return true;
     return renderViewMode === "front" && shape.sketchViewMode === "side";
   });
   const displayView = {
@@ -196,14 +199,18 @@ export function SketchCanvas({
     originY: renderViewMode === "front" ? canvasView.height / 2 : canvasView.originY,
   };
   const displayShapes = renderViewMode === "top"
-    ? shapesVisibleInCurrentView
+    ? shapesVisibleInCurrentView.map((shape) => (shape.sketchViewMode === "side" ? topProjectionShape(shape, shapes) : shape))
     : shapesVisibleInCurrentView.map((shape) => (shape.sketchViewMode === renderViewMode ? shape : projectedShape(shape, 1, shapes, renderViewMode)));
   const visibleReferenceShapes = showSizingReference ? sizingReferenceShapes : [];
   const displayReferenceShapes =
     renderViewMode !== "top"
       ? visibleReferenceShapes.map((shape) => projectedShape(shape, 1, shapes, renderViewMode))
       : visibleReferenceShapes;
-  const renderedShapes = [...displayShapes].sort((a, b) => Number(referenceRoles.includes(a.role)) - Number(referenceRoles.includes(b.role)));
+  const renderedShapes = [...displayShapes].sort((a, b) => {
+    const referenceOrder = Number(referenceRoles.includes(a.role)) - Number(referenceRoles.includes(b.role));
+    if (referenceOrder) return referenceOrder;
+    return Number(a.id === selectedShapeId) - Number(b.id === selectedShapeId);
+  });
   const canDrawDirectlyInSideView = drawActive && viewMode === "side";
   const topDraftPoints = draftRole === "part"
     ? partShapePointsFromDraft(activePartType, draftPreviewPoint ? [...draftPoints, draftPreviewPoint] : draftPoints, canDrawDirectlyInSideView)
@@ -341,7 +348,7 @@ export function SketchCanvas({
     if (!drawActive) {
       if (event.shiftKey) {
         const point = pointFromEvent(event);
-        if (point.snapAttachment?.shapeId === implicitMirrorShapeId) {
+        if (isImplicitMirrorShapeId(point.snapAttachment?.shapeId)) {
           event.stopPropagation();
           onJoinToSegment(implicitMirrorShapeId, point);
           return;
@@ -391,9 +398,10 @@ export function SketchCanvas({
         translateShapePointsForDrag(dragTarget.originalPoints, dragTarget.startPoint, point),
       );
     } else if (dragTarget.kind === "shapeLine") {
+      const lineShape = shapes.find((shape) => shape.id === dragTarget.shapeId);
       onMoveShapeLine(
         dragTarget.shapeId,
-        translateReferenceLinePoints(dragTarget.originalPoints, dragTarget.startPoint, point),
+        translateReferenceLinePoints(dragTarget.originalPoints, dragTarget.startPoint, point, lineShape?.sketchViewMode === "side"),
       );
     } else if (dragTarget.kind === "dimensionLabel") {
       const midpoint = dimensionMidpoint(dragTarget.dimensionId);
@@ -705,14 +713,14 @@ export function SketchCanvas({
         xAxisLabel={renderViewMode === "side" ? "Z" : renderViewMode === "top" ? "Y" : "X"}
         yAxisLabel={renderViewMode === "side" ? "X" : renderViewMode === "top" ? "X" : "Z"}
       />
-      <line className="sizing-centerline implicit-y-mirror" x1={displayView.originX} y1="0" x2={displayView.originX} y2={displayView.height} />
+      <line className="sizing-centerline implicit-x-mirror" x1={displayView.originX} y1="0" x2={displayView.originX} y2={displayView.height} />
       <circle className="sizing-origin" cx={displayView.originX} cy={displayView.originY} r="5" />
       <text className="view-label" x="28" y="42">{renderViewMode === "top" ? "Top down sketch" : `${renderViewMode[0].toUpperCase() + renderViewMode.slice(1)} projected reference`}</text>
       {isPointVisible(displayView.originX, displayView.originY, displayView) ? (
         <text className="view-label subtle" x={displayView.originX + 10} y={displayView.originY - 12}>origin</text>
       ) : null}
       {renderViewMode === "top" && isPointVisible(displayView.originX, 46, displayView) ? (
-        <text className="implicit-y-mirror-label" x={displayView.originX + 10} y="58">Y=0 mirror</text>
+        <text className="implicit-x-mirror-label" x={displayView.originX + 10} y="58">X=0 mirror</text>
       ) : null}
       {displayReferenceShapes.length ? (
         <g className="sizing-reference-layer">

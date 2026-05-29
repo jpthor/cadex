@@ -1838,7 +1838,7 @@
         "tailVolumeTarget": 0.55,
         "takeoffThrustToWeight": 1.4
       },
-      "selectedShapeId": "part-a01ec89c-3797-43ab-b9fc-6830451a430b",
+      "selectedShapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
       "shapes": [
         {
           "bodyMaterial": "carbonFibre",
@@ -1894,7 +1894,7 @@
               "snapAttachment": {
                 "kind": "segment",
                 "segmentIndex": 0,
-                "shapeId": "implicit-y-axis-mirror",
+                "shapeId": "implicit-x-axis-mirror",
                 "t": 0.4999998140438074
               },
               "xM": 0,
@@ -1927,7 +1927,7 @@
               "snapAttachment": {
                 "kind": "segment",
                 "segmentIndex": 0,
-                "shapeId": "implicit-y-axis-mirror",
+                "shapeId": "implicit-x-axis-mirror",
                 "t": 0.4992607264750214
               },
               "xM": 0,
@@ -2159,7 +2159,7 @@
               "snapAttachment": {
                 "kind": "segment",
                 "segmentIndex": 0,
-                "shapeId": "implicit-y-axis-mirror",
+                "shapeId": "implicit-x-axis-mirror",
                 "t": 0.4998761201477071
               },
               "xM": 0,
@@ -2496,7 +2496,7 @@
               "snapAttachment": {
                 "kind": "segment",
                 "segmentIndex": 0,
-                "shapeId": "implicit-y-axis-mirror",
+                "shapeId": "implicit-x-axis-mirror",
                 "t": 0.4992524028459061
               },
               "xM": 0,
@@ -2517,7 +2517,7 @@
               "snapAttachment": {
                 "kind": "segment",
                 "segmentIndex": 0,
-                "shapeId": "implicit-y-axis-mirror",
+                "shapeId": "implicit-x-axis-mirror",
                 "t": 0.49913403731257067
               },
               "xM": 0,
@@ -2541,7 +2541,7 @@
               "snapAttachment": {
                 "kind": "segment",
                 "segmentIndex": 0,
-                "shapeId": "implicit-y-axis-mirror",
+                "shapeId": "implicit-x-axis-mirror",
                 "t": 0.4991131238532132
               },
               "xM": 0,
@@ -2554,7 +2554,7 @@
               "snapAttachment": {
                 "kind": "segment",
                 "segmentIndex": 0,
-                "shapeId": "implicit-y-axis-mirror",
+                "shapeId": "implicit-x-axis-mirror",
                 "t": 0.49931076115707945
               },
               "xM": 0,
@@ -2570,9 +2570,9 @@
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 874,
-        "originX": 312.1928068170971,
-        "originY": 152.2682868129039,
-        "scale": 358.4959832677407,
+        "originX": 196.61174839435228,
+        "originY": 100.98594003040068,
+        "scale": 529.8401668362977,
         "width": 900
       }
     },
@@ -2618,7 +2618,7 @@
       "tailVolumeTarget": 0.55,
       "takeoffThrustToWeight": 1.4
     },
-    "selectedShapeId": "part-a01ec89c-3797-43ab-b9fc-6830451a430b",
+    "selectedShapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176",
     "shapes": [
       {
         "bodyMaterial": "carbonFibre",
@@ -2674,7 +2674,7 @@
             "snapAttachment": {
               "kind": "segment",
               "segmentIndex": 0,
-              "shapeId": "implicit-y-axis-mirror",
+              "shapeId": "implicit-x-axis-mirror",
               "t": 0.4999998140438074
             },
             "xM": 0,
@@ -2707,7 +2707,7 @@
             "snapAttachment": {
               "kind": "segment",
               "segmentIndex": 0,
-              "shapeId": "implicit-y-axis-mirror",
+              "shapeId": "implicit-x-axis-mirror",
               "t": 0.4992607264750214
             },
             "xM": 0,
@@ -2939,7 +2939,7 @@
             "snapAttachment": {
               "kind": "segment",
               "segmentIndex": 0,
-              "shapeId": "implicit-y-axis-mirror",
+              "shapeId": "implicit-x-axis-mirror",
               "t": 0.4998761201477071
             },
             "xM": 0,
@@ -3276,7 +3276,7 @@
             "snapAttachment": {
               "kind": "segment",
               "segmentIndex": 0,
-              "shapeId": "implicit-y-axis-mirror",
+              "shapeId": "implicit-x-axis-mirror",
               "t": 0.4992524028459061
             },
             "xM": 0,
@@ -3297,7 +3297,7 @@
             "snapAttachment": {
               "kind": "segment",
               "segmentIndex": 0,
-              "shapeId": "implicit-y-axis-mirror",
+              "shapeId": "implicit-x-axis-mirror",
               "t": 0.49913403731257067
             },
             "xM": 0,
@@ -3321,7 +3321,7 @@
             "snapAttachment": {
               "kind": "segment",
               "segmentIndex": 0,
-              "shapeId": "implicit-y-axis-mirror",
+              "shapeId": "implicit-x-axis-mirror",
               "t": 0.4991131238532132
             },
             "xM": 0,
@@ -3334,7 +3334,7 @@
             "snapAttachment": {
               "kind": "segment",
               "segmentIndex": 0,
-              "shapeId": "implicit-y-axis-mirror",
+              "shapeId": "implicit-x-axis-mirror",
               "t": 0.49931076115707945
             },
             "xM": 0,
@@ -3350,11 +3350,11 @@
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 874,
-      "originX": 312.1928068170971,
-      "originY": 152.2682868129039,
-      "scale": 358.4959832677407,
+      "originX": 196.61174839435228,
+      "originY": 100.98594003040068,
+      "scale": 529.8401668362977,
       "width": 900
     }
   },
-  "updatedAt": 1780012748915
+  "updatedAt": 1780018036554
 }

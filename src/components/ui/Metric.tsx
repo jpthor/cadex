@@ -1,10 +1,23 @@
 import type { ReactNode } from "react";
 
-export function Metric({ label, value, verification }: { label: string; value: string; verification?: string }) {
+export function Metric({
+  label,
+  note,
+  noteTone = "neutral",
+  value,
+  verification,
+}: {
+  label: string;
+  note?: string;
+  noteTone?: "good" | "caution" | "bad" | "neutral";
+  value: string;
+  verification?: string;
+}) {
   return (
     <div className="analysis-metric">
       <span>
         {label}
+        {note ? <small className={`metric-note ${noteTone}`}>{note}</small> : null}
         {verification ? <small>{verification}</small> : null}
       </span>
       <strong>{value}</strong>

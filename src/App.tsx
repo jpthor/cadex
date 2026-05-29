@@ -576,7 +576,7 @@ export default function App() {
               Sketch
             </button>
             <button className={appMode === "compute" ? "active" : ""} onClick={() => setAppMode("compute")}>
-              Compute
+              Aero
             </button>
             <button className={appMode === "propulsion" ? "active" : ""} onClick={() => setAppMode("propulsion")}>
               Propulsion
@@ -634,7 +634,7 @@ export default function App() {
         ) : appMode === "compute" ? (
           <div className="size-toolbar-label">
             <Gauge size={17} />
-            Live sketch computation
+            Live aero analysis
           </div>
         ) : (
           <div className="size-toolbar-label">
@@ -762,7 +762,6 @@ export default function App() {
             propulsionState={propulsionState}
             sizingProject={sizingProject}
             onPropulsionStateChange={setPropulsionState}
-            onSizingProjectChange={updateSizingProject}
           />
           <footer className="timeline size-footer">
             <div className="timeline-title">
@@ -781,7 +780,7 @@ export default function App() {
           <footer className="timeline size-footer">
             <div className="timeline-title">
               <Gauge size={17} />
-              <span>Compute result</span>
+              <span>Aero result</span>
             </div>
             <div className="timeline-events">
               <span>CL {computeSketchFooterValue(sizingProject, "cl")}</span>

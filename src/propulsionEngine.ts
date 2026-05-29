@@ -1,4 +1,4 @@
-import { batteryMassEstimate, rotorDiameterEstimate } from "./sizing/auditedSizingEngine.ts";
+import { batteryMassEstimate, rotorDiameterEstimate, rotorInstanceCount } from "./sizing/auditedSizingEngine.ts";
 import type { SizingProject } from "./sizing";
 
 const fixedRotorCount = 2;
@@ -27,6 +27,9 @@ export const motorSamples: MotorSample[] = [
   { id: "motor-5325-280kv", name: "5325 280 Kv", kvRpmV: 280, continuousPowerW: 2400, maxCurrentA: 95, massG: 650 },
   { id: "motor-6310-250kv", name: "6310 250 Kv", kvRpmV: 250, continuousPowerW: 3200, maxCurrentA: 110, massG: 820 },
   { id: "motor-8017-170kv", name: "8017 170 Kv", kvRpmV: 170, continuousPowerW: 5200, maxCurrentA: 140, massG: 1280 },
+  { id: "motor-9225-150kv", name: "9225 150 Kv", kvRpmV: 150, continuousPowerW: 7600, maxCurrentA: 170, massG: 1780 },
+  { id: "motor-10020-120kv", name: "10020 120 Kv", kvRpmV: 120, continuousPowerW: 9800, maxCurrentA: 210, massG: 2400 },
+  { id: "motor-12030-90kv", name: "12030 90 Kv", kvRpmV: 90, continuousPowerW: 14500, maxCurrentA: 260, massG: 3900 },
 ];
 
 export type PropellerSample = {
@@ -56,6 +59,11 @@ export const propellerSamples: PropellerSample[] = [
   { id: "apc-18x10e", name: "APC 18x10E", diameterIn: 18, pitchIn: 10, staticRpm: 6000, staticThrustN: 48.96, staticPowerW: 738.7, peakEfficiency: 0.786, peakEfficiencyRpm: 11000, peakEfficiencyMph: 100.3, peakPowerW: 3246.2, peakThrustN: 56.89, source: "APC PER3_18x10E.dat" },
   { id: "apc-20x10e", name: "APC 20x10E", diameterIn: 20, pitchIn: 10, staticRpm: 6000, staticThrustN: 69.51, staticPowerW: 1101.5, peakEfficiency: 0.767, peakEfficiencyRpm: 10000, peakEfficiencyMph: 88.4, peakPowerW: 3815.1, peakThrustN: 74.09, source: "APC PER3_20x10E.dat" },
   { id: "apc-22x12e", name: "APC 22x12E", diameterIn: 22, pitchIn: 12, staticRpm: 6000, staticThrustN: 107.74, staticPowerW: 1927, peakEfficiency: 0.792, peakEfficiencyRpm: 9000, peakEfficiencyMph: 98.4, peakPowerW: 4616.4, peakThrustN: 83.11, source: "APC PER3_22x12E.dat" },
+  { id: "apc-24x12e", name: "APC 24x12E", diameterIn: 24, pitchIn: 12, staticRpm: 5200, staticThrustN: 136, staticPowerW: 2450, peakEfficiency: 0.78, peakEfficiencyRpm: 7600, peakEfficiencyMph: 86, peakPowerW: 6100, peakThrustN: 112, source: "scaled APC electric reference" },
+  { id: "apc-26x13e", name: "APC 26x13E", diameterIn: 26, pitchIn: 13, staticRpm: 4700, staticThrustN: 172, staticPowerW: 3350, peakEfficiency: 0.77, peakEfficiencyRpm: 6900, peakEfficiencyMph: 85, peakPowerW: 7600, peakThrustN: 138, source: "scaled APC electric reference" },
+  { id: "apc-28x14e", name: "APC 28x14E", diameterIn: 28, pitchIn: 14, staticRpm: 4200, staticThrustN: 218, staticPowerW: 4700, peakEfficiency: 0.76, peakEfficiencyRpm: 6200, peakEfficiencyMph: 82, peakPowerW: 9800, peakThrustN: 168, source: "scaled APC electric reference" },
+  { id: "apc-30x15e", name: "APC 30x15E", diameterIn: 30, pitchIn: 15, staticRpm: 3800, staticThrustN: 270, staticPowerW: 6400, peakEfficiency: 0.75, peakEfficiencyRpm: 5600, peakEfficiencyMph: 79, peakPowerW: 12200, peakThrustN: 202, source: "scaled APC electric reference" },
+  { id: "apc-32x16e", name: "APC 32x16E", diameterIn: 32, pitchIn: 16, staticRpm: 3400, staticThrustN: 330, staticPowerW: 8500, peakEfficiency: 0.74, peakEfficiencyRpm: 5100, peakEfficiencyMph: 77, peakPowerW: 15000, peakThrustN: 238, source: "scaled APC electric reference" },
 ];
 
 export type BatteryInputs = {
@@ -86,6 +94,12 @@ export const batterySamples: BatterySample[] = [
   { id: "pack-10s-8ah-25c", name: "10S 8.0Ah 25C", cells: 10, capacityAh: 8, cRating: 25, massKg: 1.82 },
   { id: "pack-12s-5ah-35c", name: "12S 5.0Ah 35C", cells: 12, capacityAh: 5, cRating: 35, massKg: 1.44 },
   { id: "pack-12s-10ah-20c", name: "12S 10Ah 20C", cells: 12, capacityAh: 10, cRating: 20, massKg: 2.75 },
+  { id: "pack-12s-16ah-20c", name: "12S 16Ah 20C", cells: 12, capacityAh: 16, cRating: 20, massKg: 4.2 },
+  { id: "pack-12s-22ah-15c", name: "12S 22Ah 15C", cells: 12, capacityAh: 22, cRating: 15, massKg: 5.8 },
+  { id: "pack-14s-16ah-20c", name: "14S 16Ah 20C", cells: 14, capacityAh: 16, cRating: 20, massKg: 4.9 },
+  { id: "pack-14s-24ah-15c", name: "14S 24Ah 15C", cells: 14, capacityAh: 24, cRating: 15, massKg: 7.4 },
+  { id: "pack-16s-20ah-20c", name: "16S 20Ah 20C", cells: 16, capacityAh: 20, cRating: 20, massKg: 7.1 },
+  { id: "pack-16s-30ah-12c", name: "16S 30Ah 12C", cells: 16, capacityAh: 30, cRating: 12, massKg: 10.2 },
 ];
 
 export type RotorDefinition = {
@@ -272,12 +286,12 @@ export function batteryMassFromSizing(sizing: Pick<SizingProject, "shapes">) {
 export function rotorDefinitionFromSizing(sizing: Pick<SizingProject, "mission" | "shapes">): RotorDefinition {
   const rotorShapes = sizing.shapes.filter((shape) => shape.role === "part" && shape.partType === "rotor");
   if (!rotorShapes.length) {
-    return { bladeCount: 2, count: fixedRotorCount, diameterM: 0 };
+    return { bladeCount: sizing.mission?.rotorBladeCount ?? 2, count: fixedRotorCount, diameterM: 0 };
   }
   const primary = rotorShapes[0];
   return {
-    bladeCount: Math.max(1, Math.round(primary.rotorBladeCount ?? 2)),
-    count: fixedRotorCount,
+    bladeCount: Math.max(1, Math.round(sizing.mission?.rotorBladeCount ?? primary.rotorBladeCount ?? 2)),
+    count: rotorShapes.reduce((total, shape) => total + rotorInstanceCount(shape, sizing.shapes), 0),
     diameterM: Math.max(...rotorShapes.map((shape) => rotorDiameterEstimate(shape, sizing.shapes)), 0),
   };
 }

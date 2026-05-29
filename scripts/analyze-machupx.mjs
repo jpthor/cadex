@@ -188,7 +188,7 @@ function chordAtX(points, x) {
 }
 
 function dihedralBreakX(shape, shapes) {
-  if (!shape.dihedralBreakStationId || shape.dihedralBreakStationId === "implicit-y-axis-mirror") return 0;
+  if (!shape.dihedralBreakStationId || shape.dihedralBreakStationId === "implicit-x-axis-mirror" || shape.dihedralBreakStationId === "implicit-y-axis-mirror") return 0;
   const ref = shapes.find((candidate) => candidate.id === shape.dihedralBreakStationId);
   if (!ref || ref.points.length < 2) return undefined;
   const [a, b] = ref.points;

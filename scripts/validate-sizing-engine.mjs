@@ -3,6 +3,7 @@ import {
   bodyMassEstimate,
   bodySurfaceAreaEstimate,
   batteryMassEstimate,
+  computeSketchAerodynamics,
   computeSizingAnalysis,
   liftingSurfaceMassEstimate,
   liftingSurfaceSkinAreaEstimate,
@@ -254,11 +255,11 @@ const tailProject = {
 };
 const tailAnalysis = computeSizingAnalysis(tailProject);
 const tailArea = 0.5 * 0.08 * 2;
-const tailEffectiveness = 0.9;
+const tailEffectiveness = 0.9 * 3.45;
 const expectedTailWeightedCop =
   (0.05 * wingSurfaceAreaM2 + (-0.68 - 0.08 * 0.25) * tailArea * tailEffectiveness) /
   (wingSurfaceAreaM2 + tailArea * tailEffectiveness);
-approx(tailAnalysis.cop.yM, expectedTailWeightedCop, "effectiveness-weighted wing and tailplane CoP");
+approx(tailAnalysis.cop.yM, expectedTailWeightedCop, "downwash-weighted wing and tailplane CoP");
 approx(tailAnalysis.wingAreaM2, wingSurfaceAreaM2, "wing reference area ignores tailplane");
 
 const localMirroredTailProject = {
@@ -349,6 +350,60 @@ const canardProject = {
 };
 const canardAnalysis = computeSizingAnalysis(canardProject);
 assert.ok(canardAnalysis.cop.yM > analysis.cop.yM, "canard pulls neutral point forward");
+
+const lexProject = {
+  mission: project.mission,
+  shapes: [
+    project.shapes[0],
+    project.shapes[1],
+    {
+      id: "lex",
+      role: "liftingSurface",
+      liftingSurfaceKind: "lex",
+      label: "LEX",
+      drawMode: "line",
+      bodyMaterial: "carbonFibre",
+      bodyThicknessMm: 1.2,
+      points: [
+        { xM: 0, yM: 0.42 },
+        { xM: 0.28, yM: 0.12 },
+        { xM: 0, yM: 0.08 },
+      ],
+    },
+  ],
+};
+const lexAero = computeSketchAerodynamics(lexProject);
+assert.ok(lexAero.lex.active, "LEX activates vortex lift estimate");
+assert.ok(lexAero.geometry.lexAreaM2 > 0, "LEX area is reported separately");
+assert.ok(lexAero.lex.influencedAreaM2 > 0, "LEX vortex corridor finds downstream influenced area");
+assert.ok(lexAero.lex.influencedWingAreaM2 > 0, "LEX vortex corridor influences the wing behind it");
+assert.ok(lexAero.lex.influencedBodyAreaM2 > 0, "LEX vortex corridor influences body area behind it");
+assert.ok(lexAero.aerodynamics.maxLiftCoefficientWithLex > lexAero.aerodynamics.maxLiftCoefficientClean, "LEX raises CLmax estimate");
+assert.ok(lexAero.aerodynamics.stallSpeedMS < lexAero.aerodynamics.stallSpeedCleanMS, "LEX lowers stall speed estimate");
+approx(lexAero.geometry.wingAreaM2, wingSurfaceAreaM2, "LEX does not inflate wing reference area");
+
+const isolatedLexAero = computeSketchAerodynamics({
+  mission: project.mission,
+  shapes: [
+    project.shapes[1],
+    {
+      id: "aft-lex",
+      role: "liftingSurface",
+      liftingSurfaceKind: "lex",
+      label: "Aft LEX",
+      drawMode: "line",
+      bodyMaterial: "carbonFibre",
+      bodyThicknessMm: 1.2,
+      points: [
+        { xM: 0, yM: -0.8 },
+        { xM: 0.28, yM: -1.0 },
+        { xM: 0, yM: -1.05 },
+      ],
+    },
+  ],
+});
+assert.equal(isolatedLexAero.lex.active, false, "LEX with no downstream influenced area does not change stall");
+approx(isolatedLexAero.lex.deltaMaxLiftCoefficient, 0, "isolated LEX has no CLmax boost");
 
 console.log("Sizing engine validation passed.");
 

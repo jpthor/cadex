@@ -696,7 +696,7 @@ export function sizingDraftReferenceShapes({
       label: "Sizing fin",
       drawMode: "line",
       sketchViewMode: "side",
-      sideViewStationId: "implicit-y-axis-mirror",
+      sideViewStationId: "implicit-x-axis-mirror",
       points: [
         { xM: 0, yM: tailY + finChordM * 0.55, curveMode: "corner" },
         { xM: finHeightM, yM: tailY + finChordM * 0.4, curveMode: "corner" },
@@ -717,7 +717,7 @@ export function sizingDraftReferenceShapes({
       label: "Fin mirror plane",
       drawMode: "line",
       sketchViewMode: "side",
-      sideViewStationId: "implicit-y-axis-mirror",
+      sideViewStationId: "implicit-x-axis-mirror",
       points: [
         { xM: 0, yM: tailY + finChordM * 0.75, curveMode: "corner" },
         { xM: 0, yM: tailY - finChordM * 0.75, curveMode: "corner" },

@@ -10,6 +10,7 @@ import {
   partZHeightM,
   rotorDiskDiameterM,
   sideProjectionShapeFinal,
+  topProjectionShape,
 } from "../src/sketch/geometry.ts";
 
 const origin = { xM: 0, yM: 0 };
@@ -109,8 +110,20 @@ const wing = {
     { xM: 0, yM: -0.7 },
   ],
 };
+const lex = {
+  id: "lex",
+  role: "liftingSurface",
+  liftingSurfaceKind: "lex",
+  label: "LEX",
+  drawMode: "line",
+  points: [
+    { xM: 0, yM: -0.1 },
+    { xM: 0.35, yM: -0.35 },
+    { xM: 0, yM: -0.42 },
+  ],
+};
 
-const shapes = [body, wing, battery, payload, motor, rotor];
+const shapes = [body, wing, lex, battery, payload, motor, rotor];
 const tailboomMirror = {
   id: "tailboom-mirror",
   role: "mirrorPlane",
@@ -167,6 +180,18 @@ const sideMirrorPlane = {
     { xM: 0.8, yM: -1.2 },
   ],
 };
+const sideReferenceLine = {
+  id: "side-reference-line",
+  role: "referenceLine",
+  label: "Side Reference Line",
+  drawMode: "line",
+  sketchViewMode: "side",
+  sideViewStationId: "fuselage-reference",
+  points: [
+    { xM: 0.2, yM: -0.4 },
+    { xM: 0.8, yM: -1.2 },
+  ],
+};
 const dimensionShapes = [
   {
     id: "reference-a",
@@ -212,7 +237,7 @@ assert.deepEqual(cadGeometryForShape(battery), {
   sizeM: [1, 0.6, 0.3],
 }, "centerline battery top-down sketch creates a full-width 3D box primitive at Z=0");
 const centerlineBatteryFront = frontProjectionShape(centerlineBattery, 1, shapes);
-approx(Math.min(...centerlineBatteryFront.points.map((point) => point.xM)), 0, "centerline battery front view starts on Y-axis");
+approx(Math.min(...centerlineBatteryFront.points.map((point) => point.xM)), 0, "centerline battery front view starts on X-axis mirror");
 approx(Math.max(...centerlineBatteryFront.points.map((point) => point.xM)), 0.11, "centerline battery front view keeps full half-width");
 assertPartProjection("payload", payload, {
   sideHeightM: 0.25,
@@ -243,18 +268,27 @@ assert.equal(cadGeometryForShape(body)?.kind, "revolvedBody", "body creates a re
 assert.equal(cadGeometryForShape(body)?.profile?.length, body.points.length, "revolved body CAD keeps the source revolve profile");
 approx(bodySide.points[0].xM, 0, "revolved body side profile keeps the sharp centerline nose");
 approx(bodySide.points[0].yM, 0, "revolved body side profile starts at the source nose station");
-approx(frontSectionCenterX(snappedFuselageBody, [fuselageReference]), 0, "body touching Y-axis keeps Y as revolve axis over snapped references");
+approx(frontSectionCenterX(snappedFuselageBody, [fuselageReference]), 0, "body touching X-axis mirror keeps it as revolve axis over snapped references");
 const snappedFuselageFront = frontProjectionShape(snappedFuselageBody, 1, [fuselageReference]);
-approx(Math.min(...snappedFuselageFront.points.map((point) => point.xM)), 0, "Y-axis body front section starts on the revolve axis");
-approx(Math.max(...snappedFuselageFront.points.map((point) => point.xM)), 0.1, "Y-axis body front section uses body radius from Y-axis");
+approx(Math.min(...snappedFuselageFront.points.map((point) => point.xM)), 0, "X-axis mirror body front section starts on the revolve axis");
+approx(Math.max(...snappedFuselageFront.points.map((point) => point.xM)), 0.1, "X-axis mirror body front section uses body radius from mirror axis");
 const fuselageReferenceFront = frontProjectionShape(fuselageReference, 1, [fuselageReference]);
-approx(range(fuselageReferenceFront.points, "xM"), 0, "top-authored lengthwise reference line front view collapses to one X station");
-approx(range(fuselageReferenceFront.points, "yM"), 0, "top-authored lengthwise reference line front view collapses to a dot at Z zero");
-approx(fuselageReferenceFront.points[0].xM, 0.1, "top-authored lengthwise reference line dot keeps reference X station");
+approx(range(fuselageReferenceFront.points, "xM"), 0, "top-authored vertical reference line front view stays at one X station");
+approx(range(fuselageReferenceFront.points, "yM"), 1.4, "top-authored vertical reference line front view projects drawn length into Z");
+approx(fuselageReferenceFront.points[0].xM, 0.1, "top-authored vertical reference line keeps reference X station");
 const sideMirrorFront = frontProjectionShape(sideMirrorPlane, 1, [fuselageReference, sideMirrorPlane]);
 approx(range(sideMirrorFront.points, "xM"), 0, "side-authored mirror plane front view is edge-on at one station");
 approx(sideMirrorFront.points[0].xM, 0.1, "side-authored mirror plane front view uses its station reference");
 approx(range(sideMirrorFront.points, "yM"), 0.6, "side-authored mirror plane front view keeps its vertical Z extent");
+const sideReferenceFront = frontProjectionShape(sideReferenceLine, 1, [fuselageReference, sideReferenceLine]);
+approx(range(sideReferenceFront.points, "xM"), 0, "side-authored reference line front view collapses to one X station");
+approx(range(sideReferenceFront.points, "yM"), 0, "side-authored reference line front view collapses to one Z height");
+approx(sideReferenceFront.points[0].yM, -0.5, "side-authored reference line front view flips side sketch X into aircraft Z");
+approx(sideReferenceFront.points[0].xM, 0.1, "side-authored reference line front view uses its station reference");
+const sideReferenceTop = topProjectionShape(sideReferenceLine, [fuselageReference, sideReferenceLine]);
+approx(range(sideReferenceTop.points, "xM"), 0, "side-authored reference line top view stays at one station");
+approx(sideReferenceTop.points[0].xM, 0.1, "side-authored reference line top view uses its station reference");
+approx(range(sideReferenceTop.points, "yM"), 0.8, "side-authored reference line top view keeps aircraft Y length");
 const tailboomCad = cadGeometryForShape(tailboomBody, [tailboomMirror]);
 assert.equal(tailboomCad?.kind, "revolvedBody", "body touching a created mirror plane creates a revolved body");
 approx(tailboomCad?.centerM[1] ?? NaN, 0.45, "local mirror body revolves around touched mirror plane X");
@@ -275,6 +309,11 @@ const wingSide = sideProjectionShapeFinal(wing, shapes);
 assert.equal(wingSide.points.filter((point) => point.pathBreak).length, 1, "wing side view renders separate root and tip airfoil profiles");
 approx(range(wingSide.points, "xM"), 0.036, "wing side view root/tip airfoil thickness from 12% chord", 1e-4);
 approx(range(wingSide.points, "yM"), 0.3, "wing side view root/tip airfoil chord is located from the drawn wing chord");
+const lexFront = frontProjectionShape(lex, 1, shapes);
+const lexSide = sideProjectionShapeFinal(lex, shapes);
+approx(range(lexFront.points, "yM"), 0, "LEX front view has no vertical extent");
+approx(range(lexSide.points, "xM"), 0, "LEX side view has no vertical extent");
+approx(range(lexSide.points, "yM"), 0.32, "LEX side view keeps the drawn longitudinal profile");
 
 approx(
   measureDimension(

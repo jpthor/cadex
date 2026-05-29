@@ -8,10 +8,13 @@ import {
   airfoilThicknessRatio,
   cadGeometryForShape,
   chordExtentsAtX,
+  effectiveZOffsetM,
   incidenceAtStation,
   nacaSymmetricHalfThickness,
+  shapeTouchesMirrorAxis,
   shapeTouchesMirrorPlane,
   sideViewStationX,
+  verticalReferenceX,
 } from "../geometry";
 
 type RevolvedBodyPreview = {
@@ -34,7 +37,38 @@ type LiftingSurfacePreview = {
   id: string;
   label: string;
   mirrored?: boolean;
+  planform?: THREE.Vector3[];
   sections: THREE.Vector3[][];
+};
+
+type PartBoxPreview = {
+  center: THREE.Vector3;
+  id: string;
+  label: string;
+  mirrored?: boolean;
+  size: THREE.Vector3;
+};
+
+type MotorCylinderPreview = {
+  axis: THREE.Vector3;
+  center: THREE.Vector3;
+  id: string;
+  label: string;
+  lengthM: number;
+  mirrored?: boolean;
+  radiusM: number;
+};
+
+type RotorPreview = {
+  bladeCount: number;
+  center: THREE.Vector3;
+  id: string;
+  label: string;
+  mirrored?: boolean;
+  radial: THREE.Vector3;
+  radiusM: number;
+  rootChordM: number;
+  tipChordM: number;
 };
 
 export function Sketch3DPreview({
@@ -64,6 +98,9 @@ export function Sketch3DPreview({
 
   const bodies = useMemo(() => revolvedBodiesForPreview(shapes), [shapes]);
   const liftingSurfaces = useMemo(() => liftingSurfacesForPreview(shapes), [shapes]);
+  const partBoxes = useMemo(() => partBoxesForPreview(shapes), [shapes]);
+  const motorCylinders = useMemo(() => motorCylindersForPreview(shapes), [shapes]);
+  const rotors = useMemo(() => rotorsForPreview(shapes), [shapes]);
   const sideSketches = useMemo(() => sideSketchesForPreview(shapes), [shapes]);
   const referenceBounds = useMemo(() => referenceBoundsForPreview(shapes, bodies), [bodies, shapes]);
 
@@ -167,24 +204,33 @@ export function Sketch3DPreview({
     for (const liftingSurface of liftingSurfaces) {
       group.add(createLiftingSurfaceGroup(liftingSurface, liftingSurface.id === selectedShapeId));
     }
+    for (const partBox of partBoxes) {
+      group.add(createPartBoxGroup(partBox, partBox.id === selectedShapeId));
+    }
+    for (const motor of motorCylinders) {
+      group.add(createMotorCylinderGroup(motor, motor.id === selectedShapeId));
+    }
+    for (const rotor of rotors) {
+      group.add(createRotorGroup(rotor, rotor.id === selectedShapeId));
+    }
     for (const sideSketch of sideSketches) {
       group.add(createSideSketchGroup(sideSketch, sideSketch.id === selectedShapeId));
     }
 
     if (!hasFitRef.current || bodies.some((body) => body.id === selectedShapeId)) {
       fitCameraToGroups(camera, controls, [group, referenceGroup]);
-      hasFitRef.current = bodies.length > 0 || liftingSurfaces.length > 0;
+      hasFitRef.current = bodies.length > 0 || liftingSurfaces.length > 0 || partBoxes.length > 0 || motorCylinders.length > 0 || rotors.length > 0;
     }
-  }, [bodies, liftingSurfaces, selectedShapeId, sideSketches]);
+  }, [bodies, liftingSurfaces, motorCylinders, partBoxes, rotors, selectedShapeId, sideSketches]);
 
   useEffect(() => {
     const group = groupRef.current;
     const referenceGroup = referenceGroupRef.current;
     const camera = cameraRef.current;
     const controls = controlsRef.current;
-    if (!group || !camera || !controls || (!bodies.length && !liftingSurfaces.length)) return;
+    if (!group || !camera || !controls || (!bodies.length && !liftingSurfaces.length && !partBoxes.length && !motorCylinders.length && !rotors.length)) return;
     setCameraToView(camera, controls, [group, referenceGroup], active ? "orbit" : viewMode);
-  }, [active, bodies.length, cameraCommandSerial, liftingSurfaces.length, sideSketches.length, viewMode]);
+  }, [active, bodies.length, cameraCommandSerial, liftingSurfaces.length, motorCylinders.length, partBoxes.length, rotors.length, sideSketches.length, viewMode]);
 
   return (
     <div
@@ -205,7 +251,7 @@ function revolvedBodiesForPreview(shapes: SizeShape[]): RevolvedBodyPreview[] {
     const profile = geometry.profile?.length ? geometry.profile : shape.points.map((point) => ({ ...point, xM: Math.abs(point.xM) }));
     if (profile.length < 2) return [];
     const body = { axis, geometry, id: shape.id, label: shape.label, profile, shape };
-    return shouldMirrorAcrossImplicitY(shape) ? [body, mirroredBodyPreview(body)] : [body];
+    return shouldMirrorAcrossImplicitX(shape) ? [body, mirroredBodyPreview(body)] : [body];
   });
 }
 
@@ -214,17 +260,112 @@ function liftingSurfacesForPreview(shapes: SizeShape[]): LiftingSurfacePreview[]
     if (shape.role !== "liftingSurface" || shape.sketchViewMode === "side" || shape.points.length < 3) return [];
     const preview = liftingSurfacePreviewFromShape(shape);
     if (!preview) return [];
-    const mirrors: LiftingSurfacePreview[] = [];
-    if (shouldMirrorLiftingSurfaceAcrossImplicitY(shape)) mirrors.push(mirrorLiftingSurfacePreview(preview));
     const localMirrors = shapes
       .filter((candidate) => candidate.role === "mirrorPlane" && candidate.id !== shape.id && shapeTouchesMirrorPlane(shape, candidate))
       .map((plane, index) => mirrorLiftingSurfacePreviewAcrossPlane(preview, plane, index))
       .filter((entry): entry is LiftingSurfacePreview => Boolean(entry));
-    return [preview, ...mirrors, ...localMirrors];
+    const originMirrors = shouldMirrorLiftingSurfaceAcrossImplicitX(shape)
+      ? [preview, ...localMirrors].map(mirrorLiftingSurfacePreview)
+      : [];
+    return [preview, ...localMirrors, ...originMirrors];
   });
 }
 
-function shouldMirrorLiftingSurfaceAcrossImplicitY(shape: SizeShape) {
+function partBoxesForPreview(shapes: SizeShape[]): PartBoxPreview[] {
+  return shapes.flatMap((shape) => {
+    const partType = shape.partType ?? "payload";
+    if (shape.role !== "part" || (partType !== "payload" && partType !== "battery") || shape.points.length < 3) return [];
+    const geometry = shape.cadGeometry ?? cadGeometryForShape(shape, shapes);
+    if (!geometry || geometry.kind !== "box") return [];
+    const centerline = shapeTouchesMirrorAxis(shape);
+    const centerX = centerline ? 0 : geometry.centerM[1];
+    const box = {
+      center: new THREE.Vector3(centerX, geometry.centerM[0], geometry.centerM[2]),
+      id: shape.id,
+      label: shape.label,
+      size: new THREE.Vector3(geometry.sizeM[1], geometry.sizeM[0], geometry.sizeM[2]),
+    };
+    return shouldMirrorPartBoxAcrossImplicitY(shape) ? [box, mirrorPartBoxPreview(box)] : [box];
+  });
+}
+
+function shouldMirrorPartBoxAcrossImplicitY(shape: SizeShape) {
+  if (!shape.points.length || shapeTouchesMirrorAxis(shape)) return false;
+  const minX = Math.min(...shape.points.map((point) => point.xM));
+  const maxX = Math.max(...shape.points.map((point) => point.xM));
+  return minX >= -0.001 && maxX > 0.001;
+}
+
+function mirrorPartBoxPreview(box: PartBoxPreview): PartBoxPreview {
+  return {
+    ...box,
+    center: new THREE.Vector3(-box.center.x, box.center.y, box.center.z),
+    id: `${box.id}:mirror-y`,
+    label: `${box.label} mirror`,
+    mirrored: true,
+  };
+}
+
+function motorCylindersForPreview(shapes: SizeShape[]): MotorCylinderPreview[] {
+  return shapes.flatMap((shape) => {
+    if (shape.role !== "part" || shape.partType !== "motor" || shape.points.length < 2) return [];
+    const geometry = shape.cadGeometry ?? cadGeometryForShape(shape, shapes);
+    if (!geometry || geometry.kind !== "cylinder") return [];
+    const motor = {
+      axis: new THREE.Vector3(geometry.axisM[1], geometry.axisM[0], geometry.axisM[2]).normalize(),
+      center: new THREE.Vector3(geometry.centerM[1], geometry.centerM[0], geometry.centerM[2]),
+      id: shape.id,
+      label: shape.label,
+      lengthM: geometry.lengthM,
+      radiusM: geometry.radiusM,
+    };
+    return shouldMirrorPartBoxAcrossImplicitY(shape) ? [motor, mirrorMotorCylinderPreview(motor)] : [motor];
+  });
+}
+
+function mirrorMotorCylinderPreview(motor: MotorCylinderPreview): MotorCylinderPreview {
+  return {
+    ...motor,
+    axis: new THREE.Vector3(-motor.axis.x, motor.axis.y, motor.axis.z).normalize(),
+    center: new THREE.Vector3(-motor.center.x, motor.center.y, motor.center.z),
+    id: `${motor.id}:mirror-y`,
+    label: `${motor.label} mirror`,
+    mirrored: true,
+  };
+}
+
+function rotorsForPreview(shapes: SizeShape[]): RotorPreview[] {
+  return shapes.flatMap((shape) => {
+    if (shape.role !== "part" || shape.partType !== "rotor" || shape.points.length < 2) return [];
+    const geometry = shape.cadGeometry ?? cadGeometryForShape(shape, shapes);
+    if (!geometry || geometry.kind !== "rotor") return [];
+    const radial = new THREE.Vector3(geometry.axisM[1], geometry.axisM[0], geometry.axisM[2]).normalize();
+    const rotor = {
+      bladeCount: geometry.bladeCount,
+      center: new THREE.Vector3(geometry.centerM[1], geometry.centerM[0], geometry.centerM[2]),
+      id: shape.id,
+      label: shape.label,
+      radial: radial.lengthSq() > 1e-9 ? radial : new THREE.Vector3(1, 0, 0),
+      radiusM: geometry.radiusM,
+      rootChordM: geometry.rootChordM,
+      tipChordM: geometry.tipChordM,
+    };
+    return shouldMirrorPartBoxAcrossImplicitY(shape) ? [rotor, mirrorRotorPreview(rotor)] : [rotor];
+  });
+}
+
+function mirrorRotorPreview(rotor: RotorPreview): RotorPreview {
+  return {
+    ...rotor,
+    center: new THREE.Vector3(-rotor.center.x, rotor.center.y, rotor.center.z),
+    id: `${rotor.id}:mirror-y`,
+    label: `${rotor.label} mirror`,
+    mirrored: true,
+    radial: new THREE.Vector3(-rotor.radial.x, rotor.radial.y, rotor.radial.z).normalize(),
+  };
+}
+
+function shouldMirrorLiftingSurfaceAcrossImplicitX(shape: SizeShape) {
   if (!shape.points.length) return false;
   const minX = Math.min(...shape.points.map((point) => point.xM));
   const maxX = Math.max(...shape.points.map((point) => point.xM));
@@ -233,6 +374,7 @@ function shouldMirrorLiftingSurfaceAcrossImplicitY(shape: SizeShape) {
 }
 
 function liftingSurfacePreviewFromShape(shape: SizeShape): LiftingSurfacePreview | null {
+  if (shape.liftingSurfaceKind === "lex") return flatLexPreviewFromShape(shape);
   const bounds = signedShapeBounds(shape);
   const rootX = Math.abs(bounds.minX) <= 0.002 ? 0 : bounds.minX;
   const tipX = Math.abs(bounds.maxX - rootX) < 0.01 ? rootX + 0.05 : bounds.maxX;
@@ -254,11 +396,19 @@ function liftingSurfacePreviewFromShape(shape: SizeShape): LiftingSurfacePreview
       leadingY,
       tipAirfoil,
       xM,
-      zOffsetM: shape.zOffsetM ?? 0,
+      zOffsetM: effectiveZOffsetM(shape, []),
     });
   });
   if (sections.some((section) => section.length < 4)) return null;
   return { id: shape.id, label: shape.label, sections };
+}
+
+function flatLexPreviewFromShape(shape: SizeShape): LiftingSurfacePreview | null {
+  const points = shape.points
+    .filter((point) => Number.isFinite(point.xM) && Number.isFinite(point.yM))
+    .map((point) => new THREE.Vector3(point.xM, point.yM, effectiveZOffsetM(shape, [])));
+  if (points.length < 3) return null;
+  return { id: shape.id, label: shape.label, planform: points, sections: [] };
 }
 
 function nearestChordExtentsAtX(points: SizePoint[], xM: number, rootX: number, tipX: number) {
@@ -321,6 +471,7 @@ function airfoilPoint3D(xM: number, leadingY: number, chordOffsetM: number, heig
 
 function createLiftingSurfaceGroup(surface: LiftingSurfacePreview, selected: boolean) {
   const group = new THREE.Group();
+  if (surface.planform?.length) return createFlatLiftingSurfaceGroup(surface, selected);
   if (surface.sections.length < 2 || surface.sections.some((section) => section.length !== surface.sections[0].length)) return group;
   const root = surface.sections[0];
   const tip = surface.sections[surface.sections.length - 1];
@@ -341,20 +492,23 @@ function createLiftingSurfaceGroup(surface: LiftingSurfacePreview, selected: boo
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  const color = selected ? "#facc15" : surface.mirrored ? "#5fb6d6" : "#7dd3fc";
+  const color = surface.mirrored ? "#5fb6d6" : "#7dd3fc";
   group.add(new THREE.Mesh(
     geometry,
     new THREE.MeshStandardMaterial({
       color,
+      depthWrite: false,
       metalness: 0.04,
-      opacity: surface.mirrored ? 0.34 : 0.46,
+      opacity: surface.mirrored ? 0.34 : selected ? 0.58 : 0.46,
       roughness: 0.48,
       side: THREE.DoubleSide,
       transparent: true,
     }),
   ));
-  group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(root), new THREE.LineBasicMaterial({ color: "#e0f2fe", depthTest: false })));
-  group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(tip), new THREE.LineBasicMaterial({ color: "#bae6fd", depthTest: false })));
+  group.add(createAirfoilCapMesh(root, selected ? "#facc15" : "#bae6fd", selected ? 0.32 : 0.22));
+  group.add(createAirfoilCapMesh(tip, selected ? "#facc15" : "#e0f2fe", selected ? 0.36 : 0.28));
+  group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(root), new THREE.LineBasicMaterial({ color: selected ? "#facc15" : "#e0f2fe", depthTest: false })));
+  group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(tip), new THREE.LineBasicMaterial({ color: selected ? "#facc15" : "#bae6fd", depthTest: false })));
   const label = createTextSprite(surface.label, "#e0f2fe", 0.024);
   const center = [...root, ...tip].reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / (root.length + tip.length));
   label.position.copy(center).add(new THREE.Vector3(0, 0, 0.02));
@@ -362,12 +516,228 @@ function createLiftingSurfaceGroup(surface: LiftingSurfacePreview, selected: boo
   return group;
 }
 
+function createFlatLiftingSurfaceGroup(surface: LiftingSurfacePreview, selected: boolean) {
+  const group = new THREE.Group();
+  const points = surface.planform ?? [];
+  if (points.length < 3) return group;
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const indices: number[] = [];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    indices.push(0, index, index + 1);
+  }
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const color = surface.mirrored ? "#5fb6d6" : "#7dd3fc";
+  group.add(new THREE.Mesh(
+    geometry,
+    new THREE.MeshStandardMaterial({
+      color,
+      depthWrite: false,
+      metalness: 0.02,
+      opacity: surface.mirrored ? 0.32 : selected ? 0.56 : 0.44,
+      roughness: 0.52,
+      side: THREE.DoubleSide,
+      transparent: true,
+    }),
+  ));
+  group.add(new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(points),
+    new THREE.LineBasicMaterial({ color: selected ? "#facc15" : "#e0f2fe", depthTest: false }),
+  ));
+  const label = createTextSprite(surface.label, "#e0f2fe", 0.024);
+  const center = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
+  label.position.copy(center).add(new THREE.Vector3(0, 0, 0.02));
+  group.add(label);
+  return group;
+}
+
+function createAirfoilCapMesh(section: THREE.Vector3[], color: string, opacity: number) {
+  const uniqueSection = section.slice(0, -1);
+  const center = uniqueSection.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / Math.max(uniqueSection.length, 1));
+  const vertices = [center, ...uniqueSection];
+  const geometry = new THREE.BufferGeometry().setFromPoints(vertices);
+  const indices: number[] = [];
+  for (let index = 1; index < vertices.length; index += 1) {
+    const next = index === vertices.length - 1 ? 1 : index + 1;
+    indices.push(0, index, next);
+  }
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return new THREE.Mesh(
+    geometry,
+    new THREE.MeshBasicMaterial({
+      color,
+      depthWrite: false,
+      opacity,
+      side: THREE.DoubleSide,
+      transparent: true,
+    }),
+  );
+}
+
+function createPartBoxGroup(part: PartBoxPreview, selected: boolean) {
+  const group = new THREE.Group();
+  group.name = part.label;
+  const geometry = new THREE.BoxGeometry(
+    Math.max(part.size.x, 0.001),
+    Math.max(part.size.y, 0.001),
+    Math.max(part.size.z, 0.001),
+  );
+  geometry.translate(part.center.x, part.center.y, part.center.z);
+  const color = part.mirrored ? "#fb7185" : "#f43f5e";
+  group.add(new THREE.Mesh(
+    geometry,
+    new THREE.MeshStandardMaterial({
+      color,
+      depthWrite: false,
+      metalness: 0.02,
+      opacity: selected ? 0.62 : part.mirrored ? 0.32 : 0.46,
+      roughness: 0.58,
+      side: THREE.DoubleSide,
+      transparent: true,
+    }),
+  ));
+  group.add(new THREE.LineSegments(
+    new THREE.EdgesGeometry(geometry),
+    new THREE.LineBasicMaterial({ color: selected ? "#facc15" : "#fecdd3", depthTest: false, transparent: true, opacity: selected ? 0.95 : 0.62 }),
+  ));
+  const label = createTextSprite(part.label, "#fecdd3", 0.024);
+  label.position.copy(part.center).add(new THREE.Vector3(0, 0, part.size.z / 2 + 0.018));
+  group.add(label);
+  return group;
+}
+
+function createMotorCylinderGroup(motor: MotorCylinderPreview, selected: boolean) {
+  const group = new THREE.Group();
+  group.name = motor.label;
+  const geometry = new THREE.CylinderGeometry(
+    Math.max(motor.radiusM, 0.001),
+    Math.max(motor.radiusM, 0.001),
+    Math.max(motor.lengthM, 0.001),
+    48,
+    1,
+    false,
+  );
+  const axis = motor.axis.lengthSq() > 1e-9 ? motor.axis.clone().normalize() : new THREE.Vector3(0, 1, 0);
+  geometry.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis));
+  geometry.translate(motor.center.x, motor.center.y, motor.center.z);
+  const color = motor.mirrored ? "#fb7185" : "#f43f5e";
+  group.add(new THREE.Mesh(
+    geometry,
+    new THREE.MeshStandardMaterial({
+      color,
+      depthWrite: false,
+      metalness: 0.12,
+      opacity: selected ? 0.68 : motor.mirrored ? 0.38 : 0.52,
+      roughness: 0.44,
+      side: THREE.DoubleSide,
+      transparent: true,
+    }),
+  ));
+  group.add(new THREE.LineSegments(
+    new THREE.EdgesGeometry(geometry, 24),
+    new THREE.LineBasicMaterial({ color: selected ? "#facc15" : "#fecdd3", depthTest: false, transparent: true, opacity: selected ? 0.95 : 0.58 }),
+  ));
+  const halfAxis = axis.clone().multiplyScalar(motor.lengthM / 2);
+  group.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([motor.center.clone().sub(halfAxis), motor.center.clone().add(halfAxis)]),
+    new THREE.LineDashedMaterial({ color: "#f8fafc", dashSize: 0.025, depthTest: false, gapSize: 0.012, transparent: true, opacity: 0.9 }),
+  ));
+  const axisLine = group.children[group.children.length - 1] as THREE.Line;
+  axisLine.computeLineDistances();
+  const label = createTextSprite(motor.label, "#fecdd3", 0.024);
+  label.position.copy(motor.center).add(new THREE.Vector3(0, 0, motor.radiusM + 0.018));
+  group.add(label);
+  return group;
+}
+
+function createRotorGroup(rotor: RotorPreview, selected: boolean) {
+  const group = new THREE.Group();
+  group.name = rotor.label;
+  const radial = rotor.radial.lengthSq() > 1e-9 ? rotor.radial.clone().normalize() : new THREE.Vector3(1, 0, 0);
+  const vertical = new THREE.Vector3(0, 0, 1);
+  const normal = radial.clone().cross(vertical).normalize();
+  const basis = new THREE.Matrix4().makeBasis(radial, vertical, normal.lengthSq() > 1e-9 ? normal : new THREE.Vector3(0, 1, 0));
+  const discGeometry = new THREE.CircleGeometry(Math.max(rotor.radiusM, 0.001), 96);
+  discGeometry.applyMatrix4(basis);
+  discGeometry.translate(rotor.center.x, rotor.center.y, rotor.center.z);
+  group.add(new THREE.Mesh(
+    discGeometry,
+    new THREE.MeshBasicMaterial({
+      color: rotor.mirrored ? "#c084fc" : "#a855f7",
+      depthWrite: false,
+      opacity: rotor.mirrored ? 0.12 : 0.18,
+      side: THREE.DoubleSide,
+      transparent: true,
+    }),
+  ));
+  group.add(new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(circlePointsInRotorPlane(rotor.center, radial, vertical, rotor.radiusM, 96)),
+    new THREE.LineBasicMaterial({ color: selected ? "#facc15" : "#d8b4fe", depthTest: false, transparent: true, opacity: 0.9 }),
+  ));
+
+  const bladeCount = Math.max(1, Math.round(rotor.bladeCount));
+  for (let index = 0; index < bladeCount; index += 1) {
+    const angle = (Math.PI * 2 * index) / bladeCount;
+    const bladeRadial = radial.clone().multiplyScalar(Math.cos(angle)).add(vertical.clone().multiplyScalar(Math.sin(angle))).normalize();
+    const bladeTangent = radial.clone().multiplyScalar(-Math.sin(angle)).add(vertical.clone().multiplyScalar(Math.cos(angle))).normalize();
+    const blade = rotorBladePoints3D(rotor.center, bladeRadial, bladeTangent, rotor.radiusM, rotor.rootChordM, rotor.tipChordM);
+    const bladeGeometry = new THREE.BufferGeometry().setFromPoints(blade);
+    bladeGeometry.setIndex([0, 1, 2, 0, 2, 3]);
+    bladeGeometry.computeVertexNormals();
+    group.add(new THREE.Mesh(
+      bladeGeometry,
+      new THREE.MeshBasicMaterial({
+        color: selected ? "#facc15" : "#c084fc",
+        depthWrite: false,
+        opacity: selected ? 0.56 : 0.42,
+        side: THREE.DoubleSide,
+        transparent: true,
+      }),
+    ));
+    group.add(new THREE.LineLoop(
+      new THREE.BufferGeometry().setFromPoints(blade),
+      new THREE.LineBasicMaterial({ color: selected ? "#fef3c7" : "#f3e8ff", depthTest: false, transparent: true, opacity: 0.78 }),
+    ));
+  }
+
+  const label = createTextSprite(rotor.label, "#f3e8ff", 0.024);
+  label.position.copy(rotor.center).add(vertical.clone().multiplyScalar(rotor.radiusM + 0.024));
+  group.add(label);
+  return group;
+}
+
+function circlePointsInRotorPlane(center: THREE.Vector3, radial: THREE.Vector3, vertical: THREE.Vector3, radiusM: number, samples: number) {
+  const points: THREE.Vector3[] = [];
+  for (let index = 0; index < samples; index += 1) {
+    const angle = (Math.PI * 2 * index) / samples;
+    points.push(center.clone().add(radial.clone().multiplyScalar(Math.cos(angle) * radiusM)).add(vertical.clone().multiplyScalar(Math.sin(angle) * radiusM)));
+  }
+  return points;
+}
+
+function rotorBladePoints3D(center: THREE.Vector3, radial: THREE.Vector3, tangent: THREE.Vector3, radiusM: number, rootChordM: number, tipChordM: number) {
+  const rootRadiusM = Math.max(radiusM * 0.08, 0.004);
+  const tipRadiusM = Math.max(radiusM * 0.92, rootRadiusM + 0.005);
+  const rootCenter = center.clone().add(radial.clone().multiplyScalar(rootRadiusM));
+  const tipCenter = center.clone().add(radial.clone().multiplyScalar(tipRadiusM));
+  const rootHalfChord = Math.max(rootChordM / 2, 0.002);
+  const tipHalfChord = Math.max(tipChordM / 2, 0.001);
+  return [
+    rootCenter.clone().add(tangent.clone().multiplyScalar(rootHalfChord)),
+    tipCenter.clone().add(tangent.clone().multiplyScalar(tipHalfChord)),
+    tipCenter.clone().add(tangent.clone().multiplyScalar(-tipHalfChord)),
+    rootCenter.clone().add(tangent.clone().multiplyScalar(-rootHalfChord)),
+  ];
+}
+
 function mirrorLiftingSurfacePreview(surface: LiftingSurfacePreview): LiftingSurfacePreview {
   return {
     ...surface,
-    id: `${surface.id}:mirror-y`,
+    id: `${surface.id}:mirror-x`,
     label: `${surface.label} mirror`,
     mirrored: true,
+    planform: surface.planform?.map((point) => new THREE.Vector3(-point.x, point.y, point.z)),
     sections: surface.sections.map((section) => section.map((point) => new THREE.Vector3(-point.x, point.y, point.z))),
   };
 }
@@ -390,6 +760,7 @@ function mirrorLiftingSurfacePreviewAcrossPlane(surface: LiftingSurfacePreview, 
     id: `${surface.id}:mirror-plane-${index}`,
     label: `${surface.label} mirror`,
     mirrored: true,
+    planform: surface.planform?.map(mirrorPoint),
     sections: surface.sections.map((section) => section.map(mirrorPoint)),
   };
 }
@@ -407,6 +778,7 @@ function signedShapeBounds(shape: SizeShape) {
 }
 
 type SideSketchPreview = {
+  airfoilSections?: THREE.Vector3[][];
   id: string;
   label: string;
   mirrored?: boolean;
@@ -426,23 +798,26 @@ function sideSketchesForPreview(shapes: SizeShape[]): SideSketchPreview[] {
       (candidate) => candidate.sketchViewMode === "side" && candidate.role === "mirrorPlane" && candidate.id !== shape.id && shapeTouchesMirrorPlane(shape, candidate),
     );
     const stationX = (touchedMirrorPlane ? sideViewStationX(touchedMirrorPlane, shapes) : undefined) ?? sideViewStationX(shape, shapes) ?? 0;
-    const zOffset = shape.zOffsetM ?? 0;
+    const zOffset = effectiveZOffsetM(shape, shapes);
     const revolveAxis = touchedMirrorPlane?.points[0] && touchedMirrorPlane.points[1]
       ? {
-        end: sidePointToPreviewVector(touchedMirrorPlane.points[1], stationX, touchedMirrorPlane.zOffsetM ?? 0),
+        end: sidePointToPreviewVector(touchedMirrorPlane.points[1], stationX, effectiveZOffsetM(touchedMirrorPlane, shapes)),
         label: touchedMirrorPlane.label,
-        start: sidePointToPreviewVector(touchedMirrorPlane.points[0], stationX, touchedMirrorPlane.zOffsetM ?? 0),
+        start: sidePointToPreviewVector(touchedMirrorPlane.points[0], stationX, effectiveZOffsetM(touchedMirrorPlane, shapes)),
       }
       : undefined;
     const preview = {
+      airfoilSections: shape.role === "liftingSurface" && shape.liftingSurfaceKind !== "lex" ? sideViewAirfoilSections(shape, stationX, zOffset) : undefined,
       id: shape.id,
       label: shape.label,
       points: shape.points.map((point) => sidePointToPreviewVector(point, stationX, zOffset)),
       revolveAxis,
       role: shape.role,
     };
-    if (Math.abs(stationX) <= 0.001) return [preview];
-    return [preview, mirrorSideSketchPreview(preview)];
+    const localMirrors = shouldMirrorSideSketchAcrossCenterline(shape) ? [mirrorSideSketchAcrossCenterline(preview)] : [];
+    const previews = [preview, ...localMirrors];
+    if (Math.abs(stationX) <= 0.001) return previews;
+    return [...previews, ...previews.map(mirrorSideSketchPreview)];
   });
 }
 
@@ -450,11 +825,93 @@ function sidePointToPreviewVector(point: SizePoint, stationX: number, zOffset: n
   return new THREE.Vector3(stationX, point.yM, point.xM + zOffset);
 }
 
+function sideViewAirfoilSections(shape: SizeShape, stationX: number, zOffset: number) {
+  const bounds = signedShapeBounds(shape);
+  const rootZ = Math.abs(bounds.minX) <= 0.002 ? 0 : bounds.minX;
+  const tipZ = Math.abs(bounds.maxX - rootZ) < 0.01 ? rootZ + 0.05 : bounds.maxX;
+  const span = Math.max(tipZ - rootZ, 0.01);
+  const rootAirfoil = shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012";
+  const tipAirfoil = shape.airfoilStations?.tip ?? shape.airfoil ?? rootAirfoil;
+  return [0, 1].map((station) => {
+    const zM = rootZ + span * station;
+    const extents = chordExtentsAtX(shape.points, zM) ?? nearestChordExtentsAtX(shape.points, zM, rootZ, tipZ) ?? { minY: bounds.minY, maxY: bounds.maxY };
+    const leadingY = Math.max(extents.maxY, extents.minY);
+    const trailingY = Math.min(extents.maxY, extents.minY);
+    return sideViewAirfoilSection3D({
+      airfoil: rootAirfoil,
+      blendT: station,
+      chordM: Math.max(leadingY - trailingY, 0.001),
+      leadingY,
+      stationX,
+      tipAirfoil,
+      zM: zM + zOffset,
+    });
+  });
+}
+
+function sideViewAirfoilSection3D({
+  airfoil,
+  blendT,
+  chordM,
+  leadingY,
+  stationX,
+  tipAirfoil,
+  zM,
+}: {
+  airfoil: string;
+  blendT: number;
+  chordM: number;
+  leadingY: number;
+  stationX: number;
+  tipAirfoil: string;
+  zM: number;
+}) {
+  const upper: THREE.Vector3[] = [];
+  const lower: THREE.Vector3[] = [];
+  const thicknessRatio = Math.max(mix(airfoilThicknessRatio(airfoil), airfoilThicknessRatio(tipAirfoil), blendT), 0.04);
+  for (let index = 0; index <= 28; index += 1) {
+    const t = index / 28;
+    const chordOffsetM = -chordM * t;
+    const halfThicknessM = nacaSymmetricHalfThickness(t, thicknessRatio, chordM);
+    const camberM = mix(airfoilCamberAtStation(airfoil, t, chordM), airfoilCamberAtStation(tipAirfoil, t, chordM), blendT);
+    upper.push(new THREE.Vector3(stationX + camberM + halfThicknessM, leadingY + chordOffsetM, zM));
+    lower.unshift(new THREE.Vector3(stationX + camberM - halfThicknessM, leadingY + chordOffsetM, zM));
+  }
+  return [...upper, ...lower, upper[0].clone()];
+}
+
+function shouldMirrorSideSketchAcrossCenterline(shape: SizeShape) {
+  if (shape.role !== "liftingSurface" || !shape.points.length) return false;
+  const minX = Math.min(...shape.points.map((point) => point.xM));
+  const maxX = Math.max(...shape.points.map((point) => point.xM));
+  return minX >= -0.001 && maxX > 0.001;
+}
+
+function mirrorSideSketchAcrossCenterline(sketch: SideSketchPreview): SideSketchPreview {
+  const mirrorVector = (point: THREE.Vector3) => new THREE.Vector3(point.x, point.y, -point.z);
+  return {
+    ...sketch,
+    airfoilSections: sketch.airfoilSections?.map((section) => section.map(mirrorVector)),
+    id: `${sketch.id}:mirror-z`,
+    label: `${sketch.label} mirror`,
+    mirrored: true,
+    points: sketch.points.map(mirrorVector),
+    revolveAxis: sketch.revolveAxis
+      ? {
+        ...sketch.revolveAxis,
+        end: mirrorVector(sketch.revolveAxis.end),
+        start: mirrorVector(sketch.revolveAxis.start),
+      }
+      : undefined,
+  };
+}
+
 function mirrorSideSketchPreview(sketch: SideSketchPreview): SideSketchPreview {
   const mirrorVector = (point: THREE.Vector3) => new THREE.Vector3(-point.x, point.y, point.z);
   return {
     ...sketch,
-    id: `${sketch.id}:mirror-y`,
+    airfoilSections: sketch.airfoilSections?.map((section) => section.map(mirrorVector)),
+    id: `${sketch.id}:mirror-x`,
     label: `${sketch.label} mirror`,
     mirrored: true,
     points: sketch.points.map(mirrorVector),
@@ -501,6 +958,15 @@ function createSideSketchGroup(sketch: SideSketchPreview, selected: boolean) {
     ? new THREE.LineLoop(lineGeometry, new THREE.LineBasicMaterial({ color, depthTest: false }))
     : new THREE.Line(lineGeometry, new THREE.LineBasicMaterial({ color, depthTest: false }));
   group.add(line);
+  if (sketch.role === "liftingSurface") {
+    for (const section of sketch.airfoilSections ?? []) {
+      group.add(createAirfoilCapMesh(section, selected ? "#facc15" : "#bae6fd", selected ? 0.34 : 0.24));
+      group.add(new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints(section),
+        new THREE.LineBasicMaterial({ color: selected ? "#facc15" : "#e0f2fe", depthTest: false }),
+      ));
+    }
+  }
   const label = createTextSprite(sketch.label, "#e0f2fe", 0.024);
   const center = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
   label.position.copy(center).add(new THREE.Vector3(0, 0, 0.03));
@@ -561,7 +1027,7 @@ function createSideRevolvedSketchGroup(sketch: SideSketchPreview, color: string,
   group.add(edges);
 
   const profileGeometry = new THREE.BufferGeometry().setFromPoints(sketch.points);
-  const profileLine = new THREE.LineLoop(
+  const profileLine = new THREE.Line(
     profileGeometry,
     new THREE.LineBasicMaterial({ color: "#f8fafc", depthTest: false }),
   );
@@ -590,13 +1056,14 @@ function createRevolvedBodyGroup(body: RevolvedBodyPreview, selected: boolean) {
   const sourceProfile = body.shape.points.filter((point) => Number.isFinite(point.xM) && Number.isFinite(point.yM));
   if (sourceProfile.length < 2) return group;
 
-  const axisStart = new THREE.Vector3(body.axis.start.xM, body.axis.start.yM, 0);
-  const axisEnd = new THREE.Vector3(body.axis.end.xM, body.axis.end.yM, 0);
+  const zOffsetM = effectiveZOffsetM(body.shape, []);
+  const axisStart = new THREE.Vector3(body.axis.start.xM, body.axis.start.yM, zOffsetM);
+  const axisEnd = new THREE.Vector3(body.axis.end.xM, body.axis.end.yM, zOffsetM);
   const axisVector = axisEnd.clone().sub(axisStart);
   if (axisVector.lengthSq() <= 1e-10) return group;
   const axisDirection = axisVector.normalize();
   const projectedProfile = sourceProfile.map((point) => {
-    const pointVector = new THREE.Vector3(point.xM, point.yM, 0);
+    const pointVector = new THREE.Vector3(point.xM, point.yM, zOffsetM);
     const projection = pointVector.clone().sub(axisStart).dot(axisDirection);
     const closestOnAxis = axisStart.clone().add(axisDirection.clone().multiplyScalar(projection));
     return {
@@ -613,7 +1080,8 @@ function createRevolvedBodyGroup(body: RevolvedBodyPreview, selected: boolean) {
   surfaceGeometry.computeVertexNormals();
 
   const surfaceMaterial = new THREE.MeshStandardMaterial({
-    color: body.mirrored ? "#6fb7d6" : selected ? "#7dd3fc" : "#90cdf4",
+    color: body.mirrored ? "#8b949e" : "#aeb7c2",
+    depthWrite: false,
     metalness: 0.08,
     opacity: body.mirrored ? 0.42 : 0.58,
     roughness: 0.52,
@@ -634,9 +1102,9 @@ function createRevolvedBodyGroup(body: RevolvedBodyPreview, selected: boolean) {
   group.add(edges);
 
   const profileGeometry = new THREE.BufferGeometry().setFromPoints(
-    sourceProfile.map((point) => new THREE.Vector3(point.xM, point.yM, 0.004)),
+    sourceProfile.map((point) => new THREE.Vector3(point.xM, point.yM, zOffsetM + 0.004)),
   );
-  const profileLine = new THREE.LineLoop(
+  const profileLine = new THREE.Line(
     profileGeometry,
     new THREE.LineBasicMaterial({ color: "#f8fafc", linewidth: 2 }),
   );
@@ -653,7 +1121,7 @@ function createRevolvedBodyGroup(body: RevolvedBodyPreview, selected: boolean) {
   return group;
 }
 
-function shouldMirrorAcrossImplicitY(shape: SizeShape) {
+function shouldMirrorAcrossImplicitX(shape: SizeShape) {
   if (!shape.points.length) return false;
   const minX = Math.min(...shape.points.map((point) => point.xM));
   const maxX = Math.max(...shape.points.map((point) => point.xM));
@@ -670,13 +1138,13 @@ function mirroredBodyPreview(body: RevolvedBodyPreview): RevolvedBodyPreview {
       end: mirrorPoint(body.axis.end),
       start: mirrorPoint(body.axis.start),
     },
-    id: `${body.id}:mirror-y`,
+    id: `${body.id}:mirror-x`,
     label: `${body.label} mirror`,
     mirrored: true,
     profile: body.profile.map(mirrorPoint),
     shape: {
       ...body.shape,
-      id: `${body.shape.id}:mirror-y`,
+      id: `${body.shape.id}:mirror-x`,
       label: `${body.shape.label} mirror`,
       points: body.shape.points.map(mirrorPoint),
     },
@@ -696,7 +1164,7 @@ function revolveAxisForShape(shape: SizeShape, shapes: SizeShape[]): RevolveAxis
   return {
     start: { xM: 0, yM: minY },
     end: { xM: 0, yM: maxY },
-    label: "Y=0 mirror",
+    label: "X=0 mirror",
   };
 }
 
@@ -704,6 +1172,7 @@ function createReferenceLayer(bounds: PreviewBounds, shapes: SizeShape[]) {
   const group = new THREE.Group();
   group.add(createScaleGrid(bounds));
   group.add(createAxisReference(bounds));
+  group.add(createReferenceLines(shapes));
   group.add(createMirrorPlanes(shapes, bounds));
   return group;
 }
@@ -770,7 +1239,7 @@ function createMirrorPlanes(shapes: SizeShape[], bounds: PreviewBounds) {
     new THREE.Vector3(0, bounds.minY, 0),
     new THREE.Vector3(0, bounds.maxY, 0),
     bounds,
-    "Y=0 mirror",
+    "X=0 mirror",
   );
   group.add(implicitPlane);
 
@@ -791,12 +1260,65 @@ function createMirrorPlanes(shapes: SizeShape[], bounds: PreviewBounds) {
   return group;
 }
 
+function createReferenceLines(shapes: SizeShape[]) {
+  const group = new THREE.Group();
+  for (const shape of shapes) {
+    if (shape.role !== "referenceLine" || shape.points.length < 2) continue;
+    const lineGroup = shape.sketchViewMode === "side" ? createSideViewReferenceLine(shape, shapes) : createTopViewReferenceLine(shape);
+    group.add(lineGroup);
+  }
+  return group;
+}
+
+function createTopViewReferenceLine(shape: SizeShape) {
+  const group = new THREE.Group();
+  const stationX = verticalReferenceX(shape);
+  const zOffset = effectiveZOffsetM(shape, []);
+  const points = stationX === undefined
+    ? shape.points.map((point) => new THREE.Vector3(point.xM, point.yM, zOffset))
+    : shape.points.map((point) => new THREE.Vector3(stationX, 0, -point.yM + zOffset));
+  group.add(createDashedReferencePolyline(points, "#86efac", 0.9));
+  if (!points.some((point) => Math.abs(point.x) <= 0.001)) {
+    group.add(createDashedReferencePolyline(points.map((point) => new THREE.Vector3(-point.x, point.y, point.z)), "#86efac", 0.44));
+  }
+  const center = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
+  const label = createTextSprite(shape.label, "#dcfce7", 0.022);
+  label.position.copy(center).add(new THREE.Vector3(0, 0, 0.018));
+  group.add(label);
+  return group;
+}
+
+function createSideViewReferenceLine(shape: SizeShape, shapes: SizeShape[]) {
+  const group = new THREE.Group();
+  const stationX = sideViewStationX(shape, shapes) ?? 0;
+  const zOffset = effectiveZOffsetM(shape, shapes);
+  const points = shape.points.map((point) => new THREE.Vector3(stationX, point.yM, -point.xM + zOffset));
+  group.add(createDashedReferencePolyline(points, "#86efac", 0.9));
+  if (Math.abs(stationX) > 0.001) {
+    group.add(createDashedReferencePolyline(points.map((point) => new THREE.Vector3(-point.x, point.y, point.z)), "#86efac", 0.44));
+  }
+  const center = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
+  const label = createTextSprite(shape.label, "#dcfce7", 0.022);
+  label.position.copy(center).add(new THREE.Vector3(0, 0, 0.018));
+  group.add(label);
+  return group;
+}
+
+function createDashedReferencePolyline(points: THREE.Vector3[], color: string, opacity: number) {
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(points),
+    new THREE.LineDashedMaterial({ color, dashSize: 0.025, depthTest: false, gapSize: 0.014, transparent: true, opacity }),
+  );
+  line.computeLineDistances();
+  return line;
+}
+
 function createSideViewMirrorPlane(shape: SizeShape, shapes: SizeShape[], bounds: PreviewBounds) {
   const [start, end] = shape.points;
   const stationX = sideViewStationX(shape, shapes) ?? 0;
-  const zOffset = shape.zOffsetM ?? 0;
-  const start3 = new THREE.Vector3(stationX, start.yM, start.xM + zOffset);
-  const end3 = new THREE.Vector3(stationX, end.yM, end.xM + zOffset);
+  const zOffset = effectiveZOffsetM(shape, shapes);
+  const start3 = new THREE.Vector3(stationX, start.yM, -start.xM + zOffset);
+  const end3 = new THREE.Vector3(stationX, end.yM, -end.xM + zOffset);
   const ySpan = Math.max(Math.abs(end.yM - start.yM), 0.08);
   const zSpan = Math.max(Math.abs(end.xM - start.xM), 0.08);
   const zMin = Math.min(start3.z, end3.z) - zSpan * 0.5;
@@ -919,7 +1441,7 @@ function referenceBoundsForPreview(shapes: SizeShape[], bodies: RevolvedBodyPrev
     zs.push(-radius, radius);
   }
   for (const shape of shapes) {
-    if (shape.sketchViewMode === "side" && !referenceRolesForPreview(shape)) {
+    if (shape.sketchViewMode === "side") {
       const touchedMirrorPlane = shapes.find(
         (candidate) => candidate.sketchViewMode === "side" && candidate.role === "mirrorPlane" && candidate.id !== shape.id && shapeTouchesMirrorPlane(shape, candidate),
       );
@@ -928,23 +1450,21 @@ function referenceBoundsForPreview(shapes: SizeShape[], bodies: RevolvedBodyPrev
       if (Math.abs(stationX) > 0.001) xs.push(-stationX);
       for (const point of shape.points) {
         ys.push(point.yM);
-        zs.push(point.xM + (shape.zOffsetM ?? 0));
+        const zOffset = effectiveZOffsetM(shape, shapes);
+        zs.push(referenceRolesForPreview(shape) ? -point.xM + zOffset : point.xM + zOffset);
       }
       continue;
     }
-    if (shape.role !== "mirrorPlane") continue;
-    if (shape.sketchViewMode === "side") {
-      const stationX = sideViewStationX(shape, shapes) ?? 0;
-      xs.push(stationX);
-      for (const point of shape.points) {
-        ys.push(point.yM);
-        zs.push(point.xM + (shape.zOffsetM ?? 0));
-      }
-      continue;
-    }
+    if (!referenceRolesForPreview(shape)) continue;
+    const stationX = shape.role === "referenceLine" ? verticalReferenceX(shape) : undefined;
     for (const point of shape.points) {
-      xs.push(point.xM);
-      ys.push(point.yM);
+      xs.push(stationX ?? point.xM);
+      ys.push(stationX === undefined ? point.yM : 0);
+      const zOffset = effectiveZOffsetM(shape, shapes);
+      zs.push(stationX === undefined ? zOffset : -point.yM + zOffset);
+    }
+    if (shape.role === "referenceLine" && shape.points.every((point) => Math.abs(point.xM) > 0.001)) {
+      for (const point of shape.points) xs.push(-point.xM);
     }
   }
   const minX = Math.min(...xs, -radius) - 0.08;

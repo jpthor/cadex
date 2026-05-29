@@ -84,9 +84,9 @@ const fallback = computePropulsionSizing(aircraftMassKg, motorCount, 4, 0, input
 approx(fallback.effectiveDiskLoadingNpm2, 85 * Math.sqrt(4 / 2), "missing rotor geometry falls back to blade-count disk loading");
 assert.ok(fallback.rotorDiameterM > 0, "missing rotor geometry still produces a rotor diameter estimate");
 
-assert.equal(propellerSamples.length, 10, "sample propeller dropdown has ten APC designs");
-assert.equal(motorSamples.length, 10, "sample motor dropdown has ten representative motor sizes");
-assert.equal(batterySamples.length, 10, "sample battery dropdown has ten representative packs");
+assert.ok(propellerSamples.length >= 10, "sample propeller dropdown has broad APC-style designs");
+assert.ok(motorSamples.length >= 10, "sample motor dropdown has broad representative motor sizes");
+assert.ok(batterySamples.length >= 10, "sample battery dropdown has broad representative packs");
 const samplePropeller = propellerSamples.find((propeller) => propeller.id === "apc-20x10e");
 const sampleMotor = motorSamples.find((motor) => motor.id === "motor-4225-390kv");
 const sampleBattery = batterySamples.find((batteryPack) => batteryPack.id === "pack-8s-8ah-25c");
@@ -215,13 +215,13 @@ const sizingProject = {
 const expectedBatteryMassKg = 0.02 * 0.028 * 1700;
 approx(batteryMassFromSizing(sizingProject), expectedBatteryMassKg, "Propulsion receives inferred battery mass from Sizing");
 const rotorDefinition = rotorDefinitionFromSizing(sizingProject);
-assert.equal(rotorDefinition.bladeCount, 4, "Propulsion receives blade count from Sizing");
-assert.equal(rotorDefinition.count, 2, "Propulsion uses Aircraft summary rotor count without double-counting local mirror planes");
-approx(rotorDefinition.diameterM, 0.6, "Propulsion receives rotor diameter from Sizing");
+assert.equal(rotorDefinition.bladeCount, 4, "Propulsion receives blade count from actual sketch rotor");
+assert.equal(rotorDefinition.count, 4, "Propulsion receives actual physical rotor count after local and origin mirrors");
+approx(rotorDefinition.diameterM, 0.6, "Propulsion receives rotor diameter from actual sketch rotor");
 assert.deepEqual(
   rotorDefinitionFromSizing({ ...sizingProject, shapes: [] }),
   { bladeCount: 2, count: motorCount, diameterM: 0 },
-  "missing rotor geometry falls back to mission motor count",
+  "missing rotor geometry falls back to sizing motor count",
 );
 
 console.log("Propulsion engine validation passed.");

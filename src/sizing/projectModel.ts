@@ -1,8 +1,10 @@
 export type SizeShapeRole = "body" | "liftingSurface" | "part" | "referenceLine" | "mirrorPlane";
+const implicitMirrorShapeId = "implicit-x-axis-mirror";
+const legacyImplicitMirrorShapeId = "implicit-y-axis-mirror";
 export type SizeDrawMode = "line" | "spline";
 export type BodyMaterial = "aluminium" | "fibreglass" | "carbonFibre";
 export type PartType = "payload" | "battery" | "motor" | "rotor" | "electronics";
-export type LiftingSurfaceKind = "wing" | "tailplane" | "fin";
+export type LiftingSurfaceKind = "wing" | "tailplane" | "fin" | "lex";
 
 export type SizePoint = {
   xM: number;
@@ -96,6 +98,7 @@ export type SizeShape = {
   cadGeometry?: SizeCadGeometry;
   sketchViewMode?: "top" | "front" | "side";
   sideViewStationId?: string;
+  zStationId?: string;
   zOffsetM?: number;
   dihedralBreakStationId?: string;
   dihedralLiftM?: number;
@@ -201,6 +204,7 @@ export const liftingSurfaceKindLabels: Record<LiftingSurfaceKind, string> = {
   wing: "Wing",
   tailplane: "Tailplane",
   fin: "Fin",
+  lex: "LEX",
 };
 
 export function defaultSizingProject(): SizingProject {
@@ -319,9 +323,10 @@ function normalizeShape(shape: SizeShape): SizeShape {
     rotorBladeCount: role === "part" && partType === "rotor" ? Math.max(1, Math.round(numberOr(shape.rotorBladeCount, 2))) : undefined,
     cadGeometry: normalizeCadGeometry(shape.cadGeometry),
     sketchViewMode: normalizeSketchViewMode(shape.sketchViewMode),
-    sideViewStationId: typeof shape.sideViewStationId === "string" && shape.sideViewStationId ? shape.sideViewStationId : undefined,
+    sideViewStationId: normalizeShapeId(shape.sideViewStationId),
+    zStationId: normalizeShapeId(shape.zStationId),
     zOffsetM: optionalNumber(shape.zOffsetM),
-    dihedralBreakStationId: typeof shape.dihedralBreakStationId === "string" && shape.dihedralBreakStationId ? shape.dihedralBreakStationId : undefined,
+    dihedralBreakStationId: normalizeShapeId(shape.dihedralBreakStationId),
     dihedralLiftM: optionalNumber(shape.dihedralLiftM),
   };
 }
@@ -466,7 +471,7 @@ function normalizePartType(value: unknown): PartType {
 }
 
 function normalizeLiftingSurfaceKind(value: unknown): LiftingSurfaceKind {
-  return value === "tailplane" || value === "fin" || value === "wing" ? value : "wing";
+  return value === "tailplane" || value === "fin" || value === "lex" || value === "wing" ? value : "wing";
 }
 
 function normalizeSketchViewMode(value: unknown) {
@@ -491,12 +496,12 @@ function normalizeSnapAttachment(value: unknown): SizeSnapAttachment | undefined
   if (!value || typeof value !== "object") return undefined;
   const candidate = value as Partial<SizeSnapAttachment>;
   if (candidate.kind === "node") {
-    const shapeId = typeof candidate.shapeId === "string" ? candidate.shapeId : undefined;
+    const shapeId = normalizeShapeId(candidate.shapeId);
     const pointIndex = optionalNumber(candidate.pointIndex);
     return shapeId && pointIndex !== undefined ? { kind: "node", shapeId, pointIndex: Math.max(0, Math.round(pointIndex)) } : undefined;
   }
   if (candidate.kind === "segment") {
-    const shapeId = typeof candidate.shapeId === "string" ? candidate.shapeId : undefined;
+    const shapeId = normalizeShapeId(candidate.shapeId);
     const segmentIndex = optionalNumber(candidate.segmentIndex);
     const t = optionalNumber(candidate.t);
     return shapeId && segmentIndex !== undefined && t !== undefined
@@ -526,7 +531,7 @@ function normalizeDimension(value: unknown): SizeDimension | undefined {
 function normalizeDimensionTarget(value: unknown): SizeDimensionTarget | undefined {
   if (!value || typeof value !== "object") return undefined;
   const candidate = value as Partial<SizeDimensionTarget>;
-  const shapeId = typeof candidate.shapeId === "string" ? candidate.shapeId : undefined;
+  const shapeId = normalizeShapeId(candidate.shapeId);
   if (!shapeId) return undefined;
   if (candidate.kind === "node") {
     const pointIndex = optionalNumber(candidate.pointIndex);
@@ -540,6 +545,11 @@ function normalizeDimensionTarget(value: unknown): SizeDimensionTarget | undefin
       : { kind: "segment", shapeId, segmentIndex: Math.max(0, Math.round(segmentIndex)), t: Math.min(1, Math.max(0, t)) };
   }
   return undefined;
+}
+
+function normalizeShapeId(value: unknown) {
+  if (typeof value !== "string" || !value) return undefined;
+  return value === legacyImplicitMirrorShapeId ? implicitMirrorShapeId : value;
 }
 
 export {
