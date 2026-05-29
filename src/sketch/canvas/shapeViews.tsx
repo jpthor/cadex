@@ -161,6 +161,7 @@ export function SketchShape({
   const motorAxisPoints = shape.partType === "motor" ? motorAxisLinePoints(projected, canonicalPoints, renderPoints) : [];
   const motorAxisPath = motorAxisPoints.length ? pathForPoints(motorAxisPoints, view) : "";
   const motorAxisMirrorPath = shouldRenderOriginMirror && motorAxisPoints.length ? pathForPoints(mirrorPoints(motorAxisPoints), view) : "";
+  const collapsedReferencePoint = collapsedReferenceCanvasPoint(shape, renderPoints, view);
   const nodeEntries = nodePoints.map((point, pointIndex) => ({ point, pointIndex }));
   const visibleNodeEntries =
     shape.partType === "motor" && !projected && nodeEntries.length >= 2
@@ -169,6 +170,39 @@ export function SketchShape({
           { point: motorRightDragPoint(canonicalPoints), pointIndex: 1 },
         ]
       : nodeEntries;
+  function handleShapeHitPointerDown(event: PointerEvent<SVGPathElement | SVGCircleElement>) {
+    if (drawActive || readOnly) return;
+    event.stopPropagation();
+    if (event.shiftKey) {
+      onJoinToSegment(pointFromShapePointerEvent(event, view));
+      return;
+    }
+    if (dimensionToolActive) {
+      onSelectDimensionTarget(nearestSegmentTarget(shape, pointFromShapePointerEvent(event, view)));
+      return;
+    }
+    if (selectedMotorId && shape.id !== selectedMotorId) {
+      onJoinToSegment(pointFromShapePointerEvent(event, view));
+      return;
+    }
+    if (!referenceRoles.includes(shape.role)) {
+      if (!selected) onSelect();
+      if (selected && shape.role === "part") {
+        suppressClickAfterDeleteRef.current = true;
+        window.setTimeout(() => {
+          suppressClickAfterDeleteRef.current = false;
+        }, 300);
+        onBeginShapeDrag(event as PointerEvent<SVGPathElement>);
+      }
+      return;
+    }
+    if (!selected) {
+      onSelect();
+      return;
+    }
+    onBeginLineDrag(event as PointerEvent<SVGPathElement>);
+  }
+
   return (
     <g
       className={`${className} ${shouldFill ? "part-filled" : ""}`}
@@ -200,38 +234,14 @@ export function SketchShape({
       <path
         className={`shape-hit shape-hit-live ${shouldFill ? "shape-hit-filled" : ""}`}
         d={livePath}
-        onPointerDown={(event) => {
-          if (drawActive || readOnly) return;
-          event.stopPropagation();
-          if (event.shiftKey) {
-            onJoinToSegment(pointFromShapePointerEvent(event, view));
-            return;
-          }
-          if (dimensionToolActive) {
-            onSelectDimensionTarget(nearestSegmentTarget(shape, pointFromShapePointerEvent(event, view)));
-            return;
-          }
-          if (selectedMotorId && shape.id !== selectedMotorId) {
-            onJoinToSegment(pointFromShapePointerEvent(event, view));
-            return;
-          }
-          if (!referenceRoles.includes(shape.role)) {
-            if (!selected) onSelect();
-            if (selected && shape.role === "part") {
-              suppressClickAfterDeleteRef.current = true;
-              window.setTimeout(() => {
-                suppressClickAfterDeleteRef.current = false;
-              }, 300);
-              onBeginShapeDrag(event);
-            }
-            return;
-          }
-          if (!referenceRoles.includes(shape.role)) return;
-          onBeginLineDrag(event);
-        }}
+        onPointerDown={handleShapeHitPointerDown}
       />
+      {collapsedReferencePoint ? (
+        <circle className="shape-hit shape-hit-dot" cx={collapsedReferencePoint.x} cy={collapsedReferencePoint.y} r="10" onPointerDown={handleShapeHitPointerDown} />
+      ) : null}
       {shouldRenderOriginMirror ? <path className="shape-hit shape-hit-mirror" d={mirrorPath} /> : null}
       <path className="shape-live" d={livePath} />
+      {collapsedReferencePoint ? <circle className="shape-live-dot" cx={collapsedReferencePoint.x} cy={collapsedReferencePoint.y} r="4" /> : null}
       {motorAxisPath ? <path className="shape-axis" d={motorAxisPath} /> : null}
       {localMirrorSets.map((points, index) => (
         <path className="shape-local-mirror" d={shouldFill ? closedPathForPoints(points, view) : pathForPoints(points, view)} key={`local-${index}`} />
@@ -352,6 +362,14 @@ function motorAxisLinePoints(projected: boolean, canonicalPoints: SizePoint[], r
   ];
 }
 
+function collapsedReferenceCanvasPoint(shape: SizeShape, points: SizePoint[], view: CanvasView) {
+  if (!referenceRoles.includes(shape.role) || points.length < 2) return null;
+  const first = points[0];
+  if (!first) return null;
+  const collapsed = points.every((point) => Math.hypot(point.xM - first.xM, point.yM - first.yM) < 1e-6);
+  return collapsed ? toCanvas(first, view) : null;
+}
+
 function motorRightDragPoint(points: SizePoint[]): SizePoint {
   return motorSpanPoints(points)[1] ?? {
     xM: 0,
@@ -445,8 +463,8 @@ export function AirfoilStations({
 }) {
   const bounds = shapeBounds(shape);
   const stations: { id: AirfoilStation; pct: number; label: string }[] = [
-    { id: "root10", pct: 0.1, label: "10%" },
-    { id: "tip90", pct: 0.9, label: "90%" },
+    { id: "root", pct: 0, label: "Root" },
+    { id: "tip", pct: 1, label: "Tip" },
   ];
   const y1 = toCanvas({ xM: 0, yM: bounds.minY }, view).y;
   const y2 = toCanvas({ xM: 0, yM: bounds.maxY }, view).y;
@@ -608,11 +626,11 @@ export function AnalysisMarkers({ analysis, view }: { analysis: SizingAnalysis; 
     <g className="analysis-markers">
       <g className="com-reference">
         <line className="reference-line" x1="24" y1={com.y} x2={view.width - 24} y2={com.y} />
-        <text x={view.width - 118} y={com.y - 8}>CoM y {analysis.com.yM.toFixed(2)} m</text>
+        <text x={view.width - 118} y={com.y - 8}>CoM X {analysis.com.yM.toFixed(2)} m</text>
       </g>
       <g className="cop-reference">
         <line className="reference-line" x1="24" y1={cop.y} x2={view.width - 24} y2={cop.y} />
-        <text x={view.width - 118} y={cop.y + 18}>CoP y {analysis.cop.yM.toFixed(2)} m</text>
+        <text x={view.width - 118} y={cop.y + 18}>CoP X {analysis.cop.yM.toFixed(2)} m</text>
       </g>
       <g className="com-marker">
         <circle cx={com.x} cy={com.y} r="9" />
@@ -678,6 +696,11 @@ export function DimensionLayer({
             className={`dimension-lock ${selected ? "selected" : ""}`}
             key={dimension.id}
             onClick={(event) => {
+              event.stopPropagation();
+              onSelectDimension(dimension.id);
+            }}
+            onPointerDown={(event) => {
+              if ((event.target as Element).closest(".dimension-delete-control, .dimension-label")) return;
               event.stopPropagation();
               onSelectDimension(dimension.id);
             }}
@@ -753,9 +776,13 @@ function DimensionGraphics({ geometry }: { geometry: DimensionGeometry }) {
   return (
     <>
       <line className="dimension-hit" x1={geometry.dimStart.x} y1={geometry.dimStart.y} x2={geometry.dimEnd.x} y2={geometry.dimEnd.y} />
+      <line className="dimension-hit" x1={geometry.start.x} y1={geometry.start.y} x2={geometry.dimStart.x} y2={geometry.dimStart.y} />
+      <line className="dimension-hit" x1={geometry.end.x} y1={geometry.end.y} x2={geometry.dimEnd.x} y2={geometry.dimEnd.y} />
       <line className="dimension-extension" x1={geometry.start.x} y1={geometry.start.y} x2={geometry.dimStart.x} y2={geometry.dimStart.y} />
       <line className="dimension-extension" x1={geometry.end.x} y1={geometry.end.y} x2={geometry.dimEnd.x} y2={geometry.dimEnd.y} />
       <line className="dimension-measure" markerEnd="url(#dimension-arrow-end)" markerStart="url(#dimension-arrow-start)" x1={geometry.dimStart.x} y1={geometry.dimStart.y} x2={geometry.dimEnd.x} y2={geometry.dimEnd.y} />
+      <circle className="dimension-hit-point" cx={geometry.start.x} cy={geometry.start.y} r="9" />
+      <circle className="dimension-hit-point" cx={geometry.end.x} cy={geometry.end.y} r="9" />
       <circle cx={geometry.start.x} cy={geometry.start.y} r="3" />
       <circle cx={geometry.end.x} cy={geometry.end.y} r="3" />
     </>

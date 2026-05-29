@@ -2,7 +2,7 @@ import type { SizeDimensionTarget } from "../sizing";
 
 export const scaleUnits = ["cm", "m", "mm"] as const;
 export type ScaleUnit = (typeof scaleUnits)[number];
-export type AirfoilStation = "root10" | "tip90";
+export type AirfoilStation = "root" | "tip";
 export type CanvasViewMode = "top" | "front" | "side";
 export type JoinPointSelection = { shapeId: string; pointIndex: number };
 export type DimensionDraft = { firstTarget: SizeDimensionTarget } | null;

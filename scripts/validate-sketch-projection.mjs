@@ -155,6 +155,18 @@ const fuselageReference = {
     { xM: 0.1, yM: -1.2 },
   ],
 };
+const sideMirrorPlane = {
+  id: "side-mirror-plane",
+  role: "mirrorPlane",
+  label: "Side Mirror Plane",
+  drawMode: "line",
+  sketchViewMode: "side",
+  sideViewStationId: "fuselage-reference",
+  points: [
+    { xM: 0.2, yM: -0.4 },
+    { xM: 0.8, yM: -1.2 },
+  ],
+};
 const dimensionShapes = [
   {
     id: "reference-a",
@@ -235,6 +247,14 @@ approx(frontSectionCenterX(snappedFuselageBody, [fuselageReference]), 0, "body t
 const snappedFuselageFront = frontProjectionShape(snappedFuselageBody, 1, [fuselageReference]);
 approx(Math.min(...snappedFuselageFront.points.map((point) => point.xM)), 0, "Y-axis body front section starts on the revolve axis");
 approx(Math.max(...snappedFuselageFront.points.map((point) => point.xM)), 0.1, "Y-axis body front section uses body radius from Y-axis");
+const fuselageReferenceFront = frontProjectionShape(fuselageReference, 1, [fuselageReference]);
+approx(range(fuselageReferenceFront.points, "xM"), 0, "top-authored lengthwise reference line front view collapses to one X station");
+approx(range(fuselageReferenceFront.points, "yM"), 0, "top-authored lengthwise reference line front view collapses to a dot at Z zero");
+approx(fuselageReferenceFront.points[0].xM, 0.1, "top-authored lengthwise reference line dot keeps reference X station");
+const sideMirrorFront = frontProjectionShape(sideMirrorPlane, 1, [fuselageReference, sideMirrorPlane]);
+approx(range(sideMirrorFront.points, "xM"), 0, "side-authored mirror plane front view is edge-on at one station");
+approx(sideMirrorFront.points[0].xM, 0.1, "side-authored mirror plane front view uses its station reference");
+approx(range(sideMirrorFront.points, "yM"), 0.6, "side-authored mirror plane front view keeps its vertical Z extent");
 const tailboomCad = cadGeometryForShape(tailboomBody, [tailboomMirror]);
 assert.equal(tailboomCad?.kind, "revolvedBody", "body touching a created mirror plane creates a revolved body");
 approx(tailboomCad?.centerM[1] ?? NaN, 0.45, "local mirror body revolves around touched mirror plane X");

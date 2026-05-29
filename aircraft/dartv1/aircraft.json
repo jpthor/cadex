@@ -1838,7 +1838,7 @@
         "tailVolumeTarget": 0.55,
         "takeoffThrustToWeight": 1.4
       },
-      "selectedShapeId": "part-e73fd5e7-cc9e-4c68-aba4-f851ede38851",
+      "selectedShapeId": "part-a01ec89c-3797-43ab-b9fc-6830451a430b",
       "shapes": [
         {
           "bodyMaterial": "carbonFibre",
@@ -1867,7 +1867,7 @@
               {
                 "curveMode": "spline",
                 "xM": 0.11312227107255168,
-                "yM": -0.19925435443071243
+                "yM": -0.1992543544307124
               },
               {
                 "curveMode": "spline",
@@ -1939,8 +1939,8 @@
         {
           "airfoil": "NACA 2412",
           "airfoilStations": {
-            "root10": "NACA 2412",
-            "tip90": "NACA 2412"
+            "root": "NACA 2412",
+            "tip": "NACA 2412"
           },
           "bodyMaterial": "carbonFibre",
           "bodyThicknessMm": 1.2,
@@ -1957,12 +1957,14 @@
             "spanM": 2.316587378547876,
             "tipChordM": 0.6597016184300655
           },
+          "dihedralBreakStationId": "referenceLine-8ec1fae5-ca93-436d-92ea-1d719ed564a1",
+          "dihedralLiftM": 0.1,
           "drawMode": "spline",
           "id": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
           "incidenceDeg": 0,
           "incidenceStationsDeg": {
-            "root10": 0,
-            "tip90": 0
+            "root": 0,
+            "tip": 0
           },
           "label": "Wing 1",
           "liftingSurfaceKind": "wing",
@@ -2208,7 +2210,8 @@
               "yM": -0.263822748464834
             }
           ],
-          "role": "part"
+          "role": "part",
+          "zOffsetM": 0.1
         },
         {
           "drawMode": "line",
@@ -2314,7 +2317,8 @@
               "yM": -1.73
             }
           ],
-          "role": "body"
+          "role": "body",
+          "zOffsetM": 0.1
         },
         {
           "cadGeometry": {
@@ -2362,13 +2366,14 @@
             }
           ],
           "role": "part",
-          "rotorBladeCount": 4
+          "rotorBladeCount": 4,
+          "zOffsetM": 0.1
         },
         {
           "airfoil": "NACA 0012",
           "airfoilStations": {
-            "root10": "NACA 0012",
-            "tip90": "NACA 0012"
+            "root": "NACA 0012",
+            "tip": "NACA 0012"
           },
           "bodyMaterial": "carbonFibre",
           "bodyThicknessMm": 1.2,
@@ -2389,8 +2394,8 @@
           "id": "liftingSurface-78881328-cb17-4a50-a4e5-f8d1c30928c0",
           "incidenceDeg": 0,
           "incidenceStationsDeg": {
-            "root10": 0,
-            "tip90": 0
+            "root": 0,
+            "tip": 0
           },
           "label": "Tailplane",
           "liftingSurfaceKind": "tailplane",
@@ -2442,7 +2447,8 @@
               "yM": -1.73
             }
           ],
-          "role": "liftingSurface"
+          "role": "liftingSurface",
+          "zOffsetM": 0.1
         },
         {
           "drawMode": "line",
@@ -2465,15 +2471,108 @@
             }
           ],
           "role": "referenceLine"
+        },
+        {
+          "airfoil": "NACA 0012",
+          "airfoilStations": {
+            "root": "NACA 0012",
+            "tip": "NACA 0012"
+          },
+          "bodyMaterial": "carbonFibre",
+          "bodyThicknessMm": 1.2,
+          "drawMode": "spline",
+          "id": "liftingSurface-d3a3a468-9080-44c8-802a-7d353646f52a",
+          "incidenceDeg": 0,
+          "incidenceStationsDeg": {
+            "root": 0,
+            "tip": 0
+          },
+          "label": "Fin 1",
+          "liftingSurfaceKind": "fin",
+          "massKg": 0.15,
+          "points": [
+            {
+              "curveMode": "spline",
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "implicit-y-axis-mirror",
+                "t": 0.4992524028459061
+              },
+              "xM": 0,
+              "yM": -1.4951943081878198
+            },
+            {
+              "curveMode": "spline",
+              "xM": 0.28,
+              "yM": -1.6
+            },
+            {
+              "curveMode": "spline",
+              "xM": 0.28,
+              "yM": -1.73
+            },
+            {
+              "curveMode": "spline",
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "implicit-y-axis-mirror",
+                "t": 0.49913403731257067
+              },
+              "xM": 0,
+              "yM": -1.7319253748586334
+            }
+          ],
+          "role": "liftingSurface",
+          "sideViewStationId": "mirrorPlane-3ee5f33f-b262-492b-b1d2-327c5eb9b5c8",
+          "sketchViewMode": "side",
+          "zOffsetM": 0.1
+        },
+        {
+          "drawMode": "line",
+          "id": "mirrorPlane-995ee954-5a69-4118-b11a-44b8efeb3661",
+          "label": "Mirror plane 2",
+          "points": [
+            {
+              "curveMode": "corner",
+              "segmentInMode": "corner",
+              "segmentOutMode": "corner",
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "implicit-y-axis-mirror",
+                "t": 0.4991131238532132
+              },
+              "xM": 0,
+              "yM": -1.7737522935735797
+            },
+            {
+              "curveMode": "corner",
+              "segmentInMode": "corner",
+              "segmentOutMode": "corner",
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "implicit-y-axis-mirror",
+                "t": 0.49931076115707945
+              },
+              "xM": 0,
+              "yM": -1.3784776858410623
+            }
+          ],
+          "role": "mirrorPlane",
+          "sketchViewMode": "side",
+          "zOffsetM": 0.1
         }
       ],
       "showSizingReference": true,
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
-        "height": 720,
-        "originX": 247.2419429303796,
-        "originY": 26.093333008556613,
-        "scale": 781.1605996434838,
+        "height": 874,
+        "originX": 312.1928068170971,
+        "originY": 152.2682868129039,
+        "scale": 358.4959832677407,
         "width": 900
       }
     },
@@ -2519,7 +2618,7 @@
       "tailVolumeTarget": 0.55,
       "takeoffThrustToWeight": 1.4
     },
-    "selectedShapeId": "part-e73fd5e7-cc9e-4c68-aba4-f851ede38851",
+    "selectedShapeId": "part-a01ec89c-3797-43ab-b9fc-6830451a430b",
     "shapes": [
       {
         "bodyMaterial": "carbonFibre",
@@ -2548,7 +2647,7 @@
             {
               "curveMode": "spline",
               "xM": 0.11312227107255168,
-              "yM": -0.19925435443071243
+              "yM": -0.1992543544307124
             },
             {
               "curveMode": "spline",
@@ -2620,8 +2719,8 @@
       {
         "airfoil": "NACA 2412",
         "airfoilStations": {
-          "root10": "NACA 2412",
-          "tip90": "NACA 2412"
+          "root": "NACA 2412",
+          "tip": "NACA 2412"
         },
         "bodyMaterial": "carbonFibre",
         "bodyThicknessMm": 1.2,
@@ -2638,12 +2737,14 @@
           "spanM": 2.316587378547876,
           "tipChordM": 0.6597016184300655
         },
+        "dihedralBreakStationId": "referenceLine-8ec1fae5-ca93-436d-92ea-1d719ed564a1",
+        "dihedralLiftM": 0.1,
         "drawMode": "spline",
         "id": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
         "incidenceDeg": 0,
         "incidenceStationsDeg": {
-          "root10": 0,
-          "tip90": 0
+          "root": 0,
+          "tip": 0
         },
         "label": "Wing 1",
         "liftingSurfaceKind": "wing",
@@ -2889,7 +2990,8 @@
             "yM": -0.263822748464834
           }
         ],
-        "role": "part"
+        "role": "part",
+        "zOffsetM": 0.1
       },
       {
         "drawMode": "line",
@@ -2995,7 +3097,8 @@
             "yM": -1.73
           }
         ],
-        "role": "body"
+        "role": "body",
+        "zOffsetM": 0.1
       },
       {
         "cadGeometry": {
@@ -3043,13 +3146,14 @@
           }
         ],
         "role": "part",
-        "rotorBladeCount": 4
+        "rotorBladeCount": 4,
+        "zOffsetM": 0.1
       },
       {
         "airfoil": "NACA 0012",
         "airfoilStations": {
-          "root10": "NACA 0012",
-          "tip90": "NACA 0012"
+          "root": "NACA 0012",
+          "tip": "NACA 0012"
         },
         "bodyMaterial": "carbonFibre",
         "bodyThicknessMm": 1.2,
@@ -3070,8 +3174,8 @@
         "id": "liftingSurface-78881328-cb17-4a50-a4e5-f8d1c30928c0",
         "incidenceDeg": 0,
         "incidenceStationsDeg": {
-          "root10": 0,
-          "tip90": 0
+          "root": 0,
+          "tip": 0
         },
         "label": "Tailplane",
         "liftingSurfaceKind": "tailplane",
@@ -3123,7 +3227,8 @@
             "yM": -1.73
           }
         ],
-        "role": "liftingSurface"
+        "role": "liftingSurface",
+        "zOffsetM": 0.1
       },
       {
         "drawMode": "line",
@@ -3146,17 +3251,110 @@
           }
         ],
         "role": "referenceLine"
+      },
+      {
+        "airfoil": "NACA 0012",
+        "airfoilStations": {
+          "root": "NACA 0012",
+          "tip": "NACA 0012"
+        },
+        "bodyMaterial": "carbonFibre",
+        "bodyThicknessMm": 1.2,
+        "drawMode": "spline",
+        "id": "liftingSurface-d3a3a468-9080-44c8-802a-7d353646f52a",
+        "incidenceDeg": 0,
+        "incidenceStationsDeg": {
+          "root": 0,
+          "tip": 0
+        },
+        "label": "Fin 1",
+        "liftingSurfaceKind": "fin",
+        "massKg": 0.15,
+        "points": [
+          {
+            "curveMode": "spline",
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "implicit-y-axis-mirror",
+              "t": 0.4992524028459061
+            },
+            "xM": 0,
+            "yM": -1.4951943081878198
+          },
+          {
+            "curveMode": "spline",
+            "xM": 0.28,
+            "yM": -1.6
+          },
+          {
+            "curveMode": "spline",
+            "xM": 0.28,
+            "yM": -1.73
+          },
+          {
+            "curveMode": "spline",
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "implicit-y-axis-mirror",
+              "t": 0.49913403731257067
+            },
+            "xM": 0,
+            "yM": -1.7319253748586334
+          }
+        ],
+        "role": "liftingSurface",
+        "sideViewStationId": "mirrorPlane-3ee5f33f-b262-492b-b1d2-327c5eb9b5c8",
+        "sketchViewMode": "side",
+        "zOffsetM": 0.1
+      },
+      {
+        "drawMode": "line",
+        "id": "mirrorPlane-995ee954-5a69-4118-b11a-44b8efeb3661",
+        "label": "Mirror plane 2",
+        "points": [
+          {
+            "curveMode": "corner",
+            "segmentInMode": "corner",
+            "segmentOutMode": "corner",
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "implicit-y-axis-mirror",
+              "t": 0.4991131238532132
+            },
+            "xM": 0,
+            "yM": -1.7737522935735797
+          },
+          {
+            "curveMode": "corner",
+            "segmentInMode": "corner",
+            "segmentOutMode": "corner",
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "implicit-y-axis-mirror",
+              "t": 0.49931076115707945
+            },
+            "xM": 0,
+            "yM": -1.3784776858410623
+          }
+        ],
+        "role": "mirrorPlane",
+        "sketchViewMode": "side",
+        "zOffsetM": 0.1
       }
     ],
     "showSizingReference": true,
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
-      "height": 720,
-      "originX": 247.2419429303796,
-      "originY": 26.093333008556613,
-      "scale": 781.1605996434838,
+      "height": 874,
+      "originX": 312.1928068170971,
+      "originY": 152.2682868129039,
+      "scale": 358.4959832677407,
       "width": 900
     }
   },
-  "updatedAt": 1779974581425
+  "updatedAt": 1780012748915
 }

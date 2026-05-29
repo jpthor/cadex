@@ -54,6 +54,7 @@ import {
   resolveAttachedShapes,
   setSegmentMode,
   setTangentVector,
+  shapeTouchesMirrorPlane,
   updateShapePointForJoin,
 } from "./geometry";
 import { AircraftPanel } from "./panels/aircraftPanel";
@@ -72,13 +73,14 @@ export function SketchWorkspace({
 }) {
   const [draftPoints, setDraftPoints] = useState<SizePoint[]>([]);
   const [draftPreviewPoint, setDraftPreviewPoint] = useState<SizePoint | null>(null);
+  const [draftViewMode, setDraftViewMode] = useState<CanvasViewMode>("top");
   const [drawActive, setDrawActive] = useState(false);
   const [undoStack, setUndoStack] = useState<SizingProject[]>([]);
   const [redoStack, setRedoStack] = useState<SizingProject[]>([]);
   const sizingRef = useRef(sizing);
   const undoStackRef = useRef<SizingProject[]>([]);
   const redoStackRef = useRef<SizingProject[]>([]);
-  const [activeAirfoilStation, setActiveAirfoilStation] = useState<AirfoilStation>("root10");
+  const [activeAirfoilStation, setActiveAirfoilStation] = useState<AirfoilStation>("root");
   const [activeLiftingSurfaceKind, setActiveLiftingSurfaceKind] = useState<LiftingSurfaceKind>("wing");
   const [rightPaneTab, setRightPaneTab] = useState<"aircraft" | "suggested" | "shape">("aircraft");
   const [joinSourcePoint, setJoinSourcePoint] = useState<JoinPointSelection | null>(null);
@@ -188,6 +190,7 @@ export function SketchWorkspace({
   function restoreHistoryProject(project: SizingProject) {
     setDraftPoints([]);
     setDraftPreviewPoint(null);
+    setDraftViewMode("top");
     setDrawActive(false);
     setDimensionDraft(null);
     setDimensionToolActive(false);
@@ -213,6 +216,15 @@ export function SketchWorkspace({
     setSelectedDimensionId(null);
     setJoinSourcePoint({ shapeId, pointIndex });
     update({ selectedShapeId: shapeId }, false);
+  }
+
+  function selectShape(selectedShapeId: string) {
+    setSelectedDimensionId(null);
+    setJoinSourcePoint(null);
+    setDimensionDraft(null);
+    setPendingDimension(null);
+    setPendingDimensionValue("");
+    update({ selectedShapeId }, false);
   }
 
   function selectDimension(id: string) {
@@ -285,39 +297,43 @@ export function SketchWorkspace({
     updateShapes(sizing.shapes.map((shape) => (shape.id === selected.id ? { ...shape, ...patch } : shape)));
   }
 
-  function addDraftPoint(point: SizePoint) {
+  function addDraftPoint(point: SizePoint, viewMode: CanvasViewMode = "top") {
+    setDraftViewMode(viewMode);
     if (activeRole === "part") {
-      const nextPoint = cleanPartDraftPoint(point);
+      const nextPoint = cleanPartDraftPoint(point, viewMode === "side");
       if (!draftPoints.length) {
         setDraftPoints([nextPoint]);
         return;
       }
-      finishPartShape([draftPoints[0], nextPoint]);
+      finishPartShape([draftPoints[0], nextPoint], viewMode);
       return;
     }
     const axisLockedPoint =
       referenceRoles.includes(activeRole) && draftPoints.length === 1 ? axisAlignedPoint(draftPoints[0], point) : point;
-    const nextPoint = { ...axisLockedPoint, xM: Math.abs(axisLockedPoint.xM), curveMode: axisLockedPoint.curveMode ?? "spline" };
+    const nextPoint = { ...axisLockedPoint, xM: viewMode === "side" ? axisLockedPoint.xM : Math.abs(axisLockedPoint.xM), curveMode: axisLockedPoint.curveMode ?? "spline" };
     setDraftPoints((points) => {
       const nextPoints = [...points, nextPoint];
       if (referenceRoles.includes(activeRole) && nextPoints.length >= 2) {
-        window.setTimeout(() => finishReferenceShape(nextPoints.slice(0, 2)), 0);
+        window.setTimeout(() => finishReferenceShape(nextPoints.slice(0, 2), viewMode), 0);
       }
       return nextPoints;
     });
   }
 
-  function finishReferenceShape(points: SizePoint[]) {
+  function finishReferenceShape(points: SizePoint[], viewMode: CanvasViewMode = "top") {
     const lockedPoints = points.length >= 2 ? [points[0], axisAlignedPoint(points[0], points[1])] : points;
     const count = sizing.shapes.filter((shape) => shape.role === activeRole).length + 1;
+    const sketchViewMode = referenceRoles.includes(activeRole) && viewMode !== "top" ? viewMode : undefined;
     const shape: SizeShape = {
       id: `${activeRole}-${crypto.randomUUID()}`,
       role: activeRole,
       label: `${roleLabels[activeRole]} ${count}`,
       drawMode: "line",
+      sketchViewMode,
+      sideViewStationId: sketchViewMode === "side" ? implicitMirrorShapeId : undefined,
       points: lockedPoints.map((point) => ({
         ...point,
-        xM: Math.abs(point.xM),
+        xM: viewMode === "side" ? point.xM : Math.abs(point.xM),
         curveMode: "corner",
         segmentInMode: "corner",
         segmentOutMode: "corner",
@@ -337,7 +353,7 @@ export function SketchWorkspace({
       return;
     }
     if (activeRole === "part") {
-      finishPartShape(draftPoints);
+      finishPartShape(draftPoints, viewMode);
       return;
     }
     const newLiftingSurfaceKind: LiftingSurfaceKind = activeRole === "liftingSurface" && viewMode === "side" ? "fin" : activeLiftingSurfaceKind;
@@ -352,28 +368,30 @@ export function SketchWorkspace({
       role: activeRole,
       label: `${labelBase} ${count}`,
       drawMode: "spline",
-      points: closeIfNearCenterline(draftPoints),
+      points: viewMode === "side" ? draftPoints : closeIfNearCenterline(draftPoints),
       airfoil: activeRole === "liftingSurface" ? "NACA 0012" : undefined,
       liftingSurfaceKind: activeRole === "liftingSurface" ? newLiftingSurfaceKind : undefined,
-      airfoilStations: activeRole === "liftingSurface" ? { root10: "NACA 0012", tip90: "NACA 0012" } : undefined,
+      airfoilStations: activeRole === "liftingSurface" ? { root: "NACA 0012", tip: "NACA 0012" } : undefined,
       incidenceDeg: activeRole === "liftingSurface" ? 0 : undefined,
-      incidenceStationsDeg: activeRole === "liftingSurface" ? { root10: 0, tip90: 0 } : undefined,
+      incidenceStationsDeg: activeRole === "liftingSurface" ? { root: 0, tip: 0 } : undefined,
       massKg: activeRole === "body" ? 0.5 : activeRole === "liftingSurface" ? 0.15 : 0,
       bodyMaterial: activeRole === "body" || activeRole === "liftingSurface" ? "carbonFibre" : undefined,
       bodyThicknessMm: activeRole === "body" || activeRole === "liftingSurface" ? 1.2 : undefined,
       partType: undefined,
       rotorBladeCount: undefined,
-      sketchViewMode: activeRole === "liftingSurface" && viewMode !== "top" ? viewMode : undefined,
+      sketchViewMode: viewMode !== "top" ? viewMode : undefined,
+      sideViewStationId: viewMode === "side" ? implicitMirrorShapeId : undefined,
     };
     shape.cadGeometry = cadGeometryForShape(shape, [...sizing.shapes, shape]);
     setDraftPoints([]);
     setDraftPreviewPoint(null);
+    setDraftViewMode("top");
     setDrawActive(false);
     updateShapes([...sizing.shapes, shape], shape.id);
   }
 
-  function finishPartShape(points: SizePoint[]) {
-    const partPoints = partShapePointsFromDraft(activePartType, points);
+  function finishPartShape(points: SizePoint[], viewMode: CanvasViewMode = draftViewMode) {
+    const partPoints = partShapePointsFromDraft(activePartType, points, viewMode === "side");
     if (partPoints.length < 2) {
       setDrawActive(false);
       return;
@@ -388,10 +406,13 @@ export function SketchWorkspace({
       massKg: 0,
       partType: activePartType,
       rotorBladeCount: activePartType === "rotor" ? sizing.mission.rotorBladeCount : undefined,
+      sketchViewMode: viewMode !== "top" ? viewMode : undefined,
+      sideViewStationId: viewMode === "side" ? implicitMirrorShapeId : undefined,
     };
     shape.cadGeometry = cadGeometryForShape(shape, [...sizing.shapes, shape]);
     setDraftPoints([]);
     setDraftPreviewPoint(null);
+    setDraftViewMode("top");
     setDrawActive(false);
     updateShapes([...sizing.shapes, shape], shape.id);
   }
@@ -399,6 +420,7 @@ export function SketchWorkspace({
   function cancelDraft() {
     setDraftPoints([]);
     setDraftPreviewPoint(null);
+    setDraftViewMode("top");
     setDrawActive(false);
   }
 
@@ -449,12 +471,12 @@ export function SketchWorkspace({
     setDraftPoints((points) =>
       points.map((entry, pointIndex) => {
         if (pointIndex !== index) return entry;
-        if (activeRole === "part") return cleanPartDraftPoint(point);
+        if (activeRole === "part") return cleanPartDraftPoint(point, draftViewMode === "side");
         if (referenceRoles.includes(activeRole) && points.length >= 2) {
           const anchor = points[index === 0 ? 1 : 0];
           return referenceEndpointPoint(points, anchor, point);
         }
-        return { ...entry, xM: Math.abs(point.xM), yM: point.yM };
+        return { ...entry, xM: draftViewMode === "side" ? point.xM : Math.abs(point.xM), yM: point.yM };
       }),
     );
   }
@@ -695,7 +717,7 @@ export function SketchWorkspace({
           onCancel={cancelDraft}
           onAddPoint={addDraftPoint}
           onDone={finishShape}
-          onSelect={(selectedShapeId) => update({ selectedShapeId }, false)}
+          onSelect={selectShape}
           onSelectDimension={selectDimension}
           onSetPreviewPoint={setDraftPreviewPoint}
           onSetDrawActive={(active) => {
@@ -771,6 +793,7 @@ export function SketchWorkspace({
               <ShapeEditor
                 activeAirfoilStation={activeAirfoilStation}
                 mirrorPlanes={mirrorPlanes}
+                shapes={sizing.shapes}
                 shape={selected}
                 suggestedRows={selectedSuggestedRows}
                 onActiveAirfoilStationChange={setActiveAirfoilStation}
@@ -894,6 +917,25 @@ function liftingDimensionRows(shape: SizeShape, shapes: SizeShape[]) {
   const totalAreaLabel = kind === "tailplane" ? "Total tailplane area" : kind === "wing" ? "Total wing area" : "Total area";
   const bounds = shapeBounds(shape);
   const mirroredPair = bounds.minX > 0.005;
+  if (kind === "fin") {
+    const shapeViewMode = shape.sketchViewMode ?? "top";
+    const hasFinMirror = shapes.some(
+      (candidate) =>
+        candidate.role === "mirrorPlane" &&
+        candidate.id !== shape.id &&
+        (candidate.sketchViewMode ?? "top") === shapeViewMode &&
+        shapeTouchesMirrorPlane(shape, candidate),
+    );
+    const finCount = hasFinMirror ? 2 : 1;
+    const areaPerFinM2 = stats.areaM2 / finCount;
+    return [
+      { label: "Height", value: formatDimension(bounds.maxX - bounds.minX) },
+      { label: "Chord", value: formatDimension(bounds.maxY - bounds.minY) },
+      { label: "Area / fin", value: `${Math.max(areaPerFinM2, 0).toFixed(3)} m2` },
+      { label: "Total fin area", value: `${Math.max(stats.areaM2, 0).toFixed(3)} m2` },
+      { label: "Airfoil", value: shape.airfoil ?? "NACA 0012" },
+    ];
+  }
   if (kind === "tailplane") {
     const spanPerTailplaneM = Math.max(bounds.maxX - bounds.minX, 0.05);
     const areaPerTailplaneM2 = mirroredPair ? stats.areaM2 / 2 : stats.areaM2;

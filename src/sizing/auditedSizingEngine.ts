@@ -11,6 +11,70 @@ type LiftingStats = {
 };
 type AeroStats = ReturnType<typeof liftingSurfaceAeroStats>;
 
+export type SketchAeroComputation = {
+  validity: {
+    lift: boolean;
+    drag: boolean;
+    tailVolume: boolean;
+    finVolume: boolean;
+    rotor: boolean;
+  };
+  assumptions: {
+    rhoKgM3: number;
+    oswaldEfficiency: number;
+    parasiteCd: number;
+    propulsiveEfficiency: number;
+  };
+  geometry: {
+    wingAreaM2: number;
+    wingSpanM: number;
+    wingTrueSpanM: number;
+    meanChordM: number;
+    aspectRatio: number;
+    averageDihedralDeg: number;
+    tailplaneAreaM2: number;
+    tailplaneArmM: number;
+    finAreaM2: number;
+    finArmM: number;
+    rotorDiskAreaM2: number;
+    dragReferenceAreaM2: number;
+  };
+  mass: {
+    totalMassKg: number;
+    wingLoadingKgM2: number;
+  };
+  stability: {
+    centerOfMassY: number;
+    centerOfPressureY: number;
+    staticMarginPct: number;
+    tailVolumeCoefficient: number;
+    finVolumeCoefficient: number;
+    rollStabilityIndex: number;
+    rollStabilityLabel: string;
+  };
+  aerodynamics: {
+    cruiseSpeedMS: number;
+    cruiseSpeedKt: number;
+    dynamicPressurePa: number;
+    liftCoefficient: number;
+    inducedDragCoefficient: number;
+    parasiteDragCoefficient: number;
+    dragCoefficient: number;
+    liftToDrag: number;
+    dragN: number;
+    cruisePowerW: number;
+    stallSpeedMS: number;
+  };
+  propulsion: {
+    rotorCount: number;
+    hoverThrustPerRotorN: number;
+    hoverPowerTotalW: number;
+    rotorDiskLoadingNpm2: number;
+  };
+  inertia: SizingAnalysis["inertia"];
+  warnings: string[];
+};
+
 export const auditedSizingAssumptions = {
   mirrorAxisTouchToleranceM: 0.005,
   bodyMaterialDensityKgM3: {
@@ -38,6 +102,10 @@ export const auditedSizingAssumptions = {
   } satisfies Record<LiftingSurfaceKind, number>,
   rhoKgM3: 1.225,
   hoverFigureOfMerit: 0.68,
+  oswaldEfficiency: 0.75,
+  parasiteCd: 0.07,
+  propulsiveEfficiency: 0.72,
+  maxLiftCoefficient: 1.25,
 };
 
 export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "mission">): SizingAnalysis {
@@ -50,9 +118,9 @@ export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "m
   const partMass = sum(parts.map((shape) => partMassEstimate(shape, project.shapes)));
   const totalMassKg = Math.max(bodyMass + liftingMass + partMass, 0.1);
   const massItems = [
-    ...bodies.map((shape) => ({ point: shapeCentroid(shape), mass: bodyMassEstimate(shape, project.shapes) })),
-    ...lifting.map((shape) => ({ point: shapeCentroid(shape), mass: liftingSurfaceMassEstimate(shape, project.shapes) })),
-    ...parts.map((shape) => ({ point: shapeCentroid(shape), mass: partMassEstimate(shape, project.shapes) })),
+    ...bodies.map((shape) => ({ point: shapeCentroid(shape), lateralRadiusM: shapeLateralRadiusM(shape, project.shapes), mass: bodyMassEstimate(shape, project.shapes) })),
+    ...lifting.map((shape) => ({ point: shapeCentroid(shape), lateralRadiusM: shapeLateralRadiusM(shape, project.shapes), mass: liftingSurfaceMassEstimate(shape, project.shapes) })),
+    ...parts.map((shape) => ({ point: shapeCentroid(shape), lateralRadiusM: shapeLateralRadiusM(shape, project.shapes), mass: partMassEstimate(shape, project.shapes) })),
   ];
   const com = weightedCenter(massItems);
   const wingStats = liftingStats.filter((stats) => stats.kind === "wing");
@@ -96,10 +164,7 @@ export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "m
     lifting.length && !wingStats.length ? "No wing is marked; using all lifting surfaces as the reference wing." : "",
     staticMarginPct < 5 ? "Static margin is low; move mass forward or lifting area aft." : "",
     rotorShapes.length && rotorCount !== 2 ? "Twin-rotor tailsitter expects exactly 2 physical rotors after mirrors." : "",
-    rotorShapes.length && Math.abs(rotorThrustLineOffsetM) > Math.max(meanChordM * 0.08, 0.03)
-      ? "CoM is far from the rotor thrust line for hover; move mass or rotors."
-      : "",
-    tailStats.length && tailVolumeCoefficient < Math.max(missionTailVolumeTarget * 0.75, 0.25)
+    tailStats.length && tailVolumeCoefficient < Math.max(missionTailVolumeTarget * 0.55, 0.28)
       ? "Dual empennage tail volume is low for a tailsitter; add tail area or tail arm."
       : "",
   ].filter(Boolean);
@@ -121,6 +186,269 @@ export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "m
     inertia,
     warnings,
   };
+}
+
+export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" | "mission">): SketchAeroComputation {
+  const analysis = computeSizingAnalysis(project);
+  const liftingStats = project.shapes
+    .filter((shape) => shape.role === "liftingSurface")
+    .map((shape) => liftingSurfaceStats(shape, project.shapes));
+  const wingStats = liftingStats.filter((stats) => stats.kind === "wing");
+  const tailStats = liftingStats.filter((stats) => stats.kind === "tailplane");
+  const finStats = liftingStats.filter((stats) => stats.kind === "fin");
+  const referenceStats = wingStats.length ? wingStats : liftingStats;
+  const wingAreaM2 = sum(referenceStats.map((stats) => stats.areaM2));
+  const wingSpanM = Math.max(0, ...referenceStats.map((stats) => stats.spanM));
+  const wingDihedralStats = wingShapesDihedralStats(project.shapes);
+  const wingTrueSpanM = wingDihedralStats.projectedSpanM > 0 ? wingDihedralStats.trueSpanM : wingSpanM;
+  const averageDihedralDeg = wingDihedralStats.averageDihedralDeg;
+  const aspectRatio = wingAreaM2 > 0 ? (wingSpanM * wingSpanM) / wingAreaM2 : 0;
+  const meanChordM = wingSpanM > 0 ? wingAreaM2 / wingSpanM : 0;
+  const hasAerodynamicReference = wingStats.length > 0 && wingAreaM2 > 0.02 && wingSpanM > 0.05 && aspectRatio > 0.1;
+  const wingAerodynamicCenterY = weightedValue(
+    referenceStats.map((stats) => ({ value: stats.aerodynamicCenterY, weight: stats.areaM2 })),
+    0,
+  );
+  const tailAerodynamicCenterY = weightedValue(
+    tailStats.map((stats) => ({ value: stats.aerodynamicCenterY, weight: stats.areaM2 })),
+    wingAerodynamicCenterY,
+  );
+  const finAerodynamicCenterY = weightedValue(
+    finStats.map((stats) => ({ value: stats.aerodynamicCenterY, weight: stats.areaM2 })),
+    wingAerodynamicCenterY,
+  );
+  const tailplaneAreaM2 = sum(tailStats.map((stats) => stats.areaM2));
+  const finAreaM2 = sum(finStats.map((stats) => stats.areaM2));
+  const tailplaneArmM = Math.max(0, wingAerodynamicCenterY - tailAerodynamicCenterY);
+  const finArmM = Math.max(0, wingAerodynamicCenterY - finAerodynamicCenterY);
+  const tailVolumeCoefficient = tailplaneAreaM2 > 0
+    ? (tailplaneAreaM2 * tailplaneArmM) / Math.max(wingAreaM2 * meanChordM, 0.001)
+    : 0;
+  const finVolumeCoefficient = finAreaM2 > 0
+    ? (finAreaM2 * finArmM) / Math.max(wingAreaM2 * wingSpanM, 0.001)
+    : 0;
+  const rotorShapes = project.shapes.filter((shape) => shape.role === "part" && shape.partType === "rotor");
+  const rotorDiskAreaM2 = sum(
+    rotorShapes.map((shape) => Math.PI * Math.pow(rotorDiameterEstimate(shape, project.shapes) / 2, 2) * rotorInstanceCount(shape, project.shapes)),
+  );
+  const frontalAreaM2 = frontalAreaEstimate(project.shapes);
+  const cruiseSpeedMS = Math.max(project.mission.cruiseSpeedMS, 0.1);
+  const dynamicPressurePa = 0.5 * auditedSizingAssumptions.rhoKgM3 * cruiseSpeedMS * cruiseSpeedMS;
+  const weightN = analysis.totalMassKg * 9.80665;
+  const liftCoefficient = hasAerodynamicReference ? weightN / Math.max(dynamicPressurePa * wingAreaM2, 0.001) : 0;
+  const dihedralLiftFactor = Math.pow(Math.cos((averageDihedralDeg * Math.PI) / 180), 2);
+  const inducedFactor = hasAerodynamicReference ? 1 / (Math.PI * auditedSizingAssumptions.oswaldEfficiency * Math.max(aspectRatio * dihedralLiftFactor, 0.001)) : 0;
+  const inducedDragCoefficient = inducedFactor * liftCoefficient * liftCoefficient;
+  const parasiteDragCoefficient = estimateParasiteCd(project.shapes);
+  const bluntDragCoefficient = estimateBluntCd(project.shapes);
+  const hasDragReference = hasAerodynamicReference || frontalAreaM2 > 0.001;
+  const dragReferenceAreaM2 = hasAerodynamicReference ? wingAreaM2 : frontalAreaM2;
+  const dragCoefficient = hasAerodynamicReference ? parasiteDragCoefficient + inducedDragCoefficient : bluntDragCoefficient;
+  const dragN = hasDragReference ? dynamicPressurePa * dragReferenceAreaM2 * dragCoefficient : 0;
+  const cruisePowerW = hasDragReference ? (dragN * cruiseSpeedMS) / auditedSizingAssumptions.propulsiveEfficiency : 0;
+  const stallSpeedMS = hasAerodynamicReference
+    ? Math.sqrt((2 * weightN) / Math.max(auditedSizingAssumptions.rhoKgM3 * wingAreaM2 * auditedSizingAssumptions.maxLiftCoefficient, 0.001))
+    : 0;
+  const rotorDiskLoadingNpm2 = rotorDiskAreaM2 > 0 ? weightN / rotorDiskAreaM2 : 0;
+  const rollStabilityIndex = hasAerodynamicReference ? averageDihedralDeg * liftCoefficient : 0;
+  const rollStabilityLabel = rollStabilityFromIndex(rollStabilityIndex);
+  const warnings = uniqueStrings([
+    ...analysis.warnings,
+    !hasAerodynamicReference ? "Draw and mark a wing before trusting CL, induced drag, L/D, static margin, or stall speed." : "",
+    !hasDragReference ? "Draw a body, part, rotor, or lifting surface before trusting drag or cruise power." : "",
+    hasAerodynamicReference && aspectRatio > 0 && aspectRatio < 4 ? "Low aspect ratio is costing induced drag. More span or less chord improves L/D." : "",
+    liftCoefficient > 0.85 ? "Cruise CL is high. Increase wing area, reduce mass, or fly faster." : "",
+    dragCoefficient > 0.13 ? "Estimated CD is high for cruise. Check rotor/boom exposure and wing aspect ratio." : "",
+    hasAerodynamicReference && rollStabilityIndex < -1.5 ? "Anhedral effect is roll-destabilising. Check roll authority and hover-transition behaviour." : "",
+    hasAerodynamicReference && rollStabilityIndex > 6 ? "Strong dihedral effect. Roll may be very self-righting and sluggish." : "",
+    hasAerodynamicReference && finStats.length && finVolumeCoefficient < 0.025 ? "Fin volume is low. Directional stability may be weak in forward flight." : "",
+    rotorShapes.length && rotorDiskLoadingNpm2 > 160 ? "Rotor disk loading is high. Hover power will be expensive." : "",
+  ].filter(Boolean));
+
+  return {
+    validity: {
+      lift: hasAerodynamicReference,
+      drag: hasDragReference,
+      tailVolume: hasAerodynamicReference && tailplaneAreaM2 > 0 && tailplaneArmM > 0,
+      finVolume: hasAerodynamicReference && finAreaM2 > 0 && finArmM > 0,
+      rotor: rotorDiskAreaM2 > 0 && (analysis.rotorCount ?? 0) > 0,
+    },
+    assumptions: {
+      rhoKgM3: auditedSizingAssumptions.rhoKgM3,
+      oswaldEfficiency: auditedSizingAssumptions.oswaldEfficiency,
+      parasiteCd: parasiteDragCoefficient,
+      propulsiveEfficiency: auditedSizingAssumptions.propulsiveEfficiency,
+    },
+    geometry: {
+      wingAreaM2,
+      wingSpanM,
+      wingTrueSpanM,
+      meanChordM,
+      aspectRatio,
+      averageDihedralDeg,
+      tailplaneAreaM2,
+      tailplaneArmM,
+      finAreaM2,
+      finArmM,
+      rotorDiskAreaM2,
+      dragReferenceAreaM2,
+    },
+    mass: {
+      totalMassKg: analysis.totalMassKg,
+      wingLoadingKgM2: hasAerodynamicReference ? analysis.totalMassKg / Math.max(wingAreaM2, 0.001) : 0,
+    },
+    stability: {
+      centerOfMassY: analysis.com.yM,
+      centerOfPressureY: analysis.cop.yM,
+      staticMarginPct: analysis.staticMarginPct,
+      tailVolumeCoefficient,
+      finVolumeCoefficient,
+      rollStabilityIndex,
+      rollStabilityLabel,
+    },
+    aerodynamics: {
+      cruiseSpeedMS,
+      cruiseSpeedKt: cruiseSpeedMS / 0.514444,
+      dynamicPressurePa,
+      liftCoefficient,
+      inducedDragCoefficient,
+      parasiteDragCoefficient,
+      dragCoefficient,
+      liftToDrag: dragCoefficient > 0 ? liftCoefficient / dragCoefficient : 0,
+      dragN,
+      cruisePowerW,
+      stallSpeedMS,
+    },
+    propulsion: {
+      rotorCount: analysis.rotorCount ?? 0,
+      hoverThrustPerRotorN: analysis.hoverThrustPerRotorN ?? 0,
+      hoverPowerTotalW: analysis.hoverPowerTotalW ?? 0,
+      rotorDiskLoadingNpm2,
+    },
+    inertia: analysis.inertia,
+    warnings,
+  };
+}
+
+function wingShapesDihedralStats(shapes: SizeShape[]) {
+  const wingShapes = shapes.filter((shape) => shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing");
+  const panelStats = wingShapes.map((shape) => wingShapeDihedralStats(shape, shapes)).filter((stats) => stats.projectedSpanM > 0);
+  const projectedSpanM = sum(panelStats.map((stats) => stats.projectedSpanM));
+  const trueSpanM = sum(panelStats.map((stats) => stats.trueSpanM));
+  const averageDihedralDeg = weightedValue(
+    panelStats.map((stats) => ({ value: stats.dihedralDeg, weight: stats.projectedSpanM })),
+    0,
+  );
+  return { projectedSpanM, trueSpanM, averageDihedralDeg };
+}
+
+function wingShapeDihedralStats(shape: SizeShape, shapes: SizeShape[]) {
+  const bounds = shapeBounds(shape);
+  const rootX = touchesMirrorAxis(shape) ? 0 : bounds.minX;
+  const tipX = Math.max(bounds.maxX, rootX);
+  const projectedHalfSpanM = Math.max(tipX, 0);
+  const outerPanelRunM = Math.max(tipX - rootX, 0);
+  if (projectedHalfSpanM <= 1e-6 || outerPanelRunM <= 1e-6) return { projectedSpanM: 0, trueSpanM: 0, dihedralDeg: 0 };
+  const breakX = clamp(dihedralBreakX(shape, shapes) ?? tipX, rootX, tipX);
+  const liftedRunM = Math.max(breakX - rootX, 0);
+  const flatRunM = Math.max(tipX - breakX, 0);
+  const centerGapM = Math.max(rootX, 0);
+  const liftM = shape.dihedralLiftM ?? 0;
+  const trueHalfSpanM = centerGapM + Math.hypot(liftedRunM, liftM) + flatRunM;
+  const dihedralDeg = liftedRunM > 1e-6 ? Math.atan2(liftM, liftedRunM) * 180 / Math.PI : 0;
+  const mirrorMultiplier = touchesMirrorAxis(shape) ? 1 : 2;
+  return {
+    projectedSpanM: projectedHalfSpanM * mirrorMultiplier,
+    trueSpanM: trueHalfSpanM * mirrorMultiplier,
+    dihedralDeg,
+  };
+}
+
+function dihedralBreakX(shape: SizeShape, shapes: SizeShape[]) {
+  if (shape.dihedralBreakStationId === "implicit-y-axis-mirror") return 0;
+  const station = shapes.find((candidate) => candidate.id === shape.dihedralBreakStationId);
+  return station ? verticalReferenceX(station) : undefined;
+}
+
+function verticalReferenceX(shape: SizeShape) {
+  const [start, end] = shape.points;
+  if (!start || !end) return undefined;
+  if (Math.abs(start.xM - end.xM) > Math.abs(start.yM - end.yM)) return undefined;
+  return (start.xM + end.xM) / 2;
+}
+
+function rollStabilityFromIndex(index: number) {
+  if (index < -1.5) return "anhedral";
+  if (index < 0.5) return "neutral";
+  if (index < 3.5) return "mild";
+  if (index < 6) return "stable";
+  return "strong";
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values)];
+}
+
+function estimateParasiteCd(shapes: SizeShape[]) {
+  const hasRotors = shapes.some((shape) => shape.role === "part" && shape.partType === "rotor");
+  const hasBooms = shapes.some((shape) => shape.role === "body" && shape.label.toLowerCase().includes("boom"));
+  const hasFins = shapes.some((shape) => shape.role === "liftingSurface" && shape.liftingSurfaceKind === "fin");
+  return auditedSizingAssumptions.parasiteCd + (hasRotors ? 0.01 : 0) + (hasBooms ? 0.005 : 0) + (hasFins ? 0.004 : 0);
+}
+
+function estimateBluntCd(shapes: SizeShape[]) {
+  const hasBody = shapes.some((shape) => shape.role === "body");
+  const hasRotor = shapes.some((shape) => shape.role === "part" && shape.partType === "rotor");
+  const hasBoxPart = shapes.some((shape) => shape.role === "part" && shape.partType !== "rotor" && shape.partType !== "motor");
+  const hasMotor = shapes.some((shape) => shape.role === "part" && shape.partType === "motor");
+  if (hasBody && !hasBoxPart && !hasRotor) return 0.85 + (hasMotor ? 0.08 : 0);
+  return 1.05 + (hasRotor ? 0.15 : 0) + (hasMotor ? 0.08 : 0);
+}
+
+function frontalAreaEstimate(shapes: SizeShape[]) {
+  return sum(shapes.map((shape) => shapeFrontalAreaEstimate(shape, shapes)));
+}
+
+function shapeFrontalAreaEstimate(shape: SizeShape, shapes: SizeShape[]) {
+  if (!shape.points.length || shape.role === "referenceLine" || shape.role === "mirrorPlane") return 0;
+  if (shape.role === "body") {
+    const bounds = shapeBounds(shape);
+    return Math.PI * bounds.maxX * bounds.maxX;
+  }
+  if (shape.role === "liftingSurface") {
+    const stats = liftingSurfaceStats(shape, shapes);
+    const incidenceRad = Math.abs((shape.incidenceDeg ?? 0) * Math.PI / 180);
+    return stats.areaM2 * Math.max(0.06, Math.sin(incidenceRad));
+  }
+  if (shape.role !== "part") return 0;
+  const instanceCount = partInstanceCount(shape, shapes);
+  if (shape.partType === "motor") {
+    return Math.PI * Math.pow(motorDiameterEstimateM(shape) / 2, 2) * instanceCount;
+  }
+  if (shape.partType === "rotor") {
+    const diameterM = rotorDiameterEstimate(shape, shapes);
+    const bladeCount = Math.max(1, Math.round(shape.rotorBladeCount ?? 2));
+    const bladeAreaM2 = diameterM * Math.max(diameterM * auditedSizingAssumptions.rotorRootChordDiameterFraction, 0.008) * 0.5;
+    return bladeAreaM2 * bladeCount * rotorInstanceCount(shape, shapes);
+  }
+  const bounds = shapeBounds(shape);
+  const widthM = touchesMirrorAxis(shape) ? bounds.maxX * 2 : Math.max(bounds.maxX - bounds.minX, 0);
+  const heightM = inferredBoxHeightM(shape);
+  return widthM * heightM * instanceCount;
+}
+
+function partInstanceCount(shape: SizeShape, shapes: SizeShape[]) {
+  const localMirrorMultiplier = shapes.some((candidate) => mirrorPlaneAppliesToShape(shape, candidate) && shapeTouchesLine(shape, candidate)) ? 2 : 1;
+  const originMirrorMultiplier = touchesMirrorAxis(shape) ? 1 : 2;
+  return localMirrorMultiplier * originMirrorMultiplier;
+}
+
+function inferredBoxHeightM(shape: SizeShape) {
+  const bounds = shapeBounds(shape);
+  const widthM = touchesMirrorAxis(shape) ? bounds.maxX * 2 : Math.max(bounds.maxX - bounds.minX, 0);
+  const lengthM = Math.max(bounds.maxY - bounds.minY, 0);
+  const smallerDimensionM = Math.min(widthM || lengthM, lengthM || widthM);
+  return clamp(smallerDimensionM * 0.5, 0.01, 0.18);
 }
 
 export function shapeBounds(shape: SizeShape) {
@@ -147,6 +475,20 @@ function shapeCentroid(shape: SizeShape): SizePoint {
     xM: 0,
     yM: sum(shape.points.map((point) => point.yM)) / shape.points.length,
   };
+}
+
+function shapeLateralRadiusM(shape: SizeShape, shapes: SizeShape[]) {
+  if (!shape.points.length) return 0;
+  if (shape.role === "liftingSurface") {
+    return liftingSurfaceStats(shape, shapes).spanM / Math.sqrt(12);
+  }
+  const bounds = shapeBounds(shape);
+  if (shape.role === "body" || touchesMirrorAxis(shape)) {
+    return bounds.maxX / Math.sqrt(3);
+  }
+  const centroid = polygonCentroid(shape.points);
+  if (centroid) return Math.abs(centroid.xM);
+  return sum(shape.points.map((point) => Math.abs(point.xM))) / shape.points.length;
 }
 
 export function bodyMassEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
@@ -255,7 +597,7 @@ export function rotorVolumePerRotorEstimate(shape: SizeShape, shapes: SizeShape[
 }
 
 export function rotorInstanceCount(shape: SizeShape, shapes: SizeShape[] = []) {
-  const localMirrorMultiplier = shapes.some((candidate) => candidate.role === "mirrorPlane" && shapeTouchesLine(shape, candidate)) ? 2 : 1;
+  const localMirrorMultiplier = shapes.some((candidate) => mirrorPlaneAppliesToShape(shape, candidate) && shapeTouchesLine(shape, candidate)) ? 2 : 1;
   const originMirrorMultiplier = touchesMirrorAxis(shape) ? 1 : 2;
   return localMirrorMultiplier * originMirrorMultiplier;
 }
@@ -269,7 +611,7 @@ export function rotorDiameterEstimate(shape: SizeShape, shapes: SizeShape[] = []
 }
 
 function rotorDiameterPoints(shape: SizeShape, shapes: SizeShape[]) {
-  const localMirrorPlane = shapes.find((candidate) => candidate.role === "mirrorPlane" && shapeTouchesLine(shape, candidate));
+  const localMirrorPlane = shapes.find((candidate) => mirrorPlaneAppliesToShape(shape, candidate) && shapeTouchesLine(shape, candidate));
   if (localMirrorPlane) return [...shape.points, ...mirrorAcrossLine(shape.points, localMirrorPlane)];
   if (touchesMirrorAxis(shape)) return [...shape.points, ...shape.points.map((point) => ({ ...point, xM: -point.xM }))];
   return shape.points;
@@ -277,7 +619,7 @@ function rotorDiameterPoints(shape: SizeShape, shapes: SizeShape[]) {
 
 export function bodySurfaceAreaEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
   if (shape.points.length < 3) return 0;
-  const localMirrorPlane = shapes.find((candidate) => candidate.role === "mirrorPlane" && shapeTouchesLine(shape, candidate));
+  const localMirrorPlane = shapes.find((candidate) => mirrorPlaneAppliesToShape(shape, candidate) && shapeTouchesLine(shape, candidate));
   if (localMirrorPlane) return revolvedSurfaceAreaAroundLine(shape.points, localMirrorPlane);
   if (touchesMirrorAxis(shape)) return revolvedSurfaceArea(shape.points);
   const thicknessM = Math.max(shape.bodyThicknessMm ?? 1.2, 0) / 1000;
@@ -291,18 +633,24 @@ export function liftingSurfaceSkinAreaEstimate(shape: SizeShape, shapes: SizeSha
 }
 
 export function liftingSurfaceStats(shape: SizeShape, shapes: SizeShape[] = []): LiftingStats {
-  const localMirrorPlane = shapes.find((candidate) => candidate.role === "mirrorPlane" && shapeTouchesLine(shape, candidate));
+  const localMirrorPlane = shapes.find((candidate) => mirrorPlaneAppliesToShape(shape, candidate) && shapeTouchesLine(shape, candidate));
+  const isSideViewFin = (shape.liftingSurfaceKind ?? "wing") === "fin" && shape.sketchViewMode === "side";
   if (localMirrorPlane) {
     const base = liftingSurfaceStats(shape);
     const mirroredShape = { ...shape, points: mirrorAcrossLine(shape.points, localMirrorPlane) };
     const mirrored = liftingSurfaceStats(mirroredShape);
     const areaM2 = base.areaM2 + mirrored.areaM2;
-    const combinedBounds = shapeBounds({ ...shape, points: [...shape.points, ...mirroredShape.points] });
+    const combinedBounds = isSideViewFin
+      ? rawPointBounds([...shape.points, ...mirroredShape.points])
+      : shapeBounds({ ...shape, points: [...shape.points, ...mirroredShape.points] });
+    const combinedSpanM = isSideViewFin
+      ? Math.max(combinedBounds.maxX - combinedBounds.minX, base.spanM, mirrored.spanM, 0.05)
+      : Math.max(base.spanM, mirrored.spanM, combinedBounds.maxX * 2, 0.05);
     return {
       ...base,
       areaM2,
-      spanM: Math.max(base.spanM, mirrored.spanM, combinedBounds.maxX * 2, 0.05),
-      chordM: areaM2 / Math.max(Math.max(base.spanM, mirrored.spanM, combinedBounds.maxX * 2, 0.05), 0.05),
+      spanM: combinedSpanM,
+      chordM: areaM2 / Math.max(combinedSpanM, 0.05),
       center: weightedPoint(
         [
           { point: base.center, weight: base.areaM2 },
@@ -317,6 +665,26 @@ export function liftingSurfaceStats(shape: SizeShape, shapes: SizeShape[] = []):
         ],
         base.aerodynamicCenterY,
       ),
+    };
+  }
+  if (isSideViewFin) {
+    const bounds = rawPointBounds(shape.points);
+    const heightM = Math.max(bounds.maxX - bounds.minX, 0.05);
+    const chordExtentM = Math.max(bounds.maxY - bounds.minY, 0.01);
+    const areaM2 = Math.max(polygonArea(shape.points), heightM * chordExtentM * 0.5, 0.001);
+    const chordM = areaM2 / heightM;
+    const centroid = polygonCentroid(shape.points) ?? {
+      xM: (bounds.minX + bounds.maxX) / 2,
+      yM: (bounds.minY + bounds.maxY) / 2,
+    };
+    return {
+      areaM2,
+      spanM: heightM,
+      chordM,
+      center: centroid,
+      aerodynamicCenterY: bounds.maxY - chordM * 0.25,
+      kind: "fin",
+      effectiveness: auditedSizingAssumptions.liftingSurfaceEffectiveness.fin,
     };
   }
   const bounds = shapeBounds(shape);
@@ -336,6 +704,25 @@ export function liftingSurfaceStats(shape: SizeShape, shapes: SizeShape[] = []):
     aerodynamicCenterY,
     kind: shape.liftingSurfaceKind ?? "wing",
     effectiveness: auditedSizingAssumptions.liftingSurfaceEffectiveness[shape.liftingSurfaceKind ?? "wing"],
+  };
+}
+
+function mirrorPlaneAppliesToShape(shape: SizeShape, plane: SizeShape) {
+  if (plane.role !== "mirrorPlane" || plane.id === shape.id) return false;
+  return (plane.sketchViewMode ?? "top") === (shape.sketchViewMode ?? "top");
+}
+
+function rawPointBounds(points: SizePoint[]) {
+  const xs = points.map((point) => point.xM);
+  const ys = points.map((point) => point.yM);
+  if (!xs.length || !ys.length) {
+    return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  }
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
   };
 }
 
@@ -414,8 +801,8 @@ function neutralPoint(aeroStats: AeroStats[], stats: LiftingStats[]) {
 }
 
 function blendedAirfoilProperties(shape: SizeShape) {
-  const root = airfoilProperties(shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012");
-  const tip = airfoilProperties(shape.airfoilStations?.tip90 ?? shape.airfoil ?? "NACA 0012");
+  const root = airfoilProperties(shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012");
+  const tip = airfoilProperties(shape.airfoilStations?.tip ?? shape.airfoil ?? "NACA 0012");
   return {
     liftSlopePerDeg: (root.liftSlopePerDeg + tip.liftSlopePerDeg) / 2,
   };
@@ -453,14 +840,15 @@ function weightedValue(items: { value: number; weight: number }[], fallback: num
   return total > 1e-9 ? sum(items.map((item) => item.value * item.weight)) / total : fallback;
 }
 
-function inertiaEstimate(items: { point: SizePoint; mass: number }[], com: SizePoint) {
+function inertiaEstimate(items: { point: SizePoint; lateralRadiusM?: number; mass: number }[], com: SizePoint) {
   return items.reduce(
     (acc, item) => {
       const dx = item.point.xM - com.xM;
       const dy = item.point.yM - com.yM;
-      acc.rollKgM2 += item.mass * dx * dx;
+      const lateral = item.lateralRadiusM ?? 0;
+      acc.rollKgM2 += item.mass * (dx * dx + lateral * lateral);
       acc.pitchKgM2 += item.mass * dy * dy;
-      acc.yawKgM2 += item.mass * (dx * dx + dy * dy);
+      acc.yawKgM2 += item.mass * (dx * dx + lateral * lateral + dy * dy);
       return acc;
     },
     { rollKgM2: 0, pitchKgM2: 0, yawKgM2: 0 },

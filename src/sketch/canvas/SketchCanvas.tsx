@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Maximize2 } from "lucide-react";
+import { Eye, EyeOff, Maximize2, Orbit } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent, WheelEvent } from "react";
 import type {
@@ -42,6 +42,7 @@ import {
   translateShapePointsForDrag,
 } from "../geometry";
 import { SizingGrid } from "./SizingGrid";
+import { Sketch3DPreview } from "./Sketch3DPreview";
 import {
   AnalysisMarkers,
   CanvasCursorPoint,
@@ -50,6 +51,16 @@ import {
   ReferenceShape,
   SketchShape,
 } from "./shapeViews";
+
+type DragTarget =
+  | { kind: "draft"; index: number; pointerId: number }
+  | { kind: "shape"; shapeId: string; index: number; pointerId: number }
+  | { kind: "shapeBody"; shapeId: string; pointerId: number; startPoint: SizePoint; originalPoints: SizePoint[] }
+  | { kind: "shapeLine"; shapeId: string; pointerId: number; startPoint: SizePoint; originalPoints: SizePoint[] }
+  | { kind: "dimensionLabel"; dimensionId: string; pointerId: number }
+  | { kind: "draftTangent"; index: number; side: "in" | "out"; pointerId: number }
+  | { kind: "shapeTangent"; shapeId: string; index: number; side: "in" | "out"; pointerId: number };
+
 export function SketchCanvas({
   shapes,
   selectedShapeId,
@@ -122,7 +133,7 @@ export function SketchCanvas({
   showSizingReference: boolean;
   sizingReferenceShapes: SizeShape[];
   analysis?: SizingAnalysis;
-  onAddPoint: (point: SizePoint) => void;
+  onAddPoint: (point: SizePoint, viewMode: CanvasViewMode) => void;
   onActiveRoleChange: (role: SizeShapeRole) => void;
   activeLiftingSurfaceKind: LiftingSurfaceKind;
   onActiveLiftingSurfaceKindChange: (kind: LiftingSurfaceKind) => void;
@@ -157,55 +168,62 @@ export function SketchCanvas({
   onInsertShapePoint: (shapeId: string, point: SizePoint) => void;
   onDeleteShapePoint: (shapeId: string, index: number) => void;
 }) {
-  const [dragTarget, setDragTarget] = useState<
-	    | { kind: "draft"; index: number; pointerId: number }
-	    | { kind: "shape"; shapeId: string; index: number; pointerId: number }
-      | { kind: "shapeBody"; shapeId: string; pointerId: number; startPoint: SizePoint; originalPoints: SizePoint[] }
-      | { kind: "shapeLine"; shapeId: string; pointerId: number; startPoint: SizePoint; originalPoints: SizePoint[] }
-      | { kind: "dimensionLabel"; dimensionId: string; pointerId: number }
-	    | { kind: "draftTangent"; index: number; side: "in" | "out"; pointerId: number }
-	    | { kind: "shapeTangent"; shapeId: string; index: number; side: "in" | "out"; pointerId: number }
-	    | null
-	  >(null);
+  const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
   const [canvasView, setCanvasView] = useState<CanvasView>(() => initialCanvasView ?? fitCanvasView(shapes));
   const [scaleUnit, setScaleUnit] = useState<ScaleUnit>("cm");
   const [viewMode, setViewMode] = useState<CanvasViewMode>("top");
   const [renderViewMode, setRenderViewMode] = useState<CanvasViewMode>("top");
   const [isViewTransitioning, setIsViewTransitioning] = useState(false);
+  const [cameraCommandSerial, setCameraCommandSerial] = useState(0);
+  const [freeOrbitActive, setFreeOrbitActive] = useState(false);
   const [canvasCursorPoint, setCanvasCursorPoint] = useState<SizePoint | null>(null);
   const [referenceMenuOpen, setReferenceMenuOpen] = useState(false);
   const [showGuides, setShowGuides] = useState(true);
+  const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const ignoreNextCanvasClick = useRef(false);
   const pointPlacedOnPress = useRef(false);
   const viewTransitionTimer = useRef<number | undefined>(undefined);
   const viewTransitionSerial = useRef(0);
   const mirrorPlanes = shapes.filter((shape) => shape.role === "mirrorPlane" && shape.points.length >= 2);
   const visibleShapes = showGuides ? shapes : shapes.filter((shape) => !referenceRoles.includes(shape.role));
+  const shapesVisibleInCurrentView = visibleShapes.filter((shape) => {
+    if (!shape.sketchViewMode) return true;
+    if (shape.sketchViewMode === renderViewMode) return true;
+    return renderViewMode === "front" && shape.sketchViewMode === "side";
+  });
   const displayView = {
     ...canvasView,
     originY: renderViewMode === "front" ? canvasView.height / 2 : canvasView.originY,
   };
   const displayShapes = renderViewMode === "top"
-    ? visibleShapes
-    : visibleShapes.map((shape) => (shape.sketchViewMode === renderViewMode ? shape : projectedShape(shape, 1, shapes, renderViewMode)));
+    ? shapesVisibleInCurrentView
+    : shapesVisibleInCurrentView.map((shape) => (shape.sketchViewMode === renderViewMode ? shape : projectedShape(shape, 1, shapes, renderViewMode)));
   const visibleReferenceShapes = showSizingReference ? sizingReferenceShapes : [];
   const displayReferenceShapes =
     renderViewMode !== "top"
       ? visibleReferenceShapes.map((shape) => projectedShape(shape, 1, shapes, renderViewMode))
       : visibleReferenceShapes;
-  const renderedShapes = [...displayShapes].sort((a, b) => Number(referenceRoles.includes(b.role)) - Number(referenceRoles.includes(a.role)));
-  const topDraftPoints = draftRole === "part" ? partShapePointsFromDraft(activePartType, draftPreviewPoint ? [...draftPoints, draftPreviewPoint] : draftPoints) : draftPoints;
-  const canDrawSideLiftingSurface = drawActive && draftRole === "liftingSurface" && viewMode === "side";
-  const displayDraftPoints = renderViewMode !== "top" && !canDrawSideLiftingSurface ? topDraftPoints.map((point) => flattenPointForFrontView(point, 1)) : topDraftPoints;
+  const renderedShapes = [...displayShapes].sort((a, b) => Number(referenceRoles.includes(a.role)) - Number(referenceRoles.includes(b.role)));
+  const canDrawDirectlyInSideView = drawActive && viewMode === "side";
+  const topDraftPoints = draftRole === "part"
+    ? partShapePointsFromDraft(activePartType, draftPreviewPoint ? [...draftPoints, draftPreviewPoint] : draftPoints, canDrawDirectlyInSideView)
+    : draftPoints;
+  const displayDraftPoints = renderViewMode !== "top" && !canDrawDirectlyInSideView ? topDraftPoints.map((point) => flattenPointForFrontView(point, 1)) : topDraftPoints;
   const displayDraftPreviewPoint =
     draftRole === "part"
       ? null
-      : renderViewMode !== "top" && draftPreviewPoint && !canDrawSideLiftingSurface
+      : renderViewMode !== "top" && draftPreviewPoint && !canDrawDirectlyInSideView
         ? flattenPointForFrontView(draftPreviewPoint, 1)
         : draftPreviewPoint;
-  const canEditCanvas = (viewMode === "top" || canDrawSideLiftingSurface) && !isViewTransitioning;
+  const canEditCanvas = (viewMode === "top" || canDrawDirectlyInSideView) && !isViewTransitioning;
+  const mirrorPlanesForView = renderViewMode === "top"
+    ? mirrorPlanes.filter((plane) => plane.sketchViewMode !== "side")
+    : mirrorPlanes
+        .filter((plane) => plane.sketchViewMode === renderViewMode || (renderViewMode === "front" && plane.sketchViewMode === "side"))
+        .map((plane) => (plane.sketchViewMode && plane.sketchViewMode !== renderViewMode ? projectedShape(plane, 1, shapes, renderViewMode) : plane));
   const drawIsSplineTool = drawActive && !referenceRoles.includes(draftRole);
   const selectedMotorId = shapes.find((shape) => shape.id === selectedShapeId && shape.role === "part" && shape.partType === "motor")?.id ?? "";
+  const draggedPartShape = draggedPartDimensionShape(dragTarget, shapes);
   const dimensionPrompt = dimensionToolActive && !pendingDimension
     ? dimensionDraft
       ? "Click second element"
@@ -226,8 +244,36 @@ export function SketchCanvas({
   ]);
 
   useEffect(() => {
-    if (drawActive && viewMode !== "top" && !(viewMode === "side" && draftRole === "liftingSurface")) transitionToView("top");
+    if (drawActive && viewMode !== "top" && viewMode !== "side") transitionToView("top");
   }, [draftRole, drawActive, viewMode]);
+
+  useEffect(() => {
+    const element = canvasWrapRef.current;
+    if (!element) return;
+
+    const resizeCanvasView = () => {
+      const width = Math.max(1, Math.round(element.clientWidth));
+      const height = Math.max(1, Math.round(element.clientHeight));
+      setCanvasView((current) => {
+        if (current.width === width && current.height === height) return current;
+        const center = fromCanvas(current.width / 2, current.height / 2, current);
+        const resized = {
+          ...current,
+          width,
+          height,
+          originX: width / 2 - center.xM * current.scale,
+          originY: height / 2 + center.yM * current.scale,
+        };
+        onCanvasViewChange(resized);
+        return resized;
+      });
+    };
+
+    resizeCanvasView();
+    const observer = new ResizeObserver(resizeCanvasView);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [onCanvasViewChange]);
 
   function updateCanvasView(next: CanvasView | ((current: CanvasView) => CanvasView)) {
     setCanvasView((current) => {
@@ -238,6 +284,8 @@ export function SketchCanvas({
   }
 
   function transitionToView(nextViewMode: CanvasViewMode) {
+    setFreeOrbitActive(false);
+    setCameraCommandSerial((serial) => serial + 1);
     if (nextViewMode === viewMode && !isViewTransitioning) return;
     const serial = viewTransitionSerial.current + 1;
     viewTransitionSerial.current = serial;
@@ -271,7 +319,7 @@ export function SketchCanvas({
     const snapped = snap ? snapPoint(point, canvasView, shapes, draftPoints) : point;
     const axisLockedPoint =
       referenceRoles.includes(draftRole) && draftPoints.length === 1 ? axisAlignedPoint(draftPoints[0], snapped) : snapped;
-    return { ...axisLockedPoint, xM: Math.abs(axisLockedPoint.xM), curveMode: "spline" as const };
+    return { ...axisLockedPoint, xM: viewMode === "side" ? axisLockedPoint.xM : Math.abs(axisLockedPoint.xM), curveMode: "spline" as const };
   }
 
   function handleCanvasClick(event: MouseEvent<SVGSVGElement>) {
@@ -302,7 +350,7 @@ export function SketchCanvas({
       onSelect("");
       return;
     }
-    onAddPoint(pointFromEvent(event));
+    onAddPoint(pointFromEvent(event), viewMode);
   }
 
   function handleCanvasPointerDown(event: PointerEvent<SVGSVGElement>) {
@@ -310,7 +358,7 @@ export function SketchCanvas({
     if (!drawActive || event.button !== 0) return;
     if ((event.target as Element).closest(".curve-toggle, .tangent-handle, .axis-unit-option")) return;
     pointPlacedOnPress.current = true;
-    onAddPoint(pointFromEvent(event));
+    onAddPoint(pointFromEvent(event), viewMode);
   }
 
   function handleCanvasMouseDown(event: MouseEvent<SVGSVGElement>) {
@@ -318,7 +366,7 @@ export function SketchCanvas({
     if (!drawActive || event.button !== 0 || pointPlacedOnPress.current) return;
     if ((event.target as Element).closest(".curve-toggle, .tangent-handle, .axis-unit-option")) return;
     pointPlacedOnPress.current = true;
-    onAddPoint(pointFromEvent(event));
+    onAddPoint(pointFromEvent(event), viewMode);
   }
 
   function handleMouseMove(event: MouseEvent<SVGSVGElement>) {
@@ -402,8 +450,22 @@ export function SketchCanvas({
   }
 
   function zoomToFit() {
+    setFreeOrbitActive(false);
+    setCameraCommandSerial((serial) => serial + 1);
     const fitShapes = [...visibleShapes, ...visibleReferenceShapes];
     updateCanvasView(fitCanvasView(fitShapes, renderViewMode));
+  }
+
+  function toggleAddMenu() {
+    const addModeActive = drawActive || dimensionToolActive || referenceMenuOpen;
+    if (addModeActive) {
+      onCancel();
+      onSetDrawActive(false);
+      onSetDimensionToolActive(false);
+      setReferenceMenuOpen(false);
+      return;
+    }
+    setReferenceMenuOpen(true);
   }
 
   function dimensionMidpoint(dimensionId: string): SizePoint | undefined {
@@ -418,25 +480,71 @@ export function SketchCanvas({
     };
   }
 
+  const hasRevolvedBodyPreview = shapes.some((shape) => {
+    const geometry = shape.cadGeometry;
+    return shape.role === "body" && geometry?.kind === "revolvedBody";
+  });
+  const sketch3DInteractive = hasRevolvedBodyPreview && freeOrbitActive && !drawActive && !dimensionToolActive && !dragTarget;
+  const hide2DSketchOverlay = sketch3DInteractive;
+
   return (
-    <div className="sizing-canvas-wrap">
-      {viewMode === "front" ? (
-        <button className="canvas-view-button canvas-view-button-bottom" onClick={() => transitionToView("top")} type="button">
-          Top
-        </button>
+    <div className="sizing-canvas-wrap" ref={canvasWrapRef}>
+      {sketch3DInteractive ? (
+        <Sketch3DPreview
+          active={sketch3DInteractive}
+          cameraCommandSerial={cameraCommandSerial}
+          onOrbitStart={() => setFreeOrbitActive(true)}
+          selectedShapeId={selectedShapeId}
+          showGuides={showGuides}
+          shapes={shapes}
+          viewMode={viewMode}
+        />
+      ) : null}
+      {hasRevolvedBodyPreview ? (
+        <>
+          <button
+            className={`canvas-view-button canvas-view-button-top ${!freeOrbitActive && viewMode === "front" ? "active" : ""}`}
+            onClick={() => transitionToView("front")}
+            type="button"
+          >
+            Front
+          </button>
+          <button
+            className={`canvas-view-button canvas-view-button-bottom ${!freeOrbitActive && viewMode === "top" ? "active" : ""}`}
+            onClick={() => transitionToView("top")}
+            type="button"
+          >
+            Top
+          </button>
+          <button
+            className={`canvas-view-button canvas-view-button-right ${!freeOrbitActive && viewMode === "side" ? "active" : ""}`}
+            onClick={() => transitionToView("side")}
+            type="button"
+          >
+            Side
+          </button>
+        </>
       ) : (
-        <button className="canvas-view-button canvas-view-button-top" onClick={() => transitionToView("front")} type="button">
-          Front
-        </button>
-      )}
-      {viewMode === "side" ? (
-        <button className="canvas-view-button canvas-view-button-left" onClick={() => transitionToView("top")} type="button">
-          Top
-        </button>
-      ) : (
-        <button className="canvas-view-button canvas-view-button-right" onClick={() => transitionToView("side")} type="button">
-          Side
-        </button>
+        <>
+          {viewMode === "front" ? (
+            <button className="canvas-view-button canvas-view-button-bottom" onClick={() => transitionToView("top")} type="button">
+              Top
+            </button>
+          ) : (
+            <button className="canvas-view-button canvas-view-button-top" onClick={() => transitionToView("front")} type="button">
+              Front
+            </button>
+          )}
+          {viewMode === "side" ? (
+            <button className="canvas-view-button canvas-view-button-left" onClick={() => transitionToView("top")} type="button">
+              Top
+            </button>
+          ) : (
+            <button className="canvas-view-button canvas-view-button-right" onClick={() => transitionToView("side")} type="button">
+              Side
+            </button>
+          )}
+        </>
       )}
       <div
         className={`canvas-reference-menu ${referenceMenuOpen ? "open" : ""}`}
@@ -444,8 +552,8 @@ export function SketchCanvas({
         onMouseLeave={() => setReferenceMenuOpen(false)}
       >
         <button
-          className={referenceRoles.includes(draftRole) || dimensionToolActive ? "active" : ""}
-          onClick={() => setReferenceMenuOpen((open) => !open)}
+          className={drawActive || dimensionToolActive || referenceMenuOpen ? "active" : ""}
+          onClick={toggleAddMenu}
           aria-expanded={referenceMenuOpen}
           aria-haspopup="menu"
           type="button"
@@ -494,10 +602,7 @@ export function SketchCanvas({
         <button
           className={drawIsSplineTool ? "active" : ""}
           onClick={() => {
-            if (viewMode === "side") {
-              onActiveRoleChange("liftingSurface");
-              onActiveLiftingSurfaceKindChange("fin");
-            } else if (referenceRoles.includes(draftRole)) {
+            if (referenceRoles.includes(draftRole)) {
               onActiveRoleChange("body");
             }
             onSetDimensionToolActive(false);
@@ -576,7 +681,7 @@ export function SketchCanvas({
         ) : null}
       </div>
       <svg
-        className={`sizing-canvas ${isViewTransitioning ? "view-transitioning" : ""}`}
+        className={`sizing-canvas ${hasRevolvedBodyPreview ? "has-3d-preview" : ""} ${hide2DSketchOverlay ? "hide-2d-sketch-overlay" : ""} ${sketch3DInteractive ? "orbit-preview-active" : ""} ${isViewTransitioning ? "view-transitioning" : ""}`}
         onClick={handleCanvasClick}
         onMouseLeave={() => {
           setCanvasCursorPoint(null);
@@ -593,15 +698,21 @@ export function SketchCanvas({
         viewBox={`0 0 ${displayView.width} ${displayView.height}`}
         aria-label={renderViewMode === "top" ? "Top down half aircraft sketch" : `${renderViewMode} projected aircraft sizing reference`}
       >
-      <SizingGrid onSetUnit={setScaleUnit} unit={scaleUnit} view={displayView} />
-      <line className="sizing-centerline implicit-y-mirror" x1={displayView.originX} y1="20" x2={displayView.originX} y2={displayView.height - 28} />
+      <SizingGrid
+        onSetUnit={setScaleUnit}
+        unit={scaleUnit}
+        view={displayView}
+        xAxisLabel={renderViewMode === "side" ? "Z" : renderViewMode === "top" ? "Y" : "X"}
+        yAxisLabel={renderViewMode === "side" ? "X" : renderViewMode === "top" ? "X" : "Z"}
+      />
+      <line className="sizing-centerline implicit-y-mirror" x1={displayView.originX} y1="0" x2={displayView.originX} y2={displayView.height} />
       <circle className="sizing-origin" cx={displayView.originX} cy={displayView.originY} r="5" />
       <text className="view-label" x="28" y="42">{renderViewMode === "top" ? "Top down sketch" : `${renderViewMode[0].toUpperCase() + renderViewMode.slice(1)} projected reference`}</text>
       {isPointVisible(displayView.originX, displayView.originY, displayView) ? (
         <text className="view-label subtle" x={displayView.originX + 10} y={displayView.originY - 12}>origin</text>
       ) : null}
       {renderViewMode === "top" && isPointVisible(displayView.originX, 46, displayView) ? (
-        <text className="implicit-y-mirror-label" x={displayView.originX + 10} y="58">Y mirror</text>
+        <text className="implicit-y-mirror-label" x={displayView.originX + 10} y="58">Y=0 mirror</text>
       ) : null}
       {displayReferenceShapes.length ? (
         <g className="sizing-reference-layer">
@@ -624,12 +735,12 @@ export function SketchCanvas({
             key={shape.id}
             labelYOffset={renderViewMode !== "top" ? -14 - (index % 8) * 13 : 0}
             onSelect={() => onSelect(shape.id)}
-            readOnly={!canEditCanvas}
+            readOnly={!canEditCanvas && shape.sketchViewMode !== renderViewMode}
             selected={shape.id === selectedShapeId}
             selectedMotorId={selectedMotorId}
             shape={shape}
             showOriginMirror={renderViewMode !== "side"}
-            mirrorPlanes={renderViewMode !== "top" ? [] : mirrorPlanes}
+            mirrorPlanes={mirrorPlanesForView}
             onBeginShapeDrag={(event) => {
               onBeginUndoableEdit();
               event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);
@@ -709,6 +820,15 @@ export function SketchCanvas({
           view={displayView}
         />
       ) : null}
+      {!drawActive && renderViewMode === "top" && !isViewTransitioning && draggedPartShape?.partType ? (
+        <LiveDraftDimensions
+          partType={draggedPartShape.partType}
+          points={draggedPartShape.points}
+          previewPoint={null}
+          role={draggedPartShape.role}
+          view={displayView}
+        />
+      ) : null}
       {renderViewMode === "top" && !isViewTransitioning ? (
         <DimensionLayer
           dimensionDraft={dimensionDraft}
@@ -741,6 +861,21 @@ export function SketchCanvas({
       >
         <Maximize2 size={16} />
       </button>
+      {hasRevolvedBodyPreview ? (
+        <button
+          aria-label={freeOrbitActive ? "Orbit mode active" : "Orbit 3D object"}
+          className={`canvas-orbit-toggle ${freeOrbitActive ? "active" : ""}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            setFreeOrbitActive(true);
+            setCameraCommandSerial((serial) => serial + 1);
+          }}
+          title="Orbit 3D object"
+          type="button"
+        >
+          <Orbit size={16} />
+        </button>
+      ) : null}
       <button
         className={`canvas-guide-toggle ${showGuides ? "active" : ""}`}
         onClick={(event) => {
@@ -808,9 +943,10 @@ function partDimensionLabels(partType: PartType, points: SizePoint[]) {
   if (points.length < 2) return [];
   const bounds = draftBounds(points);
   if (partType === "motor") {
+    const motorDimensions = motorDimensionsFromPoints(points);
     return [
-      `Diameter ${formatDraftDimension(bounds.maxX - bounds.minX)}`,
-      `Length ${formatDraftDimension(bounds.maxY - bounds.minY)}`,
+      `Diameter ${formatDraftDimension(motorDimensions.diameterM)}`,
+      `Length ${formatDraftDimension(motorDimensions.lengthM)}`,
     ];
   }
   if (partType === "battery") {
@@ -826,6 +962,26 @@ function partDimensionLabels(partType: PartType, points: SizePoint[]) {
     return [`Diameter ${formatDraftDimension(distanceBetweenPoints(points[0], points[points.length - 1]) * 2)}`];
   }
   return [];
+}
+
+function draggedPartDimensionShape(dragTarget: DragTarget | null, shapes: SizeShape[]) {
+  if (!dragTarget || !("shapeId" in dragTarget)) return undefined;
+  const shape = shapes.find((candidate) => candidate.id === dragTarget.shapeId);
+  return shape?.role === "part" ? shape : undefined;
+}
+
+function motorDimensionsFromPoints(points: SizePoint[]) {
+  if (points.length === 2) {
+    return {
+      diameterM: Math.abs(points[1].xM - points[0].xM) * 2,
+      lengthM: Math.abs(points[1].yM - points[0].yM) * 2,
+    };
+  }
+  const bounds = draftBounds(points);
+  return {
+    diameterM: bounds.maxX - bounds.minX,
+    lengthM: bounds.maxY - bounds.minY,
+  };
 }
 
 function lastDraftSegment(points: SizePoint[], previewPoint: SizePoint | null) {

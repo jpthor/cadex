@@ -100,7 +100,7 @@ export function upsertAircraftProject(projects: AircraftProjectEntry[], entry: A
 }
 
 export async function listAircraftProjects() {
-  const response = await fetch("/api/cad/projects");
+  const response = await fetchWithCadBridgeFallback("/api/cad/projects");
   if (!response.ok) throw new Error(await response.text());
   const payload = (await response.json()) as { projects: AircraftProjectEntry[] };
   return payload.projects ?? [];
@@ -129,11 +129,20 @@ export async function deleteAircraftProject(id: string) {
 }
 
 async function projectApi<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
+  const response = await fetchWithCadBridgeFallback(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await response.text());
   return (await response.json()) as T;
+}
+
+async function fetchWithCadBridgeFallback(path: string, init?: RequestInit) {
+  try {
+    return await fetch(path, init);
+  } catch (error) {
+    if (!path.startsWith("/api/cad")) throw error;
+    return fetch(`http://127.0.0.1:1421${path.replace(/^\/api\/cad/, "")}`, init);
+  }
 }

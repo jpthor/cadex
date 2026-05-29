@@ -10,6 +10,7 @@ export type DisplayUnit = (typeof unitOptions)[number];
 export const metersPerSecondPerKnot = 0.514444;
 export const fixedAircraftMotorCount = 2;
 export const fixedAircraftTailplaneCount = 2;
+export const fixedAircraftFinCount = 2;
 
 export const defaultPropulsionTabState: PropulsionTabState = {
   selectedBatteryId: batterySamples[5]?.id ?? batterySamples[0].id,

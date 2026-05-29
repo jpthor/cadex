@@ -1,7 +1,7 @@
 import type { PartType, SizeShape, SizingAnalysis } from "../sizing";
 import { liftingSurfaceStats, shapeBounds } from "../sizing/auditedSizingEngine";
 import { mirrorAxisTouchToleranceM } from "./constants";
-import { mirrorPointsAcrossPlane, shapeTouchesMirrorAxis, shapeTouchesMirrorPlane } from "./geometry";
+import { chordExtentsAtX, mirrorPointsAcrossPlane, shapeTouchesMirrorAxis, shapeTouchesMirrorPlane } from "./geometry";
 
 export type AircraftDiagnostic = {
   level: "ok" | "warn" | "bad";
@@ -104,6 +104,60 @@ export function analyseAircraftSizing(
         wingSpanM / Math.max(meanChordM, 0.001) < 5
           ? "Low aspect ratio for cruise efficiency. A longer span or smaller chord may improve endurance."
           : "Aspect ratio is reasonable for a quick cruise-oriented sketch.",
+    });
+  }
+
+  diagnostics.push(...analyseSketchExportReadiness(shapes));
+
+  return diagnostics;
+}
+
+export function analyseSketchExportReadiness(shapes: SizeShape[]): AircraftDiagnostic[] {
+  const diagnostics: AircraftDiagnostic[] = [];
+  const liftingSurfaces = shapes.filter((shape) => shape.role === "liftingSurface");
+  const bodies = shapes.filter((shape) => shape.role === "body");
+  const rotors = shapes.filter((shape) => shape.role === "part" && shape.partType === "rotor");
+
+  for (const shape of liftingSurfaces) {
+    const bounds = shapeBounds(shape);
+    const spanM = bounds.maxX - bounds.minX;
+    const stationChecks = [
+      { label: "Root", xM: bounds.minX },
+      { label: "Tip", xM: bounds.maxX },
+    ];
+    const missingStation = stationChecks.find((station) => !chordExtentsAtX(shape.points, station.xM));
+    diagnostics.push({
+      level: spanM < 0.02 || missingStation ? "bad" : "ok",
+      label: `${shape.label} export stations`,
+      value: missingStation ? `${missingStation.label} missing` : "Root / Tip",
+      message: missingStation
+        ? "A chord station does not cut the lifting surface cleanly. Adjust the outline so both station lines cross the surface."
+        : "OpenVSP export can use the root and tip chord lines as stations.",
+    });
+  }
+
+  for (const shape of bodies) {
+    const bounds = shapeBounds(shape);
+    diagnostics.push({
+      level: bounds.maxY <= bounds.minY + 0.02 ? "bad" : "ok",
+      label: `${shape.label} body axis`,
+      value: `${Math.abs(bounds.maxY - bounds.minY).toFixed(2)} m`,
+      message:
+        bounds.maxY <= bounds.minY + 0.02
+          ? "Body has no clear nose-to-tail axis. Draw it with a clear length along X."
+          : "Body has a clear nose-to-tail direction for export.",
+    });
+  }
+
+  for (const shape of rotors) {
+    diagnostics.push({
+      level: shape.points.length >= 2 ? "ok" : "bad",
+      label: `${shape.label} rotor`,
+      value: shape.points.length >= 2 ? "center + radius" : "incomplete",
+      message:
+        shape.points.length >= 2
+          ? "Rotor has a center and radius point, so diameter and placement are explicit."
+          : "Rotor needs a center point and a radius point.",
     });
   }
 

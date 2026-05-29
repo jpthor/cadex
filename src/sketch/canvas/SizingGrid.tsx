@@ -11,13 +11,26 @@ import {
   toCanvas,
 } from "../geometry";
 import { scaleUnits } from "../constants";
-export function SizingGrid({ view, unit, onSetUnit }: { view: CanvasView; unit: ScaleUnit; onSetUnit: (unit: ScaleUnit) => void }) {
+export function SizingGrid({
+  view,
+  unit,
+  onSetUnit,
+  xAxisLabel = "X",
+  yAxisLabel = "Y",
+}: {
+  view: CanvasView;
+  unit: ScaleUnit;
+  onSetUnit: (unit: ScaleUnit) => void;
+  xAxisLabel?: string;
+  yAxisLabel?: string;
+}) {
   const majorTickM = chooseMajorTickMeters(view.scale);
   const minorTickM = chooseMinorTickMeters(majorTickM);
   const gridLines = [];
   const axisTicks = [];
   const stickyAxisX = clamp(view.originX, 28, view.width - 28);
   const stickyAxisY = clamp(view.originY, 30, view.height - 30);
+  const yAxisHeaderY = 76;
   const firstX = Math.floor(fromCanvas(0, stickyAxisY, view).xM / minorTickM) * minorTickM;
   const lastX = Math.ceil(fromCanvas(view.width, stickyAxisY, view).xM / minorTickM) * minorTickM;
   const firstY = Math.floor(fromCanvas(stickyAxisX, view.height, view).yM / minorTickM) * minorTickM;
@@ -57,11 +70,11 @@ export function SizingGrid({ view, unit, onSetUnit }: { view: CanvasView; unit: 
     <>
       <g className="sizing-grid">{gridLines}</g>
       <g className="sizing-axes">
-        <line x1="20" y1={stickyAxisY} x2={view.width - 24} y2={stickyAxisY} />
-        <line x1={stickyAxisX} y1="20" x2={stickyAxisX} y2={view.height - 24} />
+        <line x1="0" y1={stickyAxisY} x2={view.width} y2={stickyAxisY} />
+        <line x1={stickyAxisX} y1="0" x2={stickyAxisX} y2={view.height} />
         {axisTicks}
-        <text className="axis-name" x={view.width - 46} y={stickyAxisY - 10}>X</text>
-        <text className="axis-name" x={stickyAxisX + 12} y="32">Y</text>
+        <text className="axis-name" x={view.width - 46} y={stickyAxisY - 10}>{xAxisLabel}</text>
+        <text className="axis-name" x={stickyAxisX + 12} y={yAxisHeaderY}>{yAxisLabel}</text>
         <g className="axis-unit-options">
           <title>Canvas units</title>
           {scaleUnits.map((option, index) => (
@@ -70,7 +83,7 @@ export function SizingGrid({ view, unit, onSetUnit }: { view: CanvasView; unit: 
               key={option}
               onClick={() => onSetUnit(option)}
               x={stickyAxisX + 34 + index * 28}
-              y="32"
+              y={yAxisHeaderY}
             >
               {option}
             </text>

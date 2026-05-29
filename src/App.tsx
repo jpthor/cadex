@@ -39,6 +39,7 @@ import type { DisplayUnit } from "./app/constants";
 import { ProjectBrowser } from "./components/browser/ProjectBrowser";
 import { CadCanvas } from "./components/canvas/CadCanvas";
 import { toDisplayUnit } from "./components/browser/units";
+import { ComputeDashboard } from "./components/compute/ComputeDashboard";
 import { ProjectMenu } from "./components/design/ProjectMenu";
 import { TimelineItem } from "./components/design/TimelineItem";
 import { PropulsionWorkspace } from "./components/propulsion/propulsionPanels";
@@ -64,7 +65,7 @@ import {
 import { friendlyError, isTauriRuntime } from "./lib/tauriRuntime";
 import { batteryMassFromSizing, rotorDefinitionFromSizing } from "./propulsionEngine";
 import { SketchWorkspace, SketchSummaryFooter } from "./SketchMode";
-import { computeSizingAnalysis, defaultSizingProject, normalizeSizingProject } from "./sizing";
+import { computeSketchAerodynamics, computeSizingAnalysis, defaultSizingProject, normalizeSizingProject } from "./sizing";
 import type { SizingProject } from "./sizing";
 import type { CadProject, GeometryFormat, SelectedGeometry, ToolMode } from "./types";
 import { browserGroupIdForObject, selectionFromBrowserItem } from "./components/browser/browserSelection";
@@ -77,9 +78,22 @@ function formatSelectedContext(selectedGeometry: SelectedGeometry | null) {
 
 function loadStoredAppMode(): AppMode {
   const storedMode = localStorage.getItem(appModeStorageKey);
-  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "propulsion" || storedMode === "design"
+  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "propulsion" || storedMode === "design"
     ? storedMode
     : "sizing";
+}
+
+function computeSketchFooterValue(project: SizingProject, metric: "cl" | "cd" | "ld") {
+  if (!project.shapes.length) return "-";
+  const aero = computeSketchAerodynamics(project);
+  if (metric === "cd") return aero.validity.drag ? aero.aerodynamics.dragCoefficient.toFixed(3) : "-";
+  if (!aero.validity.lift) return "-";
+  if (metric === "cl") return aero.aerodynamics.liftCoefficient.toFixed(2);
+  return aero.aerodynamics.liftToDrag.toFixed(1);
+}
+
+function isFetchFailure(error: unknown) {
+  return error instanceof TypeError && String(error.message).includes("fetch");
 }
 
 export default function App() {
@@ -135,6 +149,26 @@ export default function App() {
   useEffect(() => {
     void refreshAircraftProjects();
   }, []);
+
+  useEffect(() => {
+    if (activeAircraftProjectId || !aircraftProjects.length) return;
+    const currentName = project.name.trim().toLowerCase();
+    if (!currentName) return;
+    const matchingProject = aircraftProjects.find((entry) => entry.name.trim().toLowerCase() === currentName);
+    if (!matchingProject) return;
+    loadedAircraftProjectIdRef.current = matchingProject.id;
+    lastSavedStateRef.current = "";
+    setActiveAircraftProjectId(matchingProject.id);
+  }, [activeAircraftProjectId, aircraftProjects, project.name]);
+
+  useEffect(() => {
+    if (!activeAircraftProjectId || !aircraftProjects.length) return;
+    if (aircraftProjects.some((entry) => entry.id === activeAircraftProjectId)) return;
+    loadedAircraftProjectIdRef.current = "";
+    lastSavedStateRef.current = "";
+    localStorage.removeItem("cadex.activeAircraftProjectId");
+    setActiveAircraftProjectId("");
+  }, [activeAircraftProjectId, aircraftProjects]);
 
   useEffect(() => {
     if (!activeAircraftProjectId) return;
@@ -384,8 +418,9 @@ export default function App() {
   async function createAircraftProjectFromCurrent(name: string) {
     const projectName = name.trim();
     if (!projectName) return;
-    const nextProject = { ...project, name: projectName, sizing: sizingProject };
-    const state = buildAircraftMasterState(undefined, projectName, nextProject, sizingProject, propulsionState);
+    const emptySizing = defaultSizingProject();
+    const emptyProject = { ...fallbackProject(), name: projectName, sizing: emptySizing };
+    const state = buildAircraftMasterState(undefined, projectName, emptyProject, emptySizing, defaultPropulsionTabState);
     try {
       const result = await createAircraftProject(projectName, state);
       applyAircraftMasterState(result.state);
@@ -445,8 +480,31 @@ export default function App() {
       }
       setStatus(`Deleted ${deletedProject?.name ?? "project"}`);
     } catch (error) {
+      if (isFetchFailure(error)) {
+        setAircraftProjects((current) => current.filter((entry) => entry.id !== projectId));
+        if (activeAircraftProjectId === projectId) {
+          clearLoadedAircraftProject();
+        }
+        setStatus(`Deleted ${deletedProject?.name ?? "project"} locally`);
+        return;
+      }
       setStatus(`Project delete failed: ${friendlyError(error)}`);
     }
+  }
+
+  function clearLoadedAircraftProject() {
+    const emptyProject = fallbackProject();
+    const emptySizing = defaultSizingProject();
+    loadedAircraftProjectIdRef.current = "";
+    lastSavedStateRef.current = "";
+    localStorage.removeItem("cadex.activeAircraftProjectId");
+    setActiveAircraftProjectId("");
+    setProject({ ...emptyProject, sizing: emptySizing });
+    setSizingProject(emptySizing);
+    setPropulsionState(defaultPropulsionTabState);
+    setSelectedTimelineEventId(null);
+    setSelectedBrowserItemId("project");
+    setSelectedGeometry(null);
   }
 
   function applyAircraftMasterState(state: AircraftMasterState) {
@@ -517,6 +575,9 @@ export default function App() {
             <button className={appMode === "sketch" ? "active" : ""} onClick={() => setAppMode("sketch")}>
               Sketch
             </button>
+            <button className={appMode === "compute" ? "active" : ""} onClick={() => setAppMode("compute")}>
+              Compute
+            </button>
             <button className={appMode === "propulsion" ? "active" : ""} onClick={() => setAppMode("propulsion")}>
               Propulsion
             </button>
@@ -569,6 +630,11 @@ export default function App() {
           <div className="size-toolbar-label">
             <Gauge size={17} />
             Aircraft sizing
+          </div>
+        ) : appMode === "compute" ? (
+          <div className="size-toolbar-label">
+            <Gauge size={17} />
+            Live sketch computation
           </div>
         ) : (
           <div className="size-toolbar-label">
@@ -706,6 +772,21 @@ export default function App() {
             <div className="timeline-events">
               <span>Mass {(liveSizingAnalysis?.totalMassKg ?? 0).toFixed(2)} kg</span>
               <span>{fixedAircraftMotorCount} motors</span>
+            </div>
+          </footer>
+        </>
+      ) : appMode === "compute" ? (
+        <>
+          <ComputeDashboard project={sizingProject} projectName={activeAircraftProject?.name ?? project.name} />
+          <footer className="timeline size-footer">
+            <div className="timeline-title">
+              <Gauge size={17} />
+              <span>Compute result</span>
+            </div>
+            <div className="timeline-events">
+              <span>CL {computeSketchFooterValue(sizingProject, "cl")}</span>
+              <span>CD {computeSketchFooterValue(sizingProject, "cd")}</span>
+              <span>L/D {computeSketchFooterValue(sizingProject, "ld")}</span>
             </div>
           </footer>
         </>

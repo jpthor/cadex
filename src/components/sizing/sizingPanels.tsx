@@ -2,7 +2,7 @@ import { Gauge } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { auditedSizingAssumptions, computeSizingAnalysis } from "../../sizing/auditedSizingEngine";
-import { fixedAircraftMotorCount, fixedAircraftTailplaneCount, metersPerSecondPerKnot } from "../../app/constants";
+import { fixedAircraftFinCount, fixedAircraftMotorCount, fixedAircraftTailplaneCount, metersPerSecondPerKnot } from "../../app/constants";
 import type { SizingProject } from "../../sizing";
 import { defaultTurbineCount, turbineEngineOptions } from "../../sketch/constants";
 import { Metric } from "../ui/Metric";
@@ -129,7 +129,7 @@ export function SizingDashboard({
               <Metric label="Tail area total" value={`${computedDraft.tailAreaM2.toFixed(3)} m2`} />
               <Metric label="Tail area / tailplane" value={`${computedDraft.tailAreaPerEmpennageM2.toFixed(3)} m2`} />
               <Metric label="Tail arm" value={`${computedDraft.tailArmM.toFixed(2)} m`} />
-              <Metric label="Vertical fins" value="2" />
+              <Metric label="Vertical fins" value={`${fixedAircraftFinCount}`} />
               <Metric label="Fin area / fin" value={`${computedDraft.finAreaPerFinM2.toFixed(3)} m2`} />
               <Metric label="Fin height x chord" value={`${computedDraft.finHeightM.toFixed(2)} m x ${computedDraft.finChordM.toFixed(2)} m`} />
               <Metric label="Tail volume ratio" value={`${computedDraft.tailVolumeRatio.toFixed(2)} unitless`} />
@@ -159,7 +159,7 @@ export function SizingDashboard({
             <SizingDataGroup title="Assumptions">
               <Metric label="Configuration" value="electric twin-rotor tailsitter" />
               <Metric label="Build" value="carbon fibre shell / spar" />
-              <Metric label="Empennage" value={`${fixedAircraftTailplaneCount} tailplanes + 2 fins`} />
+              <Metric label="Empennage" value={`${fixedAircraftTailplaneCount} tailplanes + ${fixedAircraftFinCount} fins`} />
               <Metric label="Cruise L/D" value={`${computedDraft.cruiseLiftToDrag.toFixed(1)}`} />
               <Metric label="Hover figure of merit" value={`${computedDraft.hoverFigureOfMerit.toFixed(2)}`} />
               <Metric label="Structure factor" value={`${(computedDraft.structureFraction * 100).toFixed(0)}% of installed mass`} />
@@ -515,7 +515,7 @@ export function computeSizingDraft(project: SizingProject) {
   const motorX = wingSpanM / 2 - rotorDiameterM / 2 - rotorInsideWingMarginM;
   const totalLengthM = wingRootDepthM + tailArmM + tailChordM;
   const finAreaTotalM2 = wingAreaM2 * 0.2;
-  const finAreaPerFinM2 = finAreaTotalM2 / 2;
+  const finAreaPerFinM2 = finAreaTotalM2 / fixedAircraftFinCount;
   const finHeightM = Math.sqrt(finAreaPerFinM2 * 1.35);
   const finChordM = finAreaPerFinM2 / Math.max(finHeightM, 0.01);
   const wingLoadingKgM2 = massKg / Math.max(wingAreaM2, 0.01);
@@ -586,6 +586,8 @@ export function computeSizingDraft(project: SizingProject) {
       meanChordM,
       motorDiameterM: hardware.motor.diameterM,
       motorLengthM: hardware.motor.lengthM,
+      finChordM,
+      finHeightM,
       rotorBladeCount,
       rotorDiameterM,
       tailAreaM2,
@@ -599,6 +601,8 @@ export function computeSizingDraft(project: SizingProject) {
 export function sizingDraftReferenceShapes({
   fuselageLengthM,
   fuselageWidthM,
+  finChordM,
+  finHeightM,
   meanChordM,
   motorDiameterM,
   motorLengthM,
@@ -611,6 +615,8 @@ export function sizingDraftReferenceShapes({
 }: {
   fuselageLengthM: number;
   fuselageWidthM: number;
+  finChordM: number;
+  finHeightM: number;
   meanChordM: number;
   motorDiameterM?: number;
   motorLengthM?: number;
@@ -681,6 +687,40 @@ export function sizingDraftReferenceShapes({
         { xM: motorX + tailSpan / 2, yM: tailY + tailChord * 0.45, curveMode: "corner" },
         { xM: motorX + tailSpan / 2, yM: tailY - tailChord * 0.45, curveMode: "corner" },
         { xM: motorX - tailSpan / 2, yM: tailY - tailChord * 0.5, curveMode: "corner" },
+      ],
+    },
+    {
+      id: "sizing-ref-fin",
+      role: "liftingSurface",
+      liftingSurfaceKind: "fin",
+      label: "Sizing fin",
+      drawMode: "line",
+      sketchViewMode: "side",
+      sideViewStationId: "implicit-y-axis-mirror",
+      points: [
+        { xM: 0, yM: tailY + finChordM * 0.55, curveMode: "corner" },
+        { xM: finHeightM, yM: tailY + finChordM * 0.4, curveMode: "corner" },
+        { xM: finHeightM, yM: tailY - finChordM * 0.5, curveMode: "corner" },
+        { xM: 0, yM: tailY - finChordM * 0.55, curveMode: "corner" },
+      ],
+      airfoil: "NACA 0012",
+      airfoilStations: { root: "NACA 0012", tip: "NACA 0012" },
+      incidenceDeg: 0,
+      incidenceStationsDeg: { root: 0, tip: 0 },
+      bodyMaterial: "carbonFibre",
+      bodyThicknessMm: 1.2,
+      massKg: 0.15,
+    },
+    {
+      id: "sizing-ref-fin-mirror",
+      role: "mirrorPlane",
+      label: "Fin mirror plane",
+      drawMode: "line",
+      sketchViewMode: "side",
+      sideViewStationId: "implicit-y-axis-mirror",
+      points: [
+        { xM: 0, yM: tailY + finChordM * 0.75, curveMode: "corner" },
+        { xM: 0, yM: tailY - finChordM * 0.75, curveMode: "corner" },
       ],
     },
     {

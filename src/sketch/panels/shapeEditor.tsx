@@ -35,7 +35,7 @@ import {
 } from "../../sizing/auditedSizingEngine";
 import { partTouchesMirrorAxis } from "../diagnostics";
 import { referenceRoles } from "../constants";
-import { cadGeometryForShape, motorDepthM } from "../geometry";
+import { cadGeometryForShape, implicitMirrorShapeId, motorDepthM, verticalReferenceX } from "../geometry";
 import { NumberField, SketchPanelTitle } from "./shared";
 export function ShapeSelector({
   selectedShapeId,
@@ -64,6 +64,7 @@ export function ShapeSelector({
 export function ShapeEditor({
   activeAirfoilStation,
   mirrorPlanes,
+  shapes,
   shape,
   suggestedRows = [],
   onActiveAirfoilStationChange,
@@ -72,6 +73,7 @@ export function ShapeEditor({
 }: {
   activeAirfoilStation: AirfoilStation;
   mirrorPlanes: SizeShape[];
+  shapes: SizeShape[];
   shape: SizeShape;
   suggestedRows?: Array<{ label: string; value: string }>;
   onActiveAirfoilStationChange: (station: AirfoilStation) => void;
@@ -85,8 +87,12 @@ export function ShapeEditor({
   const motorCount = shape.partType === "motor" && partTouchesMirrorAxis(shape) ? 1 : 2;
   const motorVolumeM3 = shape.partType === "motor" ? motorVolumeEstimate(shape) : 0;
   const motorMassKg = shape.partType === "motor" ? motorMassEstimate(shape) : 0;
-  const cadGeometry = cadGeometryForShape(shape, mirrorPlanes);
-  const liftingStats = shape.role === "liftingSurface" ? liftingSurfaceStats(shape, mirrorPlanes) : undefined;
+  const relatedShapes = shapes.length ? shapes : mirrorPlanes;
+  const sideViewStationOptions = sideViewStationAnchorOptions(shape, relatedShapes);
+  const selectedSideViewStation = sideViewStationOptions.find((option) => option.id === (shape.sideViewStationId ?? implicitMirrorShapeId));
+  const dihedralStationOptions = topViewStationAnchorOptions(shape, relatedShapes);
+  const cadGeometry = cadGeometryForShape(shape, relatedShapes);
+  const liftingStats = shape.role === "liftingSurface" ? liftingSurfaceStats(shape, relatedShapes) : undefined;
   const drawnLiftingAreaM2 = shape.role === "liftingSurface" ? polygonAreaM2(shape.points) : 0;
   const drawnLiftingSpanM = shape.role === "liftingSurface" ? Math.max(bounds.maxX - bounds.minX, 0) : 0;
   const mirroredLiftingSpanM = shape.role === "liftingSurface" && bounds.minX > 0.005 ? drawnLiftingSpanM * 2 : drawnLiftingSpanM;
@@ -102,6 +108,52 @@ export function ShapeEditor({
         <span>Label</span>
         <input value={shape.label} onChange={(event) => onChange({ label: event.target.value })} />
       </label>
+      {shape.sketchViewMode === "side" ? (
+        <label className="sizing-field">
+          <span>X station</span>
+          <select value={shape.sideViewStationId ?? implicitMirrorShapeId} onChange={(event) => onChange({ sideViewStationId: event.target.value })}>
+            {sideViewStationOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing" ? (
+        <>
+          <label className="sizing-field">
+            <span>Dihedral break</span>
+            <select
+              value={shape.dihedralBreakStationId ?? ""}
+              onChange={(event) => onChange({ dihedralBreakStationId: event.target.value || undefined })}
+            >
+              <option value="">Wing tip</option>
+              {dihedralStationOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <NumberField
+            label="Dihedral lift"
+            suffix="mm"
+            value={Math.round((shape.dihedralLiftM ?? 0) * 1000)}
+            step={5}
+            onChange={(valueMm) => onChange({ dihedralLiftM: valueMm / 1000 })}
+          />
+        </>
+      ) : null}
+      {shape.role !== "referenceLine" && shape.role !== "mirrorPlane" && !(shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing") ? (
+        <NumberField
+          label="Z lift"
+          suffix="mm"
+          value={Math.round((shape.zOffsetM ?? 0) * 1000)}
+          step={5}
+          onChange={(valueMm) => onChange({ zOffsetM: valueMm / 1000 })}
+        />
+      ) : null}
       {shape.role === "liftingSurface" ? (
         <>
           <div className="segmented-control sizing-role-control" aria-label="Lifting surface role">
@@ -117,23 +169,23 @@ export function ShapeEditor({
           </div>
           <div className="airfoil-panel">
             <div className="segmented-control sizing-role-control" aria-label="Aerofoil station">
-              <button className={activeAirfoilStation === "root10" ? "active" : ""} onClick={() => onActiveAirfoilStationChange("root10")}>
-                10%
+              <button className={activeAirfoilStation === "root" ? "active" : ""} onClick={() => onActiveAirfoilStationChange("root")}>
+                Root
               </button>
-              <button className={activeAirfoilStation === "tip90" ? "active" : ""} onClick={() => onActiveAirfoilStationChange("tip90")}>
-                90%
+              <button className={activeAirfoilStation === "tip" ? "active" : ""} onClick={() => onActiveAirfoilStationChange("tip")}>
+                Tip
               </button>
             </div>
             <label className="sizing-field">
               <span>Aerofoil</span>
               <select
-                value={shape.airfoilStations?.[activeAirfoilStation] ?? shape.airfoil ?? "NACA 0012"}
+                value={stationAirfoil(shape, activeAirfoilStation)}
                 onChange={(event) =>
                   onChange({
                     airfoil: event.target.value,
                     airfoilStations: {
-                      root10: shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012",
-                      tip90: shape.airfoilStations?.tip90 ?? shape.airfoil ?? "NACA 0012",
+                      root: stationAirfoil(shape, "root"),
+                      tip: stationAirfoil(shape, "tip"),
                       [activeAirfoilStation]: event.target.value,
                     },
                   })
@@ -161,17 +213,17 @@ export function ShapeEditor({
             </select>
           </label>
           <NumberField
-            label={`${activeAirfoilStation === "root10" ? "10%" : "90%"} incidence`}
+            label={`${activeAirfoilStation === "root" ? "Root" : "Tip"} incidence`}
             suffix="deg"
-            value={shape.incidenceStationsDeg?.[activeAirfoilStation] ?? shape.incidenceDeg ?? 0}
+            value={stationIncidence(shape, activeAirfoilStation)}
             step={0.1}
             onChange={(incidenceDeg) =>
               onChange({
-                incidenceDeg: ((activeAirfoilStation === "root10" ? incidenceDeg : shape.incidenceStationsDeg?.root10 ?? shape.incidenceDeg ?? 0) +
-                  (activeAirfoilStation === "tip90" ? incidenceDeg : shape.incidenceStationsDeg?.tip90 ?? shape.incidenceDeg ?? 0)) / 2,
+                incidenceDeg: ((activeAirfoilStation === "root" ? incidenceDeg : stationIncidence(shape, "root")) +
+                  (activeAirfoilStation === "tip" ? incidenceDeg : stationIncidence(shape, "tip"))) / 2,
                 incidenceStationsDeg: {
-                  root10: shape.incidenceStationsDeg?.root10 ?? shape.incidenceDeg ?? 0,
-                  tip90: shape.incidenceStationsDeg?.tip90 ?? shape.incidenceDeg ?? 0,
+                  root: stationIncidence(shape, "root"),
+                  tip: stationIncidence(shape, "tip"),
                   [activeAirfoilStation]: incidenceDeg,
                 },
               })
@@ -179,7 +231,7 @@ export function ShapeEditor({
           />
           <div className="shape-readout">
             <span>
-              Twist {((shape.incidenceStationsDeg?.tip90 ?? shape.incidenceDeg ?? 0) - (shape.incidenceStationsDeg?.root10 ?? shape.incidenceDeg ?? 0)).toFixed(1)} deg
+              Twist {(stationIncidence(shape, "tip") - stationIncidence(shape, "root")).toFixed(1)} deg
             </span>
           </div>
           <NumberField
@@ -194,8 +246,8 @@ export function ShapeEditor({
             {mirroredLiftingSpanM > drawnLiftingSpanM + 0.001 ? <span>Combined mirrored surface span {(mirroredLiftingSpanM * 1000).toFixed(0)} mm</span> : null}
             <span>Drawn planform area {drawnLiftingAreaM2.toFixed(3)} m2</span>
             {liftingStats ? <span>{liftingAreaScope} {liftingStats.areaM2.toFixed(3)} m2</span> : null}
-            <span>Skin area used for mass {liftingSurfaceSkinAreaEstimate(shape, mirrorPlanes).toFixed(3)} m2</span>
-            <span>Surface mass {liftingSurfaceMassEstimate(shape, mirrorPlanes).toFixed(3)} kg</span>
+            <span>Skin area used for mass {liftingSurfaceSkinAreaEstimate(shape, relatedShapes).toFixed(3)} m2</span>
+            <span>Surface mass {liftingSurfaceMassEstimate(shape, relatedShapes).toFixed(3)} kg</span>
           </div>
         </>
       ) : shape.role === "body" ? (
@@ -221,13 +273,14 @@ export function ShapeEditor({
             onChange={(bodyThicknessMm) => onChange({ bodyThicknessMm })}
           />
           <div className="shape-readout">
-            <span>Planform skin area {bodySurfaceAreaEstimate(shape, mirrorPlanes).toFixed(3)} m2</span>
-            <span>Body mass {bodyMassEstimate(shape, mirrorPlanes).toFixed(3)} kg</span>
+            <span>Planform skin area {bodySurfaceAreaEstimate(shape, relatedShapes).toFixed(3)} m2</span>
+            <span>Body mass {bodyMassEstimate(shape, relatedShapes).toFixed(3)} kg</span>
           </div>
         </>
       ) : referenceRoles.includes(shape.role) ? (
         <div className="shape-readout">
           <span>{shape.role === "mirrorPlane" ? "Mirrors touching geometry before origin mirror" : "Reference snap line"}</span>
+          {shape.sketchViewMode === "side" ? <span>Aircraft X station {selectedSideViewStation?.label ?? "Y-axis"}</span> : null}
         </div>
       ) : (
         <>
@@ -235,12 +288,17 @@ export function ShapeEditor({
             <ReadoutCard
               title="Current battery"
               rows={[
-                { label: "Plan area", value: `${batteryPlanformAreaEstimate(shape).toFixed(4)} m2` },
-                { label: "Thickness", value: `${(inferredBatteryThicknessM(shape) * 1000).toFixed(0)} mm` },
+                { label: "Length", value: formatMm(bounds.maxY - bounds.minY) },
+                { label: "Width", value: formatMm(bounds.maxX * 2) },
+                { label: "Height", value: formatMm(inferredBatteryThicknessM(shape)) },
                 { label: "Volume", value: `${(batteryVolumeEstimate(shape) * 1000).toFixed(2)} L` },
                 { label: "Mass", value: `${batteryMassEstimate(shape).toFixed(3)} kg` },
               ]}
-              notes={[partTouchesMirrorAxis(shape) ? "1 centerline battery, mirrored from Y axis" : "2 mirrored batteries", "LiPo density 1.70 kg/L"]}
+              notes={[
+                `Plan area ${batteryPlanformAreaEstimate(shape).toFixed(4)} m2`,
+                partTouchesMirrorAxis(shape) ? "1 centerline battery, mirrored from Y axis" : "2 mirrored batteries",
+                "LiPo density 1.70 kg/L",
+              ]}
             />
           ) : shape.partType === "motor" ? (
             <ReadoutCard
@@ -260,12 +318,12 @@ export function ShapeEditor({
               <ReadoutCard
                 title="Current rotor"
                 rows={[
-                  { label: "Diameter", value: `${(rotorDiameterEstimate(shape, mirrorPlanes) * 1000).toFixed(0)} mm` },
+                  { label: "Diameter", value: `${(rotorDiameterEstimate(shape, relatedShapes) * 1000).toFixed(0)} mm` },
                   { label: "Blade count", value: `${Math.max(1, Math.round(shape.rotorBladeCount ?? 2))}` },
-                  { label: "Physical count", value: `${rotorInstanceCount(shape, mirrorPlanes)}` },
-                  { label: "Volume / rotor", value: `${(rotorVolumePerRotorEstimate(shape, mirrorPlanes) * 1000).toFixed(3)} L` },
-                  { label: "Mass / rotor", value: `${rotorMassPerRotorEstimate(shape, mirrorPlanes).toFixed(3)} kg` },
-                  { label: "Total mass", value: `${rotorTotalMassEstimate(shape, mirrorPlanes).toFixed(3)} kg` },
+                  { label: "Physical count", value: `${rotorInstanceCount(shape, relatedShapes)}` },
+                  { label: "Volume / rotor", value: `${(rotorVolumePerRotorEstimate(shape, relatedShapes) * 1000).toFixed(3)} L` },
+                  { label: "Mass / rotor", value: `${rotorMassPerRotorEstimate(shape, relatedShapes).toFixed(3)} kg` },
+                  { label: "Total mass", value: `${rotorTotalMassEstimate(shape, relatedShapes).toFixed(3)} kg` },
                 ]}
                 notes={["Carbon fibre density 1.60 kg/L"]}
               />
@@ -289,18 +347,18 @@ export function ShapeEditor({
             </span>
             <span>
               <span>Axis length</span>
-              <b>{motorLength.toFixed(2)} m</b>
+              <b>{formatMm(motorLength)}</b>
             </span>
           </>
         ) : (
           <>
             <span>
               <span>Mirrored width</span>
-              <b>{(bounds.maxX * 2).toFixed(2)} m</b>
+              <b>{formatMm(bounds.maxX * 2)}</b>
             </span>
             <span>
               <span>Length</span>
-              <b>{(bounds.maxY - bounds.minY).toFixed(2)} m</b>
+              <b>{formatMm(bounds.maxY - bounds.minY)}</b>
             </span>
           </>
         )}
@@ -351,6 +409,49 @@ function ReadoutCard({
       ) : null}
     </div>
   );
+}
+
+function formatMm(valueM: number) {
+  return `${Math.round(Math.abs(valueM) * 1000)} mm`;
+}
+
+function stationAirfoil(shape: SizeShape, station: AirfoilStation) {
+  if (station === "root") return shape.airfoilStations?.root ?? shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012";
+  return shape.airfoilStations?.tip ?? shape.airfoilStations?.tip90 ?? shape.airfoil ?? "NACA 0012";
+}
+
+function stationIncidence(shape: SizeShape, station: AirfoilStation) {
+  if (station === "root") return shape.incidenceStationsDeg?.root ?? shape.incidenceStationsDeg?.root10 ?? shape.incidenceDeg ?? 0;
+  return shape.incidenceStationsDeg?.tip ?? shape.incidenceStationsDeg?.tip90 ?? shape.incidenceDeg ?? 0;
+}
+
+function sideViewStationAnchorOptions(shape: SizeShape, shapes: SizeShape[]) {
+  const options = [{ id: implicitMirrorShapeId, label: "Y-axis" }];
+  if (shape.sketchViewMode !== "side") return options;
+  return [...options, ...topViewStationAnchorOptions(shape, shapes)];
+}
+
+function topViewStationAnchorOptions(shape: SizeShape, shapes: SizeShape[]) {
+  const options: Array<{ id: string; label: string }> = [];
+  const stations = shapes
+    .filter((candidate) => candidate.id !== shape.id && referenceRoles.includes(candidate.role) && (candidate.sketchViewMode ?? "top") === "top")
+    .map((candidate) => ({ shape: candidate, xM: verticalReferenceX(candidate) }))
+    .filter((entry): entry is { shape: SizeShape; xM: number } => entry.xM !== undefined)
+    .sort((a, b) => Math.abs(a.xM) - Math.abs(b.xM) || a.shape.label.localeCompare(b.shape.label));
+  for (const { shape: station, xM } of stations) {
+    options.push({ id: station.id, label: `${station.label} (${formatSignedMm(xM)})` });
+  }
+  const missingId = shape.sketchViewMode === "side" ? shape.sideViewStationId : shape.dihedralBreakStationId;
+  if (missingId && !options.some((option) => option.id === missingId)) {
+    options.push({ id: missingId, label: "Missing station" });
+  }
+  return options;
+}
+
+function formatSignedMm(valueM: number) {
+  const mm = Math.round(valueM * 1000);
+  if (mm === 0) return "x=0";
+  return `x=${mm > 0 ? "+" : ""}${mm} mm`;
 }
 
 function polygonAreaM2(points: SizeShape["points"]) {

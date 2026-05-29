@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 
-export function Metric({ label, value }: { label: string; value: string }) {
+export function Metric({ label, value, verification }: { label: string; value: string; verification?: string }) {
   return (
     <div className="analysis-metric">
-      <span>{label}</span>
+      <span>
+        {label}
+        {verification ? <small>{verification}</small> : null}
+      </span>
       <strong>{value}</strong>
     </div>
   );

@@ -85,9 +85,9 @@ export type SizeShape = {
   points: SizePoint[];
   airfoil?: string;
   liftingSurfaceKind?: LiftingSurfaceKind;
-  airfoilStations?: Partial<Record<"root10" | "tip90", string>>;
+  airfoilStations?: Partial<Record<"root" | "tip" | "root10" | "tip90", string>>;
   incidenceDeg?: number;
-  incidenceStationsDeg?: Partial<Record<"root10" | "tip90", number>>;
+  incidenceStationsDeg?: Partial<Record<"root" | "tip" | "root10" | "tip90", number>>;
   massKg?: number;
   bodyMaterial?: BodyMaterial;
   bodyThicknessMm?: number;
@@ -95,6 +95,10 @@ export type SizeShape = {
   rotorBladeCount?: number;
   cadGeometry?: SizeCadGeometry;
   sketchViewMode?: "top" | "front" | "side";
+  sideViewStationId?: string;
+  zOffsetM?: number;
+  dihedralBreakStationId?: string;
+  dihedralLiftM?: number;
 };
 
 export type SizingMission = {
@@ -296,16 +300,16 @@ function normalizeShape(shape: SizeShape): SizeShape {
     airfoilStations:
       role === "liftingSurface"
         ? {
-            root10: typeof shape.airfoilStations?.root10 === "string" ? shape.airfoilStations.root10 : shape.airfoil ?? "NACA 0012",
-            tip90: typeof shape.airfoilStations?.tip90 === "string" ? shape.airfoilStations.tip90 : shape.airfoil ?? "NACA 0012",
+            root: typeof shape.airfoilStations?.root === "string" ? shape.airfoilStations.root : shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012",
+            tip: typeof shape.airfoilStations?.tip === "string" ? shape.airfoilStations.tip : shape.airfoilStations?.tip90 ?? shape.airfoil ?? "NACA 0012",
           }
         : undefined,
     incidenceDeg: role === "liftingSurface" ? numberOr(shape.incidenceDeg, 0) : undefined,
     incidenceStationsDeg:
       role === "liftingSurface"
         ? {
-            root10: numberOr(shape.incidenceStationsDeg?.root10, numberOr(shape.incidenceDeg, 0)),
-            tip90: numberOr(shape.incidenceStationsDeg?.tip90, numberOr(shape.incidenceDeg, 0)),
+            root: numberOr(shape.incidenceStationsDeg?.root, numberOr(shape.incidenceStationsDeg?.root10, numberOr(shape.incidenceDeg, 0))),
+            tip: numberOr(shape.incidenceStationsDeg?.tip, numberOr(shape.incidenceStationsDeg?.tip90, numberOr(shape.incidenceDeg, 0))),
           }
         : undefined,
     massKg: optionalNumber(shape.massKg),
@@ -315,6 +319,10 @@ function normalizeShape(shape: SizeShape): SizeShape {
     rotorBladeCount: role === "part" && partType === "rotor" ? Math.max(1, Math.round(numberOr(shape.rotorBladeCount, 2))) : undefined,
     cadGeometry: normalizeCadGeometry(shape.cadGeometry),
     sketchViewMode: normalizeSketchViewMode(shape.sketchViewMode),
+    sideViewStationId: typeof shape.sideViewStationId === "string" && shape.sideViewStationId ? shape.sideViewStationId : undefined,
+    zOffsetM: optionalNumber(shape.zOffsetM),
+    dihedralBreakStationId: typeof shape.dihedralBreakStationId === "string" && shape.dihedralBreakStationId ? shape.dihedralBreakStationId : undefined,
+    dihedralLiftM: optionalNumber(shape.dihedralLiftM),
   };
 }
 

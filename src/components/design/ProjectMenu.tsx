@@ -22,12 +22,12 @@ export function ProjectMenu({
   onSelect: (id: string) => void;
 }) {
   const label = activeProject?.name ?? currentName;
-  const [draftName, setDraftName] = useState(currentName === "Untitled part" ? "Untitled aircraft" : currentName);
+  const [draftName, setDraftName] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState("");
 
   useEffect(() => {
-    if (open) setDraftName((current) => current.trim() || (currentName === "Untitled part" ? "Untitled aircraft" : currentName));
-  }, [currentName, open]);
+    if (open) setDraftName("");
+  }, [open]);
 
   return (
     <div className="project-menu">
@@ -56,7 +56,7 @@ export function ProjectMenu({
               value={draftName}
             />
             <button className="project-menu-create" disabled={!draftName.trim()} type="submit">
-              Create
+              New
             </button>
           </form>
           <div className="project-menu-list">

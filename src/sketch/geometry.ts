@@ -30,7 +30,7 @@ function implicitMirrorShape(): SizeShape {
   return {
     id: implicitMirrorShapeId,
     role: "mirrorPlane",
-    label: "Y mirror",
+    label: "Y=0 mirror",
     drawMode: "line",
     points: [
       { xM: 0, yM: -1000, curveMode: "corner" },
@@ -398,9 +398,9 @@ export function isFillablePartShape(shape: SizeShape) {
   return shape.role === "part" && shape.points.length >= 3;
 }
 
-export function cleanPartDraftPoint(point: SizePoint): SizePoint {
+export function cleanPartDraftPoint(point: SizePoint, preserveXSign = false): SizePoint {
   return {
-    xM: Math.abs(point.xM),
+    xM: preserveXSign ? point.xM : Math.abs(point.xM),
     yM: point.yM,
     curveMode: "corner",
     segmentInMode: "corner",
@@ -411,19 +411,19 @@ export function cleanPartDraftPoint(point: SizePoint): SizePoint {
   };
 }
 
-export function partShapePointsFromDraft(partType: PartType, points: SizePoint[]) {
-  if (points.length < 2) return points.map(cleanPartDraftPoint);
-  const start = cleanPartDraftPoint(points[0]);
-  const end = cleanPartDraftPoint(points[points.length - 1]);
-  if (partType === "rotor") return rotorSpanFromDraft(start, end);
-  if (partType === "motor") return motorPointsFromDraft(start, end);
-  return rectanglePointsFromDraft(start, end);
+export function partShapePointsFromDraft(partType: PartType, points: SizePoint[], preserveXSign = false) {
+  if (points.length < 2) return points.map((point) => cleanPartDraftPoint(point, preserveXSign));
+  const start = cleanPartDraftPoint(points[0], preserveXSign);
+  const end = cleanPartDraftPoint(points[points.length - 1], preserveXSign);
+  if (partType === "rotor") return rotorSpanFromDraft(start, end, preserveXSign);
+  if (partType === "motor") return motorPointsFromDraft(start, end, preserveXSign);
+  return rectanglePointsFromDraft(start, end, preserveXSign);
 }
 
-export function motorPointsFromDraft(start: SizePoint, end: SizePoint) {
+export function motorPointsFromDraft(start: SizePoint, end: SizePoint, preserveXSign = false) {
   return [
-    cleanPartDraftPoint(start),
-    cleanPartDraftPoint(end),
+    cleanPartDraftPoint(start, preserveXSign),
+    cleanPartDraftPoint(end, preserveXSign),
   ];
 }
 
@@ -435,9 +435,9 @@ export function motorSpanFromDraft(start: SizePoint, end: SizePoint) {
 }
 
 export function motorBodyPoints(points: SizePoint[]) {
-  if (points.length < 2) return points.map(cleanPartDraftPoint);
+  if (points.length < 2) return points.map((point) => cleanPartDraftPoint(point));
   const [origin, handle] = motorSpanPoints(points);
-  if (!origin || !handle) return points.map(cleanPartDraftPoint);
+  if (!origin || !handle) return points.map((point) => cleanPartDraftPoint(point));
   const halfDiameterM = Math.max(Math.abs(handle.xM - origin.xM), 0.005);
   const halfLengthM = Math.max(Math.abs(handle.yM - origin.yM), 0.01);
   return rectanglePointsFromDraft(
@@ -447,8 +447,8 @@ export function motorBodyPoints(points: SizePoint[]) {
 }
 
 export function motorSpanPoints(points: SizePoint[]) {
-  if (points.length < 2) return points.map(cleanPartDraftPoint);
-  if (points.length === 2) return points.map(cleanPartDraftPoint);
+  if (points.length < 2) return points.map((point) => cleanPartDraftPoint(point));
+  if (points.length === 2) return points.map((point) => cleanPartDraftPoint(point));
   const bounds = pointBounds(points);
   const centerX = (bounds.minX + bounds.maxX) / 2;
   const centerY = (bounds.minY + bounds.maxY) / 2;
@@ -643,8 +643,8 @@ export function cadGeometryForLiftingSurface(shape: SizeShape): SizeCadGeometry 
     spanM,
     rootChordM,
     tipChordM,
-    airfoil: shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012",
-    incidenceDeg: shape.incidenceStationsDeg?.root10 ?? shape.incidenceDeg ?? 0,
+    airfoil: shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012",
+    incidenceDeg: shape.incidenceStationsDeg?.root ?? shape.incidenceDeg ?? 0,
   };
 }
 
@@ -661,13 +661,13 @@ export function rectangularPartHeightFromTopView(shape: SizeShape) {
   return Math.max(bounds.maxX - bounds.minX, 0.01);
 }
 
-export function rectanglePointsFromDraft(start: SizePoint, end: SizePoint) {
+export function rectanglePointsFromDraft(start: SizePoint, end: SizePoint, preserveXSign = false) {
   if (Math.abs(end.xM - start.xM) < 0.001 || Math.abs(end.yM - start.yM) < 0.001) return [start, end];
   return [
-    cleanPartDraftPoint(start),
-    cleanPartDraftPoint({ xM: end.xM, yM: start.yM }),
-    cleanPartDraftPoint(end),
-    cleanPartDraftPoint({ xM: start.xM, yM: end.yM }),
+    cleanPartDraftPoint(start, preserveXSign),
+    cleanPartDraftPoint({ xM: end.xM, yM: start.yM }, preserveXSign),
+    cleanPartDraftPoint(end, preserveXSign),
+    cleanPartDraftPoint({ xM: start.xM, yM: end.yM }, preserveXSign),
   ];
 }
 
@@ -687,12 +687,12 @@ export function canonicalPartPoints(shape: SizeShape) {
   if (shape.role !== "part") return shape.points;
   if (shape.partType === "rotor") return rotorSpanPoints(shape.points);
   if (shape.partType === "motor") return motorSpanPoints(shape.points);
-  if (shape.points.length < 2) return shape.points.map(cleanPartDraftPoint);
+  if (shape.points.length < 2) return shape.points.map((point) => cleanPartDraftPoint(point));
   const bounds = shapeBounds(shape);
   const start = cleanPartDraftPoint({ xM: bounds.minX, yM: bounds.minY });
   const end = cleanPartDraftPoint({ xM: bounds.maxX, yM: bounds.maxY });
   if (shape.partType === "battery" || shape.partType === "payload") return rectanglePointsFromDraft(start, end);
-  return shape.points.map(cleanPartDraftPoint);
+  return shape.points.map((point) => cleanPartDraftPoint(point));
 }
 
 export function moveConstrainedPartPoint(shape: SizeShape, pointIndex: number, target: SizePoint) {
@@ -711,17 +711,17 @@ export function moveConstrainedPartPoint(shape: SizeShape, pointIndex: number, t
   return indexMap.map((index) => rectangle[index] ?? rectangle[0]).filter(Boolean);
 }
 
-export function rotorSpanFromDraft(start: SizePoint, end: SizePoint) {
+export function rotorSpanFromDraft(start: SizePoint, end: SizePoint, preserveXSign = false) {
   const span = Math.max(Math.abs(end.xM - start.xM), 0.01);
-  const endX = end.xM >= start.xM ? start.xM + span : Math.max(0, start.xM - span);
+  const endX = end.xM >= start.xM ? start.xM + span : preserveXSign ? start.xM - span : Math.max(0, start.xM - span);
   return [
-    cleanPartDraftPoint(start),
-    cleanPartDraftPoint({ xM: endX, yM: start.yM }),
+    cleanPartDraftPoint(start, preserveXSign),
+    cleanPartDraftPoint({ xM: endX, yM: start.yM }, preserveXSign),
   ];
 }
 
 export function rotorSpanPoints(points: SizePoint[]) {
-  if (points.length < 2) return points.map(cleanPartDraftPoint);
+  if (points.length < 2) return points.map((point) => cleanPartDraftPoint(point));
   if (points.length > 2) {
     const xs = points.map((point) => Math.abs(point.xM));
     const ys = points.map((point) => point.yM);
@@ -905,7 +905,10 @@ export function flattenShapeForFrontView(shape: SizeShape, progress = 1): SizeSh
 export function projectedShape(shape: SizeShape, progress: number, shapes: SizeShape[], viewMode: CanvasViewMode): SizeShape {
   if (shape.sketchViewMode === viewMode) return shape;
   const t = clamp(progress, 0, 1);
-  const finalShape = viewMode === "side" ? sideProjectionShapeFinal(shape, shapes) : frontProjectionShape(shape, 1, shapes);
+  const finalShape =
+    viewMode === "side"
+      ? sideProjectionShapeFinal(shape, shapes)
+      : frontProjectionShape(shape, 1, shapes);
   return {
     ...finalShape,
     points: morphProjectedPoints(shape, finalShape.points, t, shapes, viewMode),
@@ -977,27 +980,197 @@ export function smootherStep(value: number) {
 }
 
 export function frontProjectionShape(shape: SizeShape, progress: number, shapes: SizeShape[]): SizeShape {
+  if (shape.sketchViewMode === "side") return sideAuthoredFrontProjection(shape, shapes);
+  if (shape.role === "referenceLine") return topAuthoredReferenceFrontProjection(shape, progress);
+  if (shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing" && shape.dihedralLiftM) {
+    return { ...shape, points: dihedralWingFrontSection(shape, shapes, progress) };
+  }
   if (!referenceRoles.includes(shape.role) && progress >= 1) return projectCadGeometryShape(shape, shapes, "front");
-  return flattenShapeForFrontView(shape, progress);
+  return applyFrontZOffset(flattenShapeForFrontView(shape, progress), shape.zOffsetM);
+}
+
+function topAuthoredReferenceFrontProjection(shape: SizeShape, progress: number): SizeShape {
+  const stationX = verticalReferenceX(shape);
+  if (stationX === undefined) return applyFrontZOffset(flattenShapeForFrontView(shape, progress), shape.zOffsetM);
+  const zM = shape.zOffsetM ?? 0;
+  return {
+    ...shape,
+    points: [
+      { xM: stationX, yM: zM, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+      { xM: stationX, yM: zM, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+    ],
+  };
+}
+
+function sideAuthoredFrontProjection(shape: SizeShape, shapes: SizeShape[]): SizeShape {
+  const revolvedProjection = sideAuthoredRevolvedFrontProjection(shape, shapes);
+  if (revolvedProjection) return revolvedProjection;
+
+  const stationX = Math.max(0, sideAuthoredStationX(shape, shapes) ?? 0);
+  const sideHeights = shape.points.map((point) => point.xM);
+  let minHeightM = sideHeights.length ? Math.min(...sideHeights) : -0.05;
+  let maxHeightM = sideHeights.length ? Math.max(...sideHeights) : 0.05;
+  if (Math.abs(maxHeightM - minHeightM) < 0.01) {
+    minHeightM -= 0.05;
+    maxHeightM += 0.05;
+  }
+  if (shape.role === "mirrorPlane") {
+    return {
+      ...shape,
+      points: [
+        { xM: stationX, yM: minHeightM + (shape.zOffsetM ?? 0), curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+        { xM: stationX, yM: maxHeightM + (shape.zOffsetM ?? 0), curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+      ],
+    };
+  }
+  if (shape.role === "referenceLine") {
+    const sideHeight = (shape.points.length
+      ? shape.points.reduce((total, point) => total + point.xM, 0) / shape.points.length
+      : 0) + (shape.zOffsetM ?? 0);
+    const halfStationLineM = 0.08;
+    return {
+      ...shape,
+      points: [
+        { xM: Math.max(0, stationX - halfStationLineM), yM: sideHeight, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+        { xM: stationX + halfStationLineM, yM: sideHeight, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+      ],
+    };
+  }
+  const halfVisibleThicknessM = Math.max((shape.bodyThicknessMm ?? 1.2) / 1000, 0.006);
+  const minX = Math.max(0, stationX - halfVisibleThicknessM);
+  const maxX = stationX + halfVisibleThicknessM;
+  const zOffsetM = shape.zOffsetM ?? 0;
+  return {
+    ...shape,
+    points: [
+      { xM: minX, yM: minHeightM + zOffsetM, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+      { xM: maxX, yM: minHeightM + zOffsetM, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+      { xM: maxX, yM: maxHeightM + zOffsetM, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+      { xM: minX, yM: maxHeightM + zOffsetM, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+      { xM: minX, yM: minHeightM + zOffsetM, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" },
+    ],
+  };
+}
+
+function sideAuthoredRevolvedFrontProjection(shape: SizeShape, shapes: SizeShape[]): SizeShape | undefined {
+  if (referenceRoles.includes(shape.role) || shape.points.length < 3) return undefined;
+  const mirrorPlane = touchedSideMirrorPlane(shape, shapes);
+  if (!mirrorPlane?.points[0] || !mirrorPlane.points[1]) return undefined;
+  const stationX = Math.max(0, sideAuthoredStationX(shape, shapes, mirrorPlane) ?? 0);
+  const axis = projectionAxisForLine(mirrorPlane);
+  if (!axis) return undefined;
+  const radiusM = Math.max(
+    ...shape.points.map((point) => distanceFromPointToProjectionAxis(point, axis)),
+    0.006,
+  );
+  const zOffsetM = shape.zOffsetM ?? 0;
+  const axisZs = mirrorPlane.points.map((point) => point.xM + zOffsetM);
+  const minAxisZ = Math.min(...axisZs);
+  const maxAxisZ = Math.max(...axisZs);
+  const centerZ = (minAxisZ + maxAxisZ) / 2;
+  const points = Math.abs(maxAxisZ - minAxisZ) <= 0.002
+    ? circularFrontSection(shape, 1, radiusM, stationX).map((point) => ({ ...point, yM: point.yM + centerZ }))
+    : verticalCapsuleFrontSection(stationX, minAxisZ, maxAxisZ, radiusM);
+  return {
+    ...shape,
+    points,
+  };
+}
+
+function sideAuthoredStationX(shape: SizeShape, shapes: SizeShape[], touchedMirrorPlane = touchedSideMirrorPlane(shape, shapes)) {
+  return (touchedMirrorPlane ? sideViewStationX(touchedMirrorPlane, shapes) : undefined)
+    ?? sideViewStationX(shape, shapes)
+    ?? inheritedSideViewStationX(shape, shapes);
+}
+
+function touchedSideMirrorPlane(shape: SizeShape, shapes: SizeShape[]) {
+  return shapes.find(
+    (candidate) =>
+      candidate.sketchViewMode === "side" &&
+      candidate.role === "mirrorPlane" &&
+      candidate.id !== shape.id &&
+      shapeTouchesMirrorPlane(shape, candidate),
+  );
+}
+
+function verticalCapsuleFrontSection(centerX: number, minZ: number, maxZ: number, radiusM: number): SizePoint[] {
+  const points: SizePoint[] = [];
+  const topZ = Math.max(minZ, maxZ);
+  const bottomZ = Math.min(minZ, maxZ);
+  const leftX = Math.max(0, centerX - radiusM);
+  const rightX = centerX + radiusM;
+  const samples = 18;
+  for (let index = 0; index <= samples; index += 1) {
+    const theta = Math.PI + (Math.PI * index) / samples;
+    points.push({
+      xM: Math.max(0, centerX + Math.cos(theta) * radiusM),
+      yM: topZ + Math.sin(theta) * radiusM,
+      curveMode: "corner",
+      segmentInMode: "corner",
+      segmentOutMode: "corner",
+    });
+  }
+  points.push({ xM: rightX, yM: bottomZ, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" });
+  for (let index = 0; index <= samples; index += 1) {
+    const theta = (Math.PI * index) / samples;
+    points.push({
+      xM: Math.max(0, centerX + Math.cos(theta) * radiusM),
+      yM: bottomZ + Math.sin(theta) * radiusM,
+      curveMode: "corner",
+      segmentInMode: "corner",
+      segmentOutMode: "corner",
+    });
+  }
+  points.push({ xM: leftX, yM: topZ, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" });
+  points.push(points[0]);
+  return points;
+}
+
+function inheritedSideViewStationX(shape: SizeShape, shapes: SizeShape[]) {
+  if (shape.sketchViewMode !== "side" || !referenceRoles.includes(shape.role)) return undefined;
+  const attachedSideShape = shapes.find(
+    (candidate) =>
+      candidate.id !== shape.id &&
+      candidate.sketchViewMode === "side" &&
+      !referenceRoles.includes(candidate.role) &&
+      candidate.sideViewStationId &&
+      shapeTouchesMirrorPlane(candidate, shape),
+  );
+  return attachedSideShape ? sideViewStationX(attachedSideShape, shapes) : undefined;
 }
 
 export function projectCadGeometryShape(shape: SizeShape, shapes: SizeShape[], viewMode: "front" | "side"): SizeShape {
   const geometry = cadGeometryForShape(shape, shapes);
   if (!geometry) return { ...shape, points: [] };
-  if (geometry.kind === "box") return { ...shape, points: projectBoxCadGeometry(shape, geometry, viewMode) };
-  if (geometry.kind === "revolvedBody") return { ...shape, points: projectRevolvedBodyCadGeometry(shape, geometry, viewMode) };
-  if (geometry.kind === "liftingSurface") return { ...shape, points: projectLiftingSurfaceCadGeometry(shape, geometry, viewMode) };
+  if (geometry.kind === "box") return withProjectedPoints(shape, projectBoxCadGeometry(shape, geometry, viewMode), viewMode);
+  if (geometry.kind === "revolvedBody") return withProjectedPoints(shape, projectRevolvedBodyCadGeometry(shape, geometry, viewMode), viewMode);
+  if (geometry.kind === "liftingSurface") return withProjectedPoints(shape, projectLiftingSurfaceCadGeometry(shape, geometry, viewMode), viewMode);
   if (geometry.kind === "cylinder" && shape.partType === "motor") {
     return viewMode === "front"
-      ? { ...shape, points: circularFrontSection(shape, 1, geometry.radiusM, Math.max(0, geometry.centerM[1])) }
-      : { ...shape, points: rectangularSideSectionFromCad(geometry.centerM[0], geometry.lengthM, geometry.radiusM * 2, 1, sideProjectionFrame(shapes)) };
+      ? withProjectedPoints(shape, circularFrontSection(shape, 1, geometry.radiusM, Math.max(0, geometry.centerM[1])), viewMode)
+      : withProjectedPoints(shape, rectangularSideSectionFromCad(geometry.centerM[0], geometry.lengthM, geometry.radiusM * 2, 1, sideProjectionFrame(shapes)), viewMode);
   }
   if (geometry.kind === "rotor" && shape.partType === "rotor") {
     return viewMode === "front"
-      ? { ...shape, points: circularFrontSection(shape, 1, geometry.radiusM, Math.max(0, geometry.centerM[1])) }
-      : { ...shape, points: rotorSideSection({ ...shape, points: canonicalPartPoints(shape) }, 1, shapes, sideProjectionFrame(shapes)) };
+      ? withProjectedPoints(shape, circularFrontSection(shape, 1, geometry.radiusM, Math.max(0, geometry.centerM[1])), viewMode)
+      : withProjectedPoints(shape, rotorSideSection({ ...shape, points: canonicalPartPoints(shape) }, 1, shapes, sideProjectionFrame(shapes)), viewMode);
   }
   return { ...shape, points: [] };
+}
+
+function withProjectedPoints(shape: SizeShape, points: SizePoint[], viewMode: "front" | "side"): SizeShape {
+  return {
+    ...shape,
+    points: viewMode === "front" ? applyFrontZOffset({ ...shape, points }, shape.zOffsetM).points : points,
+  };
+}
+
+function applyFrontZOffset(shape: SizeShape, zOffsetM = 0): SizeShape {
+  if (!zOffsetM) return shape;
+  return {
+    ...shape,
+    points: shape.points.map((point) => ({ ...point, yM: point.yM + zOffsetM })),
+  };
 }
 
 function projectBoxCadGeometry(shape: SizeShape, geometry: Extract<SizeCadGeometry, { kind: "box" }>, viewMode: "front" | "side") {
@@ -1171,8 +1344,8 @@ export function bodySideSectionAroundPlane(shape: SizeShape, plane: SizeShape, p
 export function liftingSurfaceSideSection(shape: SizeShape, progress: number, frame: SideProjectionFrame) {
   const bounds = shapeBounds(shape);
   const stations = [
-    { t: 0.1, airfoil: shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012", incidenceDeg: shape.incidenceStationsDeg?.root10 ?? shape.incidenceDeg ?? 0 },
-    { t: 0.9, airfoil: shape.airfoilStations?.tip90 ?? shape.airfoil ?? "NACA 0012", incidenceDeg: shape.incidenceStationsDeg?.tip90 ?? shape.incidenceDeg ?? 0 },
+    { t: 0, airfoil: shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012", incidenceDeg: shape.incidenceStationsDeg?.root ?? shape.incidenceDeg ?? 0 },
+    { t: 1, airfoil: shape.airfoilStations?.tip ?? shape.airfoil ?? "NACA 0012", incidenceDeg: shape.incidenceStationsDeg?.tip ?? shape.incidenceDeg ?? 0 },
   ];
   return stations.flatMap((station, index) => {
     const stationX = bounds.minX + (bounds.maxX - bounds.minX) * station.t;
@@ -1380,6 +1553,37 @@ export function liftingSurfaceFrontSection(shape: SizeShape, progress: number, s
   return [...top, ...bottom, top[0]];
 }
 
+export function dihedralWingFrontSection(shape: SizeShape, shapes: SizeShape[], progress = 1) {
+  const pointSets = frontPointSetsForShape(shape, shapes);
+  const bounds = pointSetBounds(pointSets);
+  const rootX = shapeTouchesMirrorAxis(shape) ? 0 : bounds.minX;
+  const tipX = Math.max(bounds.maxX, rootX + 0.01);
+  const spanM = Math.max(tipX - rootX, 0.01);
+  const sampleInsetM = spanM * 0.015;
+  const rootHalfHeightM = liftingSurfaceHalfHeightAtSpanEnd(shape, pointSets, rootX, sampleInsetM, "root");
+  const tipHalfHeightM = liftingSurfaceHalfHeightAtSpanEnd(shape, pointSets, tipX, sampleInsetM, "tip");
+  const liftM = Math.max(shape.dihedralLiftM ?? 0, 0);
+  const breakX = Math.min(Math.max(dihedralBreakX(shape, shapes) ?? tipX, rootX + 0.01), tipX);
+  const top: SizePoint[] = [];
+  const bottom: SizePoint[] = [];
+  for (let index = 0; index <= 24; index += 1) {
+    const stationT = index / 24;
+    const xM = rootX + spanM * stationT;
+    const airfoilT = (xM - rootX) / spanM;
+    const halfHeightM = lerp(rootHalfHeightM, tipHalfHeightM, airfoilT);
+    const centerZM = xM <= breakX ? liftM * ((xM - rootX) / Math.max(breakX - rootX, 0.01)) : liftM;
+    top.push({ xM, yM: centerZM + halfHeightM * progress, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" });
+    bottom.unshift({ xM, yM: centerZM - halfHeightM * progress, curveMode: "corner", segmentInMode: "corner", segmentOutMode: "corner" });
+  }
+  return [...top, ...bottom, top[0]];
+}
+
+function dihedralBreakX(shape: SizeShape, shapes: SizeShape[]) {
+  if (shape.dihedralBreakStationId === implicitMirrorShapeId) return 0;
+  const station = shapes.find((candidate) => candidate.id === shape.dihedralBreakStationId);
+  return station ? verticalReferenceX(station) : undefined;
+}
+
 export function liftingSurfaceHalfHeightAtSpanEnd(
   shape: SizeShape,
   pointSets: SizePoint[][],
@@ -1460,6 +1664,9 @@ export function rotorHubCenterX(shape: SizeShape) {
 }
 
 export function referenceCenterXForShape(shape: SizeShape, shapes: SizeShape[]) {
+  const explicitStationX = sideViewStationX(shape, shapes);
+  if (explicitStationX !== undefined) return explicitStationX;
+
   const references = shapes.filter((candidate) => referenceRoles.includes(candidate.role) && candidate.points.length >= 2);
   if (!references.length) return undefined;
 
@@ -1489,6 +1696,31 @@ export function referenceCenterXForShape(shape: SizeShape, shapes: SizeShape[]) 
     .sort((a, b) => a.distance - b.distance);
 
   return nearestReferences[0]?.xM;
+}
+
+export function sideViewStationX(shape: SizeShape, shapes: SizeShape[]) {
+  if (shape.sketchViewMode !== "side" || !shape.sideViewStationId) return undefined;
+  const attachedStationX = sideViewSnapStationX(shape, shapes);
+  if (attachedStationX !== undefined) return attachedStationX;
+  if (shape.sideViewStationId === implicitMirrorShapeId) return 0;
+  const station = shapes.find((candidate) => candidate.id === shape.sideViewStationId);
+  return station ? verticalReferenceX(station) : undefined;
+}
+
+function sideViewSnapStationX(shape: SizeShape, shapes: SizeShape[]) {
+  for (const point of shape.points) {
+    const attachment = point.snapAttachment;
+    if (!attachment) continue;
+    const station = shapes.find(
+      (candidate) =>
+        candidate.id === attachment.shapeId &&
+        referenceRoles.includes(candidate.role) &&
+        (candidate.sketchViewMode ?? "top") === "top",
+    );
+    const stationX = station ? verticalReferenceX(station) : undefined;
+    if (stationX !== undefined) return stationX;
+  }
+  return undefined;
 }
 
 export function verticalReferenceX(shape: SizeShape) {
@@ -1616,8 +1848,8 @@ export function pointSetBounds(pointSets: SizePoint[][]) {
 }
 
 export function airfoilThicknessRatioAtStation(shape: SizeShape, stationT: number) {
-  const root = airfoilThicknessRatio(shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012");
-  const tip = airfoilThicknessRatio(shape.airfoilStations?.tip90 ?? shape.airfoil ?? "NACA 0012");
+  const root = airfoilThicknessRatio(shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012");
+  const tip = airfoilThicknessRatio(shape.airfoilStations?.tip ?? shape.airfoil ?? "NACA 0012");
   return lerp(root, tip, clamp(stationT, 0, 1));
 }
 
@@ -1632,8 +1864,8 @@ export function airfoilThicknessRatio(name: string) {
 }
 
 export function incidenceAtStation(shape: SizeShape, stationT: number) {
-  const root = shape.incidenceStationsDeg?.root10 ?? shape.incidenceDeg ?? 0;
-  const tip = shape.incidenceStationsDeg?.tip90 ?? shape.incidenceDeg ?? 0;
+  const root = shape.incidenceStationsDeg?.root ?? shape.incidenceDeg ?? 0;
+  const tip = shape.incidenceStationsDeg?.tip ?? shape.incidenceDeg ?? 0;
   return lerp(root, tip, clamp(stationT, 0, 1));
 }
 

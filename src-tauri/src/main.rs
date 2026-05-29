@@ -25,6 +25,13 @@ use crate::model::{
     OpenAiRequest, OpenAiResult, TimelineEvent,
 };
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MachUpXRequest {
+    project_name: String,
+    sizing: Value,
+}
+
 #[tauri::command]
 fn create_project() -> CadProject {
     CadProject {
@@ -306,6 +313,54 @@ fn analyze_sizing_openvsp(
     openvsp_sizing::analyze_sizing(&app, &export_dir, request)
 }
 
+#[tauri::command]
+fn analyze_sizing_machupx(
+    app: tauri::AppHandle,
+    request: MachUpXRequest,
+) -> Result<Value, String> {
+    let export_dir = default_export_dir(&app)?.join("machupx");
+    fs::create_dir_all(&export_dir).map_err(|error| error.to_string())?;
+    let stem = legacy::sanitize_filename(&request.project_name);
+    let input_path = export_dir.join(format!("{stem}_cadex_input.json"));
+    let input = serde_json::json!({
+        "name": request.project_name,
+        "sizing": request.sizing,
+    });
+    fs::write(
+        &input_path,
+        serde_json::to_string_pretty(&input).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let script_path = std::env::current_dir()
+        .map_err(|error| error.to_string())?
+        .join("scripts")
+        .join("analyze-machupx.mjs");
+    let output = Command::new("node")
+        .arg("--experimental-strip-types")
+        .arg(script_path)
+        .arg(&input_path)
+        .arg(&export_dir)
+        .arg("--json-only")
+        .output()
+        .map_err(|error| format!("MachUpX analysis could not start: {error}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    if !output.status.success() {
+        return Ok(serde_json::json!({
+            "ok": false,
+            "solver": "MachUpX",
+            "message": "MachUpX analysis failed.",
+            "stdout": stdout,
+            "stderr": stderr,
+        }));
+    }
+
+    serde_json::from_str(&stdout)
+        .map_err(|error| format!("MachUpX returned invalid JSON: {error}. stdout: {stdout}. stderr: {stderr}"))
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(KernelState::new())
@@ -318,6 +373,7 @@ fn main() {
             export_model,
             import_model,
             analyze_sizing_openvsp,
+            analyze_sizing_machupx,
             send_openai_tool_message
         ])
         .run(tauri::generate_context!())
