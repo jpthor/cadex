@@ -207,11 +207,12 @@ export function SketchCanvas({
   const displayShapes = renderViewMode === "top"
     ? shapesVisibleInCurrentView.map((shape) => (shape.sketchViewMode === "side" ? topProjectionShape(shape, shapes) : shape))
     : shapesVisibleInCurrentView.map((shape) => (shape.sketchViewMode === renderViewMode ? shape : projectedShape(shape, 1, shapes, renderViewMode)));
-  const visibleReferenceShapes = showSizingReference ? sizingReferenceShapes : [];
+  const visibleReferenceShapes = showSizingReference && !(freeOrbitActive && !drawActive && !dimensionToolActive && !dragTarget) ? sizingReferenceShapes : [];
+  const referenceProjectionContext = [...shapes, ...visibleReferenceShapes];
   const displayReferenceShapes =
-    renderViewMode !== "top"
-      ? visibleReferenceShapes.map((shape) => projectedShape(shape, 1, shapes, renderViewMode))
-      : visibleReferenceShapes;
+    renderViewMode === "top"
+      ? visibleReferenceShapes.filter((shape) => shape.sketchViewMode !== "side")
+      : visibleReferenceShapes.map((shape) => projectedShape(shape, 1, referenceProjectionContext, renderViewMode));
   const renderedShapes = [...displayShapes].sort((a, b) => {
     const selectedOrder = Number(a.id === selectedShapeId) - Number(b.id === selectedShapeId);
     if (selectedOrder) return selectedOrder;
@@ -453,10 +454,18 @@ export function SketchCanvas({
   function handleWheel(event: WheelEvent<SVGSVGElement>) {
     event.preventDefault();
     if (!event.ctrlKey && !event.metaKey) {
+      const unitScale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? Math.min(displayView.width, displayView.height) : 1;
+      const rawDeltaX = event.deltaX * unitScale;
+      const rawDeltaY = event.deltaY * unitScale;
+      const absX = Math.abs(rawDeltaX);
+      const absY = Math.abs(rawDeltaY);
+      const deltaX = absX < 0.5 ? 0 : Math.max(-80, Math.min(80, rawDeltaX));
+      const deltaY = absY < 0.5 ? 0 : Math.max(-80, Math.min(80, rawDeltaY));
+      if (!deltaX && !deltaY) return;
       updateCanvasView((current) => ({
         ...current,
-        originX: current.originX - event.deltaX,
-        originY: current.originY - event.deltaY,
+        originX: current.originX - deltaX,
+        originY: current.originY - deltaY,
       }));
       return;
     }
@@ -747,6 +756,7 @@ export function SketchCanvas({
           {displayReferenceShapes.map((shape) => (
             <ReferenceShape
               key={shape.id}
+              mirrorPlanes={displayReferenceShapes.filter((candidate) => candidate.role === "mirrorPlane")}
               projected={renderViewMode !== "top"}
               shape={shape}
               showOriginMirror={renderViewMode !== "side"}
@@ -926,11 +936,11 @@ export function SketchCanvas({
             event.stopPropagation();
             onToggleSizingReference();
           }}
-          title={showSizingReference ? "Hide Sizing reference" : "Show Sizing reference"}
+          title={showSizingReference ? "Hide suggested aircraft" : "Show suggested aircraft"}
           type="button"
         >
           {showSizingReference ? <EyeOff size={15} /> : <Eye size={15} />}
-          <span>Sizing ref</span>
+          <span>Suggested</span>
         </button>
       ) : null}
     </div>

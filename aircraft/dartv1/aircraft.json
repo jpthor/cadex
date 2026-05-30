@@ -1819,7 +1819,7 @@
       }
     ],
     "sizing": {
-      "activeRole": "mirrorPlane",
+      "activeRole": "liftingSurface",
       "dimensions": [],
       "drawMode": "spline",
       "mission": {
@@ -2560,17 +2560,86 @@
           "role": "mirrorPlane",
           "sketchViewMode": "side",
           "zOffsetM": 0.1
+        },
+        {
+          "airfoil": "NACA 0012",
+          "airfoilStations": {
+            "root": "NACA 0012",
+            "tip": "NACA 0012"
+          },
+          "bodyMaterial": "carbonFibre",
+          "bodyThicknessMm": 1.2,
+          "cadGeometry": {
+            "airfoil": "NACA 0012",
+            "incidenceDeg": 0,
+            "kind": "liftingSurface",
+            "rootChordM": 0.3071561213914518,
+            "rootLeadingEdgeM": [
+              -0.19925435443071243,
+              0,
+              0
+            ],
+            "spanM": 0.4,
+            "tipChordM": 0.3071561213914518
+          },
+          "drawMode": "spline",
+          "id": "liftingSurface-14dbf328-26b1-4667-9c10-0f0c1b84d100",
+          "incidenceDeg": 0,
+          "incidenceStationsDeg": {
+            "root": 0,
+            "tip": 0
+          },
+          "label": "LEX 1",
+          "liftingSurfaceKind": "lex",
+          "massKg": 0.15,
+          "points": [
+            {
+              "curveMode": "spline",
+              "snapAttachment": {
+                "kind": "node",
+                "pointIndex": 1,
+                "shapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176"
+              },
+              "xM": 0.11312227107255168,
+              "yM": -0.19925435443071243
+            },
+            {
+              "curveMode": "spline",
+              "xM": 0.2,
+              "yM": -0.3
+            },
+            {
+              "curveMode": "spline",
+              "segmentInMode": "corner",
+              "segmentOutMode": "corner",
+              "xM": 0.19945899243440804,
+              "yM": -0.47278160801522
+            },
+            {
+              "curveMode": "spline",
+              "snapAttachment": {
+                "kind": "segment",
+                "segmentIndex": 0,
+                "shapeId": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
+                "t": 0.0015006788622282344
+              },
+              "xM": 0.11398844732906792,
+              "yM": -0.5064104758221643
+            }
+          ],
+          "role": "liftingSurface"
         }
       ],
-      "showSizingReference": true,
+      "showSizingReference": false,
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 874,
-        "originX": 129.09511804160223,
-        "originY": 206.72322745307008,
-        "scale": 345.50615245651665,
-        "width": 900
-      }
+        "originX": 327.09834992715935,
+        "originY": 227.84202554618489,
+        "scale": 246.5257669954103,
+        "width": 843
+      },
+      "sketchScaleUnit": "cm"
     },
     "timeline": [
       {
@@ -2595,7 +2664,7 @@
   },
   "schemaVersion": 1,
   "sizing": {
-    "activeRole": "mirrorPlane",
+    "activeRole": "liftingSurface",
     "dimensions": [],
     "drawMode": "spline",
     "mission": {
@@ -3336,17 +3405,86 @@
         "role": "mirrorPlane",
         "sketchViewMode": "side",
         "zOffsetM": 0.1
+      },
+      {
+        "airfoil": "NACA 0012",
+        "airfoilStations": {
+          "root": "NACA 0012",
+          "tip": "NACA 0012"
+        },
+        "bodyMaterial": "carbonFibre",
+        "bodyThicknessMm": 1.2,
+        "cadGeometry": {
+          "airfoil": "NACA 0012",
+          "incidenceDeg": 0,
+          "kind": "liftingSurface",
+          "rootChordM": 0.3071561213914518,
+          "rootLeadingEdgeM": [
+            -0.19925435443071243,
+            0,
+            0
+          ],
+          "spanM": 0.4,
+          "tipChordM": 0.3071561213914518
+        },
+        "drawMode": "spline",
+        "id": "liftingSurface-14dbf328-26b1-4667-9c10-0f0c1b84d100",
+        "incidenceDeg": 0,
+        "incidenceStationsDeg": {
+          "root": 0,
+          "tip": 0
+        },
+        "label": "LEX 1",
+        "liftingSurfaceKind": "lex",
+        "massKg": 0.15,
+        "points": [
+          {
+            "curveMode": "spline",
+            "snapAttachment": {
+              "kind": "node",
+              "pointIndex": 1,
+              "shapeId": "body-ed021e4f-f74d-4d35-9d71-4a9a2dde8176"
+            },
+            "xM": 0.11312227107255168,
+            "yM": -0.19925435443071243
+          },
+          {
+            "curveMode": "spline",
+            "xM": 0.2,
+            "yM": -0.3
+          },
+          {
+            "curveMode": "spline",
+            "segmentInMode": "corner",
+            "segmentOutMode": "corner",
+            "xM": 0.19945899243440804,
+            "yM": -0.47278160801522
+          },
+          {
+            "curveMode": "spline",
+            "snapAttachment": {
+              "kind": "segment",
+              "segmentIndex": 0,
+              "shapeId": "liftingSurface-8a412272-0c90-481f-91fb-65e4cf667fbe",
+              "t": 0.0015006788622282344
+            },
+            "xM": 0.11398844732906792,
+            "yM": -0.5064104758221643
+          }
+        ],
+        "role": "liftingSurface"
       }
     ],
-    "showSizingReference": true,
+    "showSizingReference": false,
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 874,
-      "originX": 129.09511804160223,
-      "originY": 206.72322745307008,
-      "scale": 345.50615245651665,
-      "width": 900
-    }
+      "originX": 327.09834992715935,
+      "originY": 227.84202554618489,
+      "scale": 246.5257669954103,
+      "width": 843
+    },
+    "sketchScaleUnit": "cm"
   },
-  "updatedAt": 1780055473672
+  "updatedAt": 1780130219886
 }

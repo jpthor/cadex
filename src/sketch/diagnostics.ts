@@ -15,7 +15,7 @@ export function analyseAircraftSizing(
   partCounts: Record<PartType, number>,
   tailplaneSize: ReturnType<typeof computeTailplaneSize>,
 ): AircraftDiagnostic[] {
-  const wingShapes = shapes.filter((shape) => shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing");
+  const wingShapes = shapes.filter((shape) => shape.role === "liftingSurface" && isWingLikeKind(shape.liftingSurfaceKind));
   const tailShapes = shapes.filter((shape) => shape.role === "liftingSurface" && shape.liftingSurfaceKind === "tailplane");
   const wingSpanM = Math.max(...wingShapes.map((shape) => effectiveMirroredSpan(shape, shapes)), 0);
   const wingAreaM2 = analysis.wingAreaM2;
@@ -110,6 +110,10 @@ export function analyseAircraftSizing(
   diagnostics.push(...analyseSketchExportReadiness(shapes));
 
   return diagnostics;
+}
+
+function isWingLikeKind(kind: SizeShape["liftingSurfaceKind"]) {
+  return (kind ?? "wing") === "wing" || kind === "wingevon";
 }
 
 export function analyseSketchExportReadiness(shapes: SizeShape[]): AircraftDiagnostic[] {

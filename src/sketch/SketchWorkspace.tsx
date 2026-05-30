@@ -762,7 +762,7 @@ export function SketchWorkspace({
           initialCanvasView={sizing.sketchCanvasView}
           initialScaleUnit={sizing.sketchScaleUnit}
           showSizingReference={showSizingReference}
-          sizingReferenceShapes={sizingReferenceShapes}
+          sizingReferenceShapes={computedSizingDraft.shapes}
           onCanvasViewChange={(sketchCanvasView) => update({ sketchCanvasView }, false)}
           onScaleUnitChange={(sketchScaleUnit) => update({ sketchScaleUnit }, false)}
           onToggleSizingReference={toggleSizingReference}
@@ -831,7 +831,7 @@ export function SketchWorkspace({
           </button>
         </div>
         {rightPaneTab === "aircraft" ? (
-          <AircraftPanel analysis={liveAnalysis} shapes={sizing.shapes} onDeleteAircraft={deleteAircraft} />
+          <AircraftPanel analysis={liveAnalysis} gRating={sizing.mission.gRating} shapes={sizing.shapes} onDeleteAircraft={deleteAircraft} />
         ) : rightPaneTab === "suggested" ? (
           <SuggestedDimensionsPanel
             currentShapes={sizing.shapes}
@@ -849,6 +849,7 @@ export function SketchWorkspace({
               <ShapeEditor
                 activeAirfoilStation={activeAirfoilStation}
                 mirrorPlanes={mirrorPlanes}
+                gRating={sizing.mission.gRating}
                 shapes={sizing.shapes}
                 shape={selected}
                 suggestedRows={selectedSuggestedRows}
@@ -890,8 +891,8 @@ function SuggestedDimensionsPanel({
   const parts = usefulShapes.filter((shape) => shape.role === "part");
   const fuselage = bodies.filter((shape) => !shape.id.includes("tail-boom"));
   const otherBodies = bodies.filter((shape) => shape.id.includes("tail-boom"));
-  const wings = lifting.filter((shape) => (shape.liftingSurfaceKind ?? "wing") === "wing");
-  const otherLifting = lifting.filter((shape) => (shape.liftingSurfaceKind ?? "wing") !== "wing");
+  const wings = lifting.filter((shape) => isWingLikeKind(shape.liftingSurfaceKind ?? "wing"));
+  const otherLifting = lifting.filter((shape) => !isWingLikeKind(shape.liftingSurfaceKind ?? "wing"));
   const aircraftRows = [
     { label: "Total length", value: formatDimension(computedSizingDraft.totalLengthM) },
     { label: "Sized battery mass", value: `${computedSizingDraft.batteryMassKg.toFixed(2)} kg` },
@@ -953,9 +954,41 @@ function bodyDimensionRows(shape: SizeShape) {
 function liftingDimensionRows(shape: SizeShape, shapes: SizeShape[], computedSizingDraft?: ReturnType<typeof computeSizingDraft>) {
   const stats = liftingSurfaceStats(shape, shapes);
   const kind = shape.liftingSurfaceKind ?? "wing";
-  const totalAreaLabel = kind === "tailplane" ? "Total tailplane area" : kind === "wing" ? "Total wing area" : kind === "lex" ? "Total LEX area" : "Total area";
+  const totalAreaLabel = kind === "tailplane" ? "Total tailplane area" : isWingLikeKind(kind) ? "Total wing area" : kind === "lex" ? "Total LEX area" : "Total area";
   const bounds = shapeBounds(shape);
   const mirroredPair = bounds.minX > 0.005;
+  if (shape.id.startsWith("sizing-ref-") && computedSizingDraft) {
+    if (isWingLikeKind(kind)) {
+      return [
+        { label: "Span", value: formatDimension(computedSizingDraft.wingSpanM) },
+        { label: "Half-span", value: formatDimension(computedSizingDraft.wingSpanM / 2) },
+        { label: "Root depth", value: `${formatDimension(computedSizingDraft.wingRootDepthM)} from nose` },
+        { label: "Mean chord", value: formatDimension(computedSizingDraft.meanChordM) },
+        { label: "Total wing area", value: `${computedSizingDraft.wingAreaM2.toFixed(3)} m2` },
+        { label: "Airfoil", value: computedSizingDraft.wingAirfoil },
+      ];
+    }
+    if (kind === "tailplane") {
+      const areaPerTailplaneM2 = computedSizingDraft.tailAreaM2 / 2;
+      const spanPerTailplaneM = Math.max(...shape.points.map((point) => point.xM)) - Math.min(...shape.points.map((point) => point.xM));
+      return [
+        { label: "Span (one tailplane)", value: formatDimension(Math.max(spanPerTailplaneM * 2, 0.01)) },
+        { label: "Mean chord (one tailplane)", value: formatDimension(areaPerTailplaneM2 / Math.max(spanPerTailplaneM * 2, 0.01)) },
+        { label: "Area (one tailplane)", value: `${areaPerTailplaneM2.toFixed(3)} m2` },
+        { label: "Total area (2 tailplanes)", value: `${computedSizingDraft.tailAreaM2.toFixed(3)} m2` },
+        { label: "Airfoil", value: computedSizingDraft.tailAirfoil },
+      ];
+    }
+    if (kind === "fin") {
+      return [
+        { label: "Height", value: formatDimension(computedSizingDraft.finHeightM) },
+        { label: "Chord", value: formatDimension(computedSizingDraft.finChordM) },
+        { label: "Area (one fin)", value: `${computedSizingDraft.finAreaPerFinM2.toFixed(3)} m2` },
+        { label: "Total area (2 fins)", value: `${(computedSizingDraft.finAreaPerFinM2 * 2).toFixed(3)} m2` },
+        { label: "Airfoil", value: computedSizingDraft.finAirfoil },
+      ];
+    }
+  }
   if (kind === "fin") {
     const shapeViewMode = shape.sketchViewMode ?? "top";
     const hasFinMirror = shapes.some(
@@ -1011,12 +1044,20 @@ function partDimensionRows(shape: SizeShape, shapes: SizeShape[], computedSizing
     { label: "Width", value: formatDimension(bounds.maxX * 2) },
   ];
   if (shape.partType === "battery") {
+    if (shape.id.startsWith("sizing-ref-") && computedSizingDraft) return batteryDimensionRowsFromDraft(computedSizingDraft);
     return [
       { label: "Length", value: formatDimension(bounds.maxY - bounds.minY) },
       { label: "Width", value: formatDimension(bounds.maxX * 2) },
       { label: "Height", value: formatDimension(inferredBatteryThicknessM(shape)) },
       { label: "Volume", value: `${(batteryVolumeEstimate(shape) * 1000).toFixed(2)} L` },
       { label: "Mass", value: `${batteryMassEstimate(shape).toFixed(3)} kg` },
+    ];
+  }
+  if ((shape.partType ?? "payload") === "payload") {
+    return [
+      ...baseRows,
+      { label: "Mass", value: `${(shape.massKg ?? computedSizingDraft?.payloadKg ?? 0).toFixed(2)} kg` },
+      ...(shape.id.startsWith("sizing-ref-") ? [{ label: "Dimensions", value: "package placeholder" }] : []),
     ];
   }
   if (shape.partType === "rotor") {
@@ -1044,7 +1085,7 @@ function batteryDimensionRowsFromDraft(draft: ReturnType<typeof computeSizingDra
     { label: "Width", value: formatDimension(draft.batteryEnvelope.widthM) },
     { label: "Height", value: formatDimension(draft.batteryEnvelope.heightM) },
     { label: "Mass", value: `${draft.batteryMassKg.toFixed(3)} kg` },
-    { label: "Mission energy", value: `${draft.batteryEnergyWh.toFixed(0)} Wh` },
+    { label: "Installed pack energy", value: `${draft.installedBatteryEnergyWh.toFixed(0)} Wh` },
   ];
 }
 
@@ -1078,7 +1119,7 @@ function selectedSuggestedTarget(shape: SizeShape):
   }
   if (shape.role === "liftingSurface") {
     const liftingSurfaceKind = shape.liftingSurfaceKind ?? "wing";
-    return liftingSurfaceKind === "wing" || liftingSurfaceKind === "tailplane" || liftingSurfaceKind === "fin" || liftingSurfaceKind === "lex" ? { role: "liftingSurface", liftingSurfaceKind } : undefined;
+    return isSupportedLiftingSurfaceKind(liftingSurfaceKind) ? { role: "liftingSurface", liftingSurfaceKind } : undefined;
   }
   return undefined;
 }
@@ -1092,10 +1133,19 @@ function partTypeFromName(label: string): PartType | undefined {
 
 function liftingKindFromName(label: string): LiftingSurfaceKind | undefined {
   if (/\blex\b|leading\s+edge\s+extension/.test(label)) return "lex";
+  if (/\bwingevons?\b|\bwing\s*evons?\b|\belevons?\b/.test(label)) return "wingevon";
   if (/\btail\s*planes?\b|\btailplanes?\b/.test(label)) return "tailplane";
   if (/\bfins?\b|\bvertical\s+tails?\b/.test(label)) return "fin";
   if (/\bwings?\b/.test(label)) return "wing";
   return undefined;
+}
+
+function isWingLikeKind(kind: LiftingSurfaceKind) {
+  return kind === "wing" || kind === "wingevon";
+}
+
+function isSupportedLiftingSurfaceKind(kind: LiftingSurfaceKind) {
+  return kind === "wing" || kind === "wingevon" || kind === "tailplane" || kind === "fin" || kind === "lex";
 }
 
 function isDeleteKey(event: KeyboardEvent) {

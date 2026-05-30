@@ -37,11 +37,13 @@ import {
   trimDimensionValue,
 } from "../geometry";
 export function ReferenceShape({
+  mirrorPlanes = [],
   projected = false,
   shape,
   showOriginMirror = true,
   view,
 }: {
+  mirrorPlanes?: SizeShape[];
   projected?: boolean;
   shape: SizeShape;
   showOriginMirror?: boolean;
@@ -56,17 +58,24 @@ export function ReferenceShape({
         : shape.partType === "motor"
           ? motorFootprintPointsFromSpan(canonicalPoints)
           : canonicalPoints;
-  const shouldFill = isFillablePartShape({ ...shape, points: renderPoints });
-  const path = shouldFill ? closedPathForPoints(renderPoints, view) : pathForPoints(renderPoints, view);
+  const shouldClose = isFillablePartShape({ ...shape, points: renderPoints }) || ((shape.role === "body" || shape.role === "liftingSurface") && renderPoints.length >= 3);
+  const path = shouldClose ? closedPathForPoints(renderPoints, view) : pathForPoints(renderPoints, view);
+  const localMirrorPlanes = shouldUseLocalMirror(shape)
+    ? mirrorPlanes.filter((plane) => plane.id !== shape.id && shapeTouchesMirrorPlane(shape, plane))
+    : [];
+  const localMirrorSets = localMirrorPlanes.map((plane) => mirrorPointsAcrossPlane(renderPoints, plane));
   const shouldRenderOriginMirror = showOriginMirror && !referenceRoles.includes(shape.role);
-  const mirroredPath = shouldRenderOriginMirror ? (shouldFill ? closedPathForPoints(mirrorPoints(renderPoints), view) : pathForPoints(mirrorPoints(renderPoints), view)) : "";
-  const labelPoint = renderPoints[Math.max(0, Math.floor(renderPoints.length / 2))];
-  const labelCanvasPoint = labelPoint ? toCanvas(labelPoint, view) : { x: 0, y: 0 };
+  const mirroredPath = shouldRenderOriginMirror ? (shouldClose ? closedPathForPoints(mirrorPoints(renderPoints), view) : pathForPoints(mirrorPoints(renderPoints), view)) : "";
   return (
-    <g className={`sizing-reference-shape ${shape.role} ${shape.partType ? `part-${shape.partType}` : ""}`}>
+    <g className={`sizing-reference-shape ${shape.role} ${shape.liftingSurfaceKind ? `surface-${shape.liftingSurfaceKind}` : ""} ${shape.partType ? `part-${shape.partType}` : ""}`}>
       <path d={path} />
+      {localMirrorSets.map((points, index) => (
+        <path d={shouldClose ? closedPathForPoints(points, view) : pathForPoints(points, view)} key={`local-${index}`} />
+      ))}
       {shouldRenderOriginMirror ? <path d={mirroredPath} /> : null}
-      <text x={labelCanvasPoint.x + 8} y={labelCanvasPoint.y - 8}>{shape.label}</text>
+      {shouldRenderOriginMirror ? localMirrorSets.map((points, index) => (
+        <path d={shouldClose ? closedPathForPoints(mirrorPoints(points), view) : pathForPoints(mirrorPoints(points), view)} key={`local-origin-${index}`} />
+      )) : null}
     </g>
   );
 }

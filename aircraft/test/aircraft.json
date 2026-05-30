@@ -6,210 +6,40 @@
     "name": "Test",
     "objects": [],
     "sizing": {
-      "activeRole": "referenceLine",
+      "activeRole": "liftingSurface",
       "dimensions": [],
       "drawMode": "spline",
       "mission": {
-        "aspectRatio": 2.8,
+        "aspectRatio": 4,
         "batteryEnergyDensityWhKg": 190,
-        "cruiseLiftCoefficient": 0.55,
-        "cruiseSpeedMS": 17,
+        "cruiseLiftCoefficient": 0.6,
+        "cruiseSpeedMS": 30.86664,
         "diskLoadingNpm2": 65,
         "enduranceMin": 20,
+        "gRating": 2,
         "hoverTimeMin": 2,
-        "lengthRatio": 0.8,
+        "lengthRatio": 1,
         "motorCount": 2,
         "payloadKg": 2,
         "reservePct": 20,
         "rotorBladeCount": 4,
         "tailVolumeTarget": 0.55,
-        "takeoffThrustToWeight": 1.4
+        "takeoffThrustToWeight": 1.4,
+        "turbineEngineId": "swiwin-sw60b",
+        "turbineFuelMin": 20
       },
-      "selectedShapeId": "referenceLine-c282e579-6c62-4368-b93e-d775dde1518f",
-      "shapes": [
-        {
-          "bodyMaterial": "carbonFibre",
-          "bodyThicknessMm": 1.2,
-          "cadGeometry": {
-            "axisM": [
-              1,
-              0,
-              0
-            ],
-            "centerM": [
-              -1.7880764535979097,
-              0,
-              0
-            ],
-            "kind": "revolvedBody",
-            "lengthM": 3.576172822123681,
-            "profile": [
-              {
-                "curveMode": "spline",
-                "xM": 0,
-                "yM": 9.957463930732048e-6
-              },
-              {
-                "curveMode": "spline",
-                "xM": 0.3366162379786232,
-                "yM": -0.5171114266598935
-              },
-              {
-                "curveMode": "spline",
-                "segmentInMode": "corner",
-                "segmentOutMode": "corner",
-                "xM": 0.34279993335108677,
-                "yM": -2.0154434781657247
-              },
-              {
-                "curveMode": "spline",
-                "xM": 0,
-                "yM": -3.57616286465975
-              }
-            ],
-            "radiusM": 0.34279993335108677
-          },
-          "drawMode": "spline",
-          "id": "body-dcdf6ddf-9245-48af-86aa-fc1e37d2471e",
-          "label": "Body 1",
-          "massKg": 0.5,
-          "points": [
-            {
-              "curveMode": "spline",
-              "snapAttachment": {
-                "kind": "segment",
-                "segmentIndex": 0,
-                "shapeId": "implicit-x-axis-mirror",
-                "t": 0.500000004978732
-              },
-              "xM": 0,
-              "yM": 9.957463930732048e-6
-            },
-            {
-              "curveMode": "spline",
-              "xM": 0.3366162379786232,
-              "yM": -0.5171114266598935
-            },
-            {
-              "curveMode": "spline",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "xM": 0.34279993335108677,
-              "yM": -2.0154434781657247
-            },
-            {
-              "curveMode": "spline",
-              "snapAttachment": {
-                "kind": "segment",
-                "segmentIndex": 0,
-                "shapeId": "implicit-x-axis-mirror",
-                "t": 0.4982119185676701
-              },
-              "xM": 0,
-              "yM": -3.57616286465975
-            }
-          ],
-          "role": "body"
-        },
-        {
-          "drawMode": "line",
-          "id": "mirrorPlane-90b8f3ca-cfa2-4c50-8687-5fe94823c6a5",
-          "label": "Mirror plane 2",
-          "points": [
-            {
-              "curveMode": "corner",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "snapAttachment": {
-                "kind": "segment",
-                "segmentIndex": 0,
-                "shapeId": "implicit-x-axis-mirror",
-                "t": 0.49910753729788254
-              },
-              "xM": 0,
-              "yM": -1.7849254042349685
-            },
-            {
-              "curveMode": "spline",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "xM": 0,
-              "yM": -2.416598042753976
-            },
-            {
-              "curveMode": "corner",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "snapAttachment": {
-                "kind": "segment",
-                "segmentIndex": 0,
-                "shapeId": "implicit-x-axis-mirror",
-                "t": 0.49873045044565134
-              },
-              "xM": 0,
-              "yM": -2.5390991086973145
-            }
-          ],
-          "role": "mirrorPlane",
-          "sideViewStationId": "mirrorPlane-bbd2614a-35ab-415c-9d70-e6298eaf3167",
-          "sketchViewMode": "side"
-        },
-        {
-          "drawMode": "line",
-          "id": "referenceLine-022e41d1-2b72-4e4f-83cd-cf6689ebeec6",
-          "label": "Pod Z",
-          "points": [
-            {
-              "curveMode": "corner",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "xM": 0.7798930921052634,
-              "yM": 0
-            },
-            {
-              "curveMode": "corner",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "xM": 0.7798930921052634,
-              "yM": -2
-            }
-          ],
-          "role": "referenceLine",
-          "sideViewStationId": "implicit-x-axis-mirror",
-          "sketchViewMode": "side"
-        },
-        {
-          "drawMode": "line",
-          "id": "referenceLine-c282e579-6c62-4368-b93e-d775dde1518f",
-          "label": "Reference line 2",
-          "points": [
-            {
-              "curveMode": "corner",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "xM": 2,
-              "yM": 0
-            },
-            {
-              "curveMode": "corner",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "xM": 2,
-              "yM": -2.1
-            }
-          ],
-          "role": "referenceLine"
-        }
-      ],
+      "selectedShapeId": "",
+      "shapes": [],
       "showSizingReference": true,
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 874,
-        "originX": 315.8712307490673,
-        "originY": 350.9409598909888,
-        "scale": 190,
-        "width": 900
-      }
+        "originX": 415.4410575235481,
+        "originY": 252.1125597147381,
+        "scale": 489.8826921506316,
+        "width": 841
+      },
+      "sketchScaleUnit": "mm"
     },
     "timeline": [
       {
@@ -229,210 +59,40 @@
   },
   "schemaVersion": 1,
   "sizing": {
-    "activeRole": "referenceLine",
+    "activeRole": "liftingSurface",
     "dimensions": [],
     "drawMode": "spline",
     "mission": {
-      "aspectRatio": 2.8,
+      "aspectRatio": 4,
       "batteryEnergyDensityWhKg": 190,
-      "cruiseLiftCoefficient": 0.55,
-      "cruiseSpeedMS": 17,
+      "cruiseLiftCoefficient": 0.6,
+      "cruiseSpeedMS": 30.86664,
       "diskLoadingNpm2": 65,
       "enduranceMin": 20,
+      "gRating": 2,
       "hoverTimeMin": 2,
-      "lengthRatio": 0.8,
+      "lengthRatio": 1,
       "motorCount": 2,
       "payloadKg": 2,
       "reservePct": 20,
       "rotorBladeCount": 4,
       "tailVolumeTarget": 0.55,
-      "takeoffThrustToWeight": 1.4
+      "takeoffThrustToWeight": 1.4,
+      "turbineEngineId": "swiwin-sw60b",
+      "turbineFuelMin": 20
     },
-    "selectedShapeId": "referenceLine-c282e579-6c62-4368-b93e-d775dde1518f",
-    "shapes": [
-      {
-        "bodyMaterial": "carbonFibre",
-        "bodyThicknessMm": 1.2,
-        "cadGeometry": {
-          "axisM": [
-            1,
-            0,
-            0
-          ],
-          "centerM": [
-            -1.7880764535979097,
-            0,
-            0
-          ],
-          "kind": "revolvedBody",
-          "lengthM": 3.576172822123681,
-          "profile": [
-            {
-              "curveMode": "spline",
-              "xM": 0,
-              "yM": 9.957463930732048e-6
-            },
-            {
-              "curveMode": "spline",
-              "xM": 0.3366162379786232,
-              "yM": -0.5171114266598935
-            },
-            {
-              "curveMode": "spline",
-              "segmentInMode": "corner",
-              "segmentOutMode": "corner",
-              "xM": 0.34279993335108677,
-              "yM": -2.0154434781657247
-            },
-            {
-              "curveMode": "spline",
-              "xM": 0,
-              "yM": -3.57616286465975
-            }
-          ],
-          "radiusM": 0.34279993335108677
-        },
-        "drawMode": "spline",
-        "id": "body-dcdf6ddf-9245-48af-86aa-fc1e37d2471e",
-        "label": "Body 1",
-        "massKg": 0.5,
-        "points": [
-          {
-            "curveMode": "spline",
-            "snapAttachment": {
-              "kind": "segment",
-              "segmentIndex": 0,
-              "shapeId": "implicit-x-axis-mirror",
-              "t": 0.500000004978732
-            },
-            "xM": 0,
-            "yM": 9.957463930732048e-6
-          },
-          {
-            "curveMode": "spline",
-            "xM": 0.3366162379786232,
-            "yM": -0.5171114266598935
-          },
-          {
-            "curveMode": "spline",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "xM": 0.34279993335108677,
-            "yM": -2.0154434781657247
-          },
-          {
-            "curveMode": "spline",
-            "snapAttachment": {
-              "kind": "segment",
-              "segmentIndex": 0,
-              "shapeId": "implicit-x-axis-mirror",
-              "t": 0.4982119185676701
-            },
-            "xM": 0,
-            "yM": -3.57616286465975
-          }
-        ],
-        "role": "body"
-      },
-      {
-        "drawMode": "line",
-        "id": "mirrorPlane-90b8f3ca-cfa2-4c50-8687-5fe94823c6a5",
-        "label": "Mirror plane 2",
-        "points": [
-          {
-            "curveMode": "corner",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "snapAttachment": {
-              "kind": "segment",
-              "segmentIndex": 0,
-              "shapeId": "implicit-x-axis-mirror",
-              "t": 0.49910753729788254
-            },
-            "xM": 0,
-            "yM": -1.7849254042349685
-          },
-          {
-            "curveMode": "spline",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "xM": 0,
-            "yM": -2.416598042753976
-          },
-          {
-            "curveMode": "corner",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "snapAttachment": {
-              "kind": "segment",
-              "segmentIndex": 0,
-              "shapeId": "implicit-x-axis-mirror",
-              "t": 0.49873045044565134
-            },
-            "xM": 0,
-            "yM": -2.5390991086973145
-          }
-        ],
-        "role": "mirrorPlane",
-        "sideViewStationId": "mirrorPlane-bbd2614a-35ab-415c-9d70-e6298eaf3167",
-        "sketchViewMode": "side"
-      },
-      {
-        "drawMode": "line",
-        "id": "referenceLine-022e41d1-2b72-4e4f-83cd-cf6689ebeec6",
-        "label": "Pod Z",
-        "points": [
-          {
-            "curveMode": "corner",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "xM": 0.7798930921052634,
-            "yM": 0
-          },
-          {
-            "curveMode": "corner",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "xM": 0.7798930921052634,
-            "yM": -2
-          }
-        ],
-        "role": "referenceLine",
-        "sideViewStationId": "implicit-x-axis-mirror",
-        "sketchViewMode": "side"
-      },
-      {
-        "drawMode": "line",
-        "id": "referenceLine-c282e579-6c62-4368-b93e-d775dde1518f",
-        "label": "Reference line 2",
-        "points": [
-          {
-            "curveMode": "corner",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "xM": 2,
-            "yM": 0
-          },
-          {
-            "curveMode": "corner",
-            "segmentInMode": "corner",
-            "segmentOutMode": "corner",
-            "xM": 2,
-            "yM": -2.1
-          }
-        ],
-        "role": "referenceLine"
-      }
-    ],
+    "selectedShapeId": "",
+    "shapes": [],
     "showSizingReference": true,
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 874,
-      "originX": 315.8712307490673,
-      "originY": 350.9409598909888,
-      "scale": 190,
-      "width": 900
-    }
+      "originX": 415.4410575235481,
+      "originY": 252.1125597147381,
+      "scale": 489.8826921506316,
+      "width": 841
+    },
+    "sketchScaleUnit": "mm"
   },
-  "updatedAt": 1780017541833
+  "updatedAt": 1780133162646
 }

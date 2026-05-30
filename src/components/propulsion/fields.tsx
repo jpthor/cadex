@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 
 export function PropulsionNumberField({
+  info,
   label,
   suffix,
   step,
   value,
   onChange,
 }: {
+  info?: string;
   label: string;
   suffix?: string;
   step: number;
@@ -22,7 +24,10 @@ export function PropulsionNumberField({
 
   return (
     <label className="propulsion-field">
-      <span>{label}</span>
+      <span className={`field-label ${info ? "has-info" : ""}`}>
+        {label}
+        {info ? <span className="field-tooltip">{info}</span> : null}
+      </span>
       <div>
         <input
           type="number"

@@ -29,7 +29,7 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 56px 1fr 36px;
+  grid-template-rows: 56px auto minmax(0, 1fr) 36px;
   width: 100vw;
   height: 100vh;
   background: #0f141a;
@@ -42,6 +42,45 @@ button {
   padding: 0 14px;
   border-bottom: 1px solid #26313d;
   background: #151c24;
+}
+
+.dependency-info-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px 12px 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(64, 101, 125, 0.46);
+  border-radius: 7px;
+  color: #aebfcd;
+  background: #101923;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.dependency-info-bar span {
+  min-width: 0;
+}
+
+.dependency-info-bar button {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(72, 114, 143, 0.55);
+  border-radius: 6px;
+  color: #c7d7e4;
+  background: #0c1721;
+}
+
+.dependency-info-bar button:hover,
+.dependency-info-bar button:focus-visible {
+  color: #ffffff;
+  border-color: #7dd3fc;
+  background: #143047;
 }
 
 .brand {
@@ -251,6 +290,7 @@ button {
 }
 
 .toolbar-settings-button {
+  margin-left: auto;
   flex: 0 0 auto;
 }
 
@@ -356,19 +396,32 @@ button {
   outline: none;
 }
 
-.status-pill {
-  margin-left: auto;
-  max-width: 420px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #b9c8d4;
-}
-
 .workspace {
   display: grid;
   grid-template-columns: 320px minmax(520px, 1fr) 360px;
   min-height: 0;
+}
+
+.app-status-bar {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: 10px;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  max-width: calc(100vw - 28px);
+  padding: 5px 10px;
+  border: 1px solid rgba(68, 91, 108, 0.85);
+  border-radius: 6px;
+  color: #b9c8d4;
+  background: rgba(12, 18, 25, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .browser-panel,
@@ -1786,31 +1839,32 @@ button {
 }
 
 .sizing-reference-shape path {
-  fill: none;
-  stroke: #facc15;
-  stroke-dasharray: 8 7;
-  stroke-width: 2;
-  opacity: 0.78;
+  fill: rgba(125, 211, 252, 0.04);
+  stroke: rgba(186, 230, 253, 0.62);
+  stroke-dasharray: 7 6;
+  stroke-width: 1.1;
+  opacity: 0.72;
   vector-effect: non-scaling-stroke;
 }
 
-.sizing-reference-shape.liftingSurface path {
-  stroke: #7dd3fc;
+.sizing-reference-shape.surface-wing path {
+  fill: rgba(125, 211, 252, 0.045);
+  stroke: rgba(125, 211, 252, 0.7);
 }
 
-.sizing-reference-shape.part-motor path,
+.sizing-reference-shape.surface-tailplane path {
+  fill: rgba(125, 211, 252, 0.035);
+  stroke: rgba(56, 189, 248, 0.66);
+}
+
+.sizing-reference-shape.part-motor path {
+  fill: rgba(216, 180, 254, 0.06);
+  stroke: rgba(216, 180, 254, 0.72);
+}
+
 .sizing-reference-shape.part-rotor path {
-  stroke: #c084fc;
-}
-
-.sizing-reference-shape text {
-  fill: #fef3c7;
-  font-size: 11px;
-  font-weight: 800;
-  opacity: 0.85;
-  paint-order: stroke;
-  stroke: #07111a;
-  stroke-width: 3px;
+  fill: rgba(216, 180, 254, 0.035);
+  stroke: rgba(216, 180, 254, 0.68);
 }
 
 .canvas-sketch-toolbar button,
@@ -2795,6 +2849,10 @@ button {
   background: rgba(13, 24, 35, 0.84);
 }
 
+.sizing-dashboard-intro {
+  grid-column: 1 / -1;
+}
+
 .sizing-panel-title,
 .sizing-data-heading {
   display: flex;
@@ -3194,6 +3252,7 @@ button {
 }
 
 .sizing-dashboard-data .analysis-metric {
+  position: relative;
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -3217,12 +3276,156 @@ button {
   white-space: nowrap;
 }
 
+.sizing-dashboard-data .analysis-metric .metric-label {
+  overflow: visible;
+}
+
+.analysis-metric,
+.metric-tile,
+.compute-metric-tile,
+.compute-curve-title {
+  position: relative;
+  overflow: visible;
+}
+
+.analysis-metric .metric-label,
+.metric-tile .metric-label,
+.compute-metric-tile .metric-label,
+.compute-curve-title .metric-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: visible;
+  position: static;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.analysis-metric .metric-label.has-info,
+.metric-tile .metric-label.has-info,
+.compute-metric-tile .metric-label.has-info,
+.compute-curve-title .metric-label.has-info {
+  cursor: help;
+  text-decoration: underline dotted rgba(125, 211, 252, 0.5);
+  text-underline-offset: 3px;
+}
+
+.analysis-metric .metric-tooltip,
+.metric-tile .metric-tooltip,
+.compute-metric-tile .metric-tooltip,
+.compute-curve-title .metric-tooltip {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 7px);
+  left: 10px;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 64px));
+  padding: 6px 8px;
+  border: 1px solid rgba(125, 211, 252, 0.42);
+  border-radius: 6px;
+  color: #e8f4fb;
+  background: rgba(8, 16, 24, 0.98);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 38%);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.25;
+  opacity: 0;
+  overflow: visible;
+  pointer-events: none;
+  text-decoration: none;
+  text-overflow: clip;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: normal;
+}
+
+.analysis-metric .metric-label.has-info:hover .metric-tooltip,
+.analysis-metric .metric-label.has-info:focus-within .metric-tooltip,
+.metric-tile .metric-label.has-info:hover .metric-tooltip,
+.metric-tile .metric-label.has-info:focus-within .metric-tooltip,
+.compute-metric-tile .metric-label.has-info:hover .metric-tooltip,
+.compute-metric-tile .metric-label.has-info:focus-within .metric-tooltip,
+.compute-curve-title .metric-label.has-info:hover .metric-tooltip,
+.compute-curve-title .metric-label.has-info:focus-within .metric-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.sizing-dashboard-data .analysis-metric .metric-tooltip,
+.sizing-summary-grid .analysis-metric .metric-tooltip {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.analysis-metric .metric-label > span:first-child,
+.metric-tile .metric-label > span:first-child,
+.compute-metric-tile .metric-label > span:first-child,
+.compute-curve-title .metric-label > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-tile .metric-label > span:first-child,
+.compute-metric-tile .metric-label > span:first-child {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.field-label {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.field-label.has-info {
+  cursor: help;
+  text-decoration: underline dotted rgba(125, 211, 252, 0.5);
+  text-underline-offset: 3px;
+}
+
+.field-tooltip {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 7px);
+  left: 0;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 64px));
+  padding: 6px 8px;
+  border: 1px solid rgba(125, 211, 252, 0.42);
+  border-radius: 6px;
+  color: #e8f4fb;
+  background: rgba(8, 16, 24, 0.98);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 38%);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.25;
+  opacity: 0;
+  overflow: visible;
+  pointer-events: none;
+  text-decoration: none;
+  text-overflow: clip;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: normal;
+}
+
+.field-label.has-info:hover .field-tooltip,
+.field-label.has-info:focus-within .field-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .sizing-dashboard-data .analysis-metric strong {
   text-align: right;
   white-space: nowrap;
 }
 
 .sizing-summary-grid .analysis-metric {
+  position: relative;
   min-width: 0;
   display: grid;
   gap: 4px;
@@ -3479,6 +3682,7 @@ button {
 }
 
 .propulsion-field {
+  position: relative;
   display: grid;
   gap: 6px;
 }
@@ -3548,7 +3752,14 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.propulsion-result-group {
+.jet-side-by-side {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.propulsion-result-group,
+.result-group {
   display: grid;
   align-content: start;
   gap: 4px;
@@ -3558,14 +3769,16 @@ button {
   background: #0c1721;
 }
 
-.propulsion-result-group h3 {
+.propulsion-result-group h3,
+.result-group h3 {
   margin: 0 0 4px;
   color: #dff4ff;
   font-size: 12px;
   letter-spacing: 0;
 }
 
-.propulsion-result-group > div {
+.propulsion-result-group > div,
+.result-group > div {
   display: grid;
   gap: 2px;
 }
@@ -3672,6 +3885,26 @@ button {
   grid-template-columns: minmax(140px, 0.8fr) repeat(auto-fit, minmax(130px, 1fr));
 }
 
+.jet-feasibility-error {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 7px;
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecaca;
+}
+
+.jet-feasibility-error strong {
+  color: #fee2e2;
+  font-size: 13px;
+}
+
+.jet-feasibility-error span {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .jet-metric-grid .metric-tile,
 .jet-metric-grid .propulsion-field {
   min-width: 0;
@@ -3767,6 +4000,58 @@ button {
   color: #d9fbe7;
 }
 
+.jet-condition-row.not-flyable-row,
+.jet-condition-row.jet-assisted-row.not-flyable-row,
+.ijet-condition-row.not-flyable-row {
+  border-color: rgba(248, 113, 113, 0.62);
+  background: linear-gradient(0deg, rgba(127, 29, 29, 0.34), rgba(127, 29, 29, 0.34)), #0c1721;
+}
+
+.jet-condition-row.not-flyable-row strong,
+.jet-condition-row.not-flyable-row span,
+.ijet-condition-row.not-flyable-row strong,
+.ijet-condition-row.not-flyable-row span {
+  color: #fecaca;
+}
+
+.ijet-condition-table .jet-condition-row {
+  grid-template-columns: 0.9fr 0.9fr 1fr 1.1fr 1fr 1fr 1fr 1.2fr 1fr;
+}
+
+.ijet-mixer-table .jet-condition-row {
+  grid-template-columns: 0.75fr 0.95fr 0.95fr 1fr 0.9fr 1fr 0.8fr 0.9fr 0.9fr;
+}
+
+.endurance-condition-table .jet-condition-row {
+  grid-template-columns: 0.9fr 0.9fr 1.1fr 1fr 1fr 1fr 1.2fr 1fr;
+}
+
+.ijet-condition-row.matched {
+  border-color: rgba(72, 187, 120, 0.34);
+}
+
+.ijet-condition-row.idle-limited,
+.ijet-condition-row.max-limited,
+.ijet-condition-row.no-battery-draw {
+  border-color: rgba(245, 158, 11, 0.38);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.ijet-condition-row.idle-limited strong,
+.ijet-condition-row.max-limited strong,
+.ijet-condition-row.no-battery-draw strong {
+  color: #fbd38d;
+}
+
+.ijet-mixer-row.prop-capped-row {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.07);
+}
+
+.ijet-mixer-row.prop-capped-row strong {
+  color: #fbd38d;
+}
+
 .jet-condition-row.pitch-overspeed-row {
   border-color: rgba(248, 113, 113, 0.48);
   background: linear-gradient(0deg, rgba(127, 29, 29, 0.34), rgba(127, 29, 29, 0.34)), #0c1721;
@@ -3857,9 +4142,23 @@ button {
   stroke-width: 3;
 }
 
+.jet-curve .grid {
+  stroke: rgba(125, 160, 190, 0.14);
+  stroke-width: 1;
+}
+
+.ijet-mixer-curve path.range {
+  stroke-dasharray: 7 5;
+}
+
 .jet-curve .prop {
   stroke: #7dd3fc;
   fill: none;
+}
+
+.jet-curve .jet {
+  stroke: #fb7185;
+  fill: #fb7185;
 }
 
 .jet-curve .hybrid {
@@ -3882,6 +4181,16 @@ button {
   fill: #facc15;
 }
 
+.jet-curve .endurance {
+  stroke: #86efac;
+  fill: #86efac;
+}
+
+.jet-curve .speed {
+  stroke: #a78bfa;
+  fill: #a78bfa;
+}
+
 .jet-curve .battery {
   stroke: #38bdf8;
   fill: #38bdf8;
@@ -3892,6 +4201,9 @@ button {
   fill: #fb7185;
 }
 
+.jet-curve path.endurance,
+.jet-curve path.speed,
+.jet-curve path.jet,
 .jet-curve path.fuel-flow,
 .jet-curve path.fuel-penalty,
 .jet-curve path.range,
@@ -3927,6 +4239,10 @@ button {
   background: #7dd3fc;
 }
 
+.jet-curve-legend i.jet {
+  background: #fb7185;
+}
+
 .jet-curve-legend i.hybrid {
   background: #86efac;
 }
@@ -3941,6 +4257,14 @@ button {
 
 .jet-curve-legend i.range {
   background: #facc15;
+}
+
+.jet-curve-legend i.endurance {
+  background: #86efac;
+}
+
+.jet-curve-legend i.speed {
+  background: #a78bfa;
 }
 
 .jet-curve-legend i.battery {
@@ -4027,6 +4351,71 @@ button {
   color: #8fa5b7;
   font-size: 10px;
   line-height: 1.25;
+}
+
+.final-workspace {
+  gap: 12px;
+}
+
+.final-workspace .propulsion-panel {
+  flex: 1 1 calc((100% - 24px) / 3);
+  min-width: 340px;
+}
+
+.final-workspace .final-hero-panel,
+.final-workspace .final-checklist-panel {
+  flex: 1 1 100%;
+}
+
+.final-hero-panel {
+  border-color: rgba(125, 211, 252, 0.24);
+  background: linear-gradient(180deg, rgba(14, 45, 56, 0.42), rgba(9, 20, 30, 0.92));
+}
+
+.final-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.final-checklist-grid {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.32fr) minmax(360px, 1fr);
+  gap: 10px;
+}
+
+.final-workspace .propulsion-result-groups.compact {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.final-workspace .analysis-metric {
+  display: grid;
+  grid-template-columns: minmax(86px, 1fr) minmax(0, auto);
+  align-items: start;
+}
+
+.final-workspace .analysis-metric span,
+.final-workspace .analysis-metric strong,
+.final-workspace .metric-tile span,
+.final-workspace .metric-tile strong {
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.18;
+}
+
+.final-workspace .analysis-metric strong {
+  max-width: 100%;
+}
+
+.final-checklist-grid .result-group:last-child .analysis-metric {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
+.final-checklist-grid .result-group:last-child .analysis-metric strong {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 760;
 }
 
 .analysis-metric {
@@ -4124,4 +4513,584 @@ button {
 .size-footer span {
   color: #e5eef8;
   font-size: 13px;
+}
+
+/* Propulsion readability pass */
+.propulsion-workspace {
+  gap: 16px;
+  padding: 16px 14px 72px;
+  scrollbar-gutter: stable;
+}
+
+.propulsion-workspace .propulsion-panel {
+  flex-basis: calc((100% - 32px) / 3);
+  gap: 12px;
+  padding: 14px;
+}
+
+.propulsion-workspace .propulsion-requirements-panel,
+.propulsion-workspace .propulsion-hardware-panel,
+.propulsion-workspace .propulsion-selection-panel,
+.propulsion-workspace .propulsion-results-panel {
+  flex-basis: 100%;
+}
+
+.propulsion-workspace .propulsion-title {
+  align-items: center;
+  min-width: 0;
+}
+
+.propulsion-workspace .propulsion-title h2 {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.propulsion-workspace .propulsion-demand-explainer {
+  margin: 0;
+  max-width: none;
+  line-height: 1.45;
+}
+
+.propulsion-workspace .metric-tile,
+.propulsion-workspace .propulsion-field,
+.propulsion-workspace .result-group {
+  min-width: 0;
+}
+
+.propulsion-workspace .metric-tile {
+  gap: 7px;
+  padding: 10px 11px;
+  overflow: visible;
+}
+
+.propulsion-workspace .metric-tile > .metric-label,
+.propulsion-workspace .field-label,
+.propulsion-workspace .compute-curve-title .metric-label {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  color: #a9bdcd;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.18;
+}
+
+.propulsion-workspace .metric-tile > .metric-label > span:first-child {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.propulsion-workspace .metric-tile strong {
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.propulsion-workspace .analysis-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: start;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.propulsion-workspace .analysis-metric > .metric-label {
+  display: grid;
+  align-items: start;
+  gap: 2px;
+  min-width: 0;
+  color: #adc0cf;
+  line-height: 1.18;
+}
+
+.propulsion-workspace .analysis-metric > .metric-label > span:first-child {
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.propulsion-workspace .analysis-metric strong {
+  justify-self: end;
+  align-self: start;
+  padding-top: 1px;
+  color: #f8fbff;
+  font-size: 13px;
+  line-height: 1.15;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.propulsion-workspace .analysis-metric small {
+  max-width: 100%;
+  line-height: 1.2;
+}
+
+.propulsion-workspace .metric-tooltip,
+.propulsion-workspace .field-tooltip {
+  display: none;
+  opacity: 1;
+  transform: none;
+}
+
+.propulsion-workspace .metric-label.has-info:hover .metric-tooltip,
+.propulsion-workspace .metric-label.has-info:focus-within .metric-tooltip,
+.propulsion-workspace .field-label.has-info:hover .field-tooltip,
+.propulsion-workspace .field-label.has-info:focus-within .field-tooltip {
+  display: block;
+}
+
+.propulsion-requirements-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  align-content: start;
+}
+
+.propulsion-requirements-panel .propulsion-title {
+  grid-column: 1;
+  flex: none;
+  min-width: 142px;
+  padding-top: 0;
+}
+
+.propulsion-requirements-panel .propulsion-demand-explainer {
+  grid-column: 2;
+  flex: none;
+  padding-top: 2px;
+}
+
+.propulsion-requirements-top {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.58fr);
+  align-items: stretch;
+  gap: 12px;
+}
+
+.propulsion-requirements-panel .propulsion-readouts {
+  flex: none;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+}
+
+.propulsion-optimizer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 10px;
+}
+
+.propulsion-optimizer .propulsion-field {
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+}
+
+.propulsion-optimizer .propulsion-field div {
+  align-items: center;
+}
+
+.propulsion-requirements-groups {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.propulsion-result-groups {
+  grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+  gap: 12px;
+}
+
+.propulsion-result-groups.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.propulsion-workspace .result-group {
+  gap: 6px;
+  padding: 11px 12px;
+}
+
+.propulsion-workspace .result-group h3 {
+  color: #e5f6ff;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.propulsion-candidate-list {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+.propulsion-candidate {
+  min-height: 66px;
+}
+
+.propulsion-candidate strong,
+.propulsion-candidate span,
+.propulsion-candidate em {
+  line-height: 1.25;
+}
+
+.propulsion-hardware-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.propulsion-hardware-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(125, 160, 190, 0.14);
+  border-radius: 7px;
+  background: #0c1721;
+}
+
+.propulsion-hardware-card .metric-tile {
+  background: rgba(6, 14, 22, 0.36);
+}
+
+.propulsion-hardware-card .propulsion-readouts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.propulsion-hardware-card .propulsion-field small {
+  min-height: 30px;
+}
+
+/* Jet readability pass */
+.jet-workspace {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+}
+
+.jet-workspace .propulsion-panel {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.jet-workspace .jet-base-panel {
+  flex-basis: calc(42% - 8px);
+}
+
+.jet-workspace .jet-setup-panel {
+  flex-basis: calc(58% - 8px);
+}
+
+.jet-workspace .jet-takeoff-panel,
+.jet-workspace .jet-landing-panel {
+  flex-basis: calc(50% - 8px);
+}
+
+.jet-workspace .jet-base-grid,
+.jet-workspace .jet-hybrid-grid,
+.jet-workspace .jet-setup-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.jet-workspace .propulsion-field-wide {
+  grid-column: 1 / -1;
+}
+
+.jet-workspace .jet-command-panel .metric-tile {
+  min-height: 76px;
+}
+
+.jet-workspace .jet-condition-table {
+  width: 100%;
+}
+
+.jet-workspace .jet-condition-row,
+.jet-workspace .jet-condition-group {
+  min-width: 0;
+  width: 100%;
+}
+
+.jet-workspace .jet-condition-row {
+  grid-template-columns: minmax(118px, 1.2fr) minmax(94px, 1fr) minmax(76px, 0.85fr) minmax(116px, 1.1fr) minmax(108px, 1fr) minmax(104px, 1fr) minmax(96px, 0.95fr) minmax(118px, 1.1fr) minmax(88px, 0.9fr);
+}
+
+.jet-workspace .jet-condition-row.jet-condition-data {
+  grid-template-columns: minmax(94px, 1fr) minmax(76px, 0.85fr) minmax(116px, 1.1fr) minmax(108px, 1fr) minmax(104px, 1fr) minmax(96px, 0.95fr) minmax(118px, 1.1fr) minmax(88px, 0.9fr);
+}
+
+.jet-workspace .endurance-condition-table .jet-condition-row,
+.jet-workspace .endurance-condition-table .jet-condition-row.jet-condition-data {
+  grid-template-columns: minmax(94px, 0.9fr) minmax(94px, 0.9fr) minmax(108px, 1fr) minmax(108px, 1fr) minmax(108px, 1fr) minmax(108px, 1fr) minmax(124px, 1.2fr) minmax(88px, 0.9fr);
+}
+
+.jet-workspace .ijet-mixer-table .jet-condition-row,
+.jet-workspace .ijet-mixer-table .jet-condition-row.jet-condition-data {
+  grid-template-columns: minmax(72px, 0.75fr) minmax(92px, 0.95fr) minmax(92px, 0.95fr) minmax(96px, 1fr) minmax(86px, 0.9fr) minmax(96px, 1fr) minmax(72px, 0.8fr) minmax(86px, 0.9fr) minmax(86px, 0.9fr);
+}
+
+.jet-workspace .jet-curve {
+  min-width: 0;
+}
+
+/* Max synthesis layout */
+.max-workspace .propulsion-panel {
+  flex: 1 1 calc(50% - 8px);
+  min-width: min(520px, 100%);
+}
+
+.max-workspace .max-input-panel,
+.max-workspace .max-summary-panel {
+  flex-basis: 100%;
+}
+
+.max-workspace .max-input-panel .sizing-input-grid {
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+}
+
+.max-workspace .max-summary-panel .jet-metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.max-workspace .propulsion-result-groups.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.max-workspace .result-group {
+  min-width: 0;
+}
+
+.max-workspace .analysis-metric {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.max-workspace .analysis-metric > .metric-label,
+.max-workspace .analysis-metric strong {
+  min-width: 0;
+}
+
+.max-workspace .analysis-metric strong {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 980px) {
+  .max-workspace .propulsion-panel {
+    flex-basis: 100%;
+  }
+
+  .max-workspace .propulsion-result-groups.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .propulsion-requirements-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .propulsion-requirements-panel .propulsion-title,
+  .propulsion-requirements-panel .propulsion-demand-explainer {
+    grid-column: 1;
+  }
+
+  .propulsion-requirements-top,
+  .propulsion-hardware-grid,
+  .propulsion-requirements-groups,
+  .propulsion-result-groups.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .propulsion-optimizer {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+
+  .jet-workspace .jet-base-panel,
+  .jet-workspace .jet-setup-panel,
+  .jet-workspace .jet-takeoff-panel,
+  .jet-workspace .jet-landing-panel {
+    flex-basis: 100%;
+  }
+}
+
+/* Aero readability pass */
+.compute-dashboard {
+  grid-template-columns: repeat(auto-fit, minmax(292px, 1fr));
+  gap: 14px;
+  padding: 16px 14px 72px;
+  scrollbar-gutter: stable;
+}
+
+.compute-dashboard .compute-panel {
+  gap: 12px;
+  padding: 14px;
+  overflow: visible;
+}
+
+.compute-dashboard .compute-hero {
+  grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.6fr);
+  gap: 14px;
+}
+
+.compute-dashboard .compute-hero h2 {
+  font-size: 21px;
+  line-height: 1.1;
+}
+
+.compute-dashboard .compute-hero p,
+.compute-dashboard .compute-empty p,
+.compute-dashboard .compute-assumption-note {
+  max-width: 560px;
+  line-height: 1.45;
+}
+
+.compute-dashboard .compute-hero-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.compute-dashboard .compute-metric-tile {
+  gap: 7px;
+  padding: 10px 11px;
+  overflow: visible;
+}
+
+.compute-dashboard .compute-metric-tile .metric-label,
+.compute-dashboard .compute-curve-title .metric-label {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  color: #a9bdcd;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.18;
+}
+
+.compute-dashboard .compute-metric-tile .metric-label > span:first-child,
+.compute-dashboard .compute-curve-title .metric-label > span:first-child {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.compute-dashboard .compute-metric-tile strong {
+  line-height: 1.05;
+}
+
+.compute-dashboard .analysis-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: start;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.compute-dashboard .analysis-metric > .metric-label {
+  display: grid;
+  align-items: start;
+  gap: 2px;
+  min-width: 0;
+  color: #adc0cf;
+  line-height: 1.18;
+}
+
+.compute-dashboard .analysis-metric > .metric-label > span:first-child {
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.compute-dashboard .analysis-metric strong {
+  justify-self: end;
+  align-self: start;
+  padding-top: 1px;
+  color: #f8fbff;
+  font-size: 13px;
+  line-height: 1.15;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.compute-dashboard .analysis-metric small {
+  max-width: 100%;
+  line-height: 1.2;
+}
+
+.compute-dashboard .metric-tooltip,
+.compute-dashboard .field-tooltip {
+  display: none;
+  opacity: 1;
+  transform: none;
+}
+
+.compute-dashboard .metric-label.has-info:hover .metric-tooltip,
+.compute-dashboard .metric-label.has-info:focus-within .metric-tooltip,
+.compute-dashboard .field-label.has-info:hover .field-tooltip,
+.compute-dashboard .field-label.has-info:focus-within .field-tooltip {
+  display: block;
+}
+
+.compute-dashboard .compute-panel-heading {
+  align-items: center;
+  min-width: 0;
+}
+
+.compute-dashboard .compute-panel-heading h3 {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.compute-dashboard .compute-group > div {
+  gap: 1px;
+}
+
+.compute-dashboard .compute-warnings {
+  gap: 7px;
+}
+
+.compute-dashboard .compute-warnings span {
+  line-height: 1.35;
+}
+
+.compute-dashboard .compute-machupx-grid {
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+  gap: 2px 16px;
+}
+
+.compute-dashboard .compute-graph-grid {
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 12px;
+}
+
+.compute-dashboard .compute-speed-summary {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 6px 14px;
+}
+
+.compute-dashboard .compute-speed-summary .analysis-metric {
+  padding: 6px 0;
+}
+
+.compute-dashboard .compute-curve-card {
+  min-height: 240px;
+}
+
+.compute-dashboard .compute-curve-title {
+  min-width: 0;
+}
+
+.compute-dashboard .compute-curve-title strong {
+  flex: 0 0 auto;
+}
+
+.compute-dashboard .compute-curve-legend span {
+  white-space: normal;
+}
+
+@media (max-width: 860px) {
+  .compute-dashboard .compute-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .compute-dashboard .compute-graph-grid {
+    grid-template-columns: 1fr;
+  }
 }

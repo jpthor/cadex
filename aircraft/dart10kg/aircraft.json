@@ -150,15 +150,16 @@
           "role": "body"
         }
       ],
-      "showSizingReference": true,
+      "showSizingReference": false,
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 874,
-        "originX": 242.72412302022548,
-        "originY": 102.24415774078368,
-        "scale": 691.1531068596881,
-        "width": 900
-      }
+        "originX": 287.26684606526027,
+        "originY": 338.04110082347074,
+        "scale": 182.624922330423,
+        "width": 843
+      },
+      "sketchScaleUnit": "cm"
     },
     "timeline": [
       {
@@ -322,15 +323,16 @@
         "role": "body"
       }
     ],
-    "showSizingReference": true,
+    "showSizingReference": false,
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 874,
-      "originX": 242.72412302022548,
-      "originY": 102.24415774078368,
-      "scale": 691.1531068596881,
-      "width": 900
-    }
+      "originX": 287.26684606526027,
+      "originY": 338.04110082347074,
+      "scale": 182.624922330423,
+      "width": 843
+    },
+    "sketchScaleUnit": "cm"
   },
-  "updatedAt": 1780053696864
+  "updatedAt": 1780128978758
 }

@@ -1,11 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Activity, AlertTriangle, Calculator, Gauge, Wind } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { batteryMassEstimate, computeSketchAerodynamics, computeSizingAnalysis } from "../../sizing";
 import type { SizingProject } from "../../sizing";
+import { usableEnergyFromInstalledWh } from "../../sizing/energy";
 import { isTauriRuntime } from "../../lib/tauriRuntime";
 import { Metric } from "../ui/Metric";
+import { computeMetricInfo } from "./computeMetricInfo";
 
 type MachUpXReport = {
   ok: boolean;
@@ -60,12 +62,25 @@ type MachUpXReport = {
 
 type MachUpXCall<T> = { ok: true; value: T } | { ok: false; message?: string };
 
+function computeInfoFor(label: string) {
+  const normalized = label.replace(/\s+\([^)]*\)/g, "");
+  return computeMetricInfo[label] ?? computeMetricInfo[normalized];
+}
+
+function ComputeMetric({ info, label, ...rest }: ComponentProps<typeof Metric>) {
+  return <Metric {...rest} info={info ?? computeInfoFor(label)} label={label} />;
+}
+
+function isWingLikeKind(kind: string | undefined) {
+  return (kind ?? "wing") === "wing" || kind === "wingevon";
+}
+
 export function ComputeDashboard({ project, projectName }: { project: SizingProject; projectName: string }) {
   const analysis = useMemo(() => (project.shapes.length ? computeSizingAnalysis(project) : undefined), [project]);
   const aero = useMemo(() => (project.shapes.length ? computeSketchAerodynamics(project) : undefined), [project]);
   const [machUpX, setMachUpX] = useState<MachUpXReport | undefined>();
   const hasMachUpXSurface = project.shapes.some(
-    (shape) => shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing" && shape.points.length >= 3,
+    (shape) => shape.role === "liftingSurface" && isWingLikeKind(shape.liftingSurfaceKind) && shape.points.length >= 3,
   );
 
   useEffect(() => {
@@ -137,6 +152,7 @@ export function ComputeDashboard({ project, projectName }: { project: SizingProj
   const rollVerdict = aero ? rollVerdictFor(aero.stability.rollStabilityIndex, aero.validity.lift) : undefined;
   const diskLoadingVerdict = aero ? diskLoadingVerdictFor(aero.propulsion.rotorDiskLoadingNpm2, aero.validity.rotor) : undefined;
   const speedSweep = aero?.validity.lift || aero?.validity.drag ? buildSpeedSweep(aero, project) : undefined;
+  const stallAdders = aero ? buildStallMarginAdders(aero) : undefined;
 
   if (!aero || !analysis) {
     return (
@@ -157,112 +173,163 @@ export function ComputeDashboard({ project, projectName }: { project: SizingProj
           <p>Live first-pass figures from the actual drawn profiles, mirrors, masses, and cruise speed.</p>
         </div>
         <div className="compute-hero-metrics">
-          <MetricTile label="CL cruise" value={formatNumber(aero.aerodynamics.liftCoefficient, 2, aero.validity.lift)} />
-          <MetricTile label="CD estimate" value={formatNumber(aero.aerodynamics.dragCoefficient, 3, aero.validity.drag)} />
-          <MetricTile label="L/D" value={formatNumber(aero.aerodynamics.liftToDrag, 1, aero.validity.lift)} />
-          <MetricTile label="Tail volume" value={formatNumber(aero.stability.tailVolumeCoefficient, 2, aero.validity.tailVolume)} />
+          <ComputeMetricTile label="CL cruise" value={formatNumber(aero.aerodynamics.liftCoefficient, 2, aero.validity.lift)} />
+          <ComputeMetricTile label="CD estimate" value={formatNumber(aero.aerodynamics.dragCoefficient, 3, aero.validity.drag)} />
+          <ComputeMetricTile label="L/D" value={formatNumber(aero.aerodynamics.liftToDrag, 1, aero.validity.lift)} />
+          <ComputeMetricTile label="Tail volume" value={formatNumber(aero.stability.tailVolumeCoefficient, 2, aero.validity.tailVolume)} />
         </div>
       </section>
 
       <ComputeGroup icon={<Wind size={17} />} title="Aerodynamics">
-        <Metric label="Cruise speed" value={`${aero.aerodynamics.cruiseSpeedKt.toFixed(1)} kt`} />
-        <Metric label="Dynamic pressure" value={`${aero.aerodynamics.dynamicPressurePa.toFixed(0)} Pa`} />
-        <Metric
+        <ComputeMetric label="Cruise speed" value={`${aero.aerodynamics.cruiseSpeedKt.toFixed(1)} kt`} />
+        <ComputeMetric label="Dynamic pressure" value={`${aero.aerodynamics.dynamicPressurePa.toFixed(0)} Pa`} />
+        <ComputeMetric
           label="CL required"
           note={clVerdict?.text}
           noteTone={clVerdict?.tone}
           value={formatNumber(aero.aerodynamics.liftCoefficient, 3, aero.validity.lift)}
           verification={machClVerification}
         />
-        <Metric label="CD induced" value={formatNumber(aero.aerodynamics.inducedDragCoefficient, 3, aero.validity.lift)} />
-        <Metric label="CD parasite" value={formatNumber(aero.aerodynamics.parasiteDragCoefficient, 3, aero.validity.drag)} />
-        <Metric
+        <ComputeMetric label="CD induced" value={formatNumber(aero.aerodynamics.inducedDragCoefficient, 3, aero.validity.lift)} />
+        <ComputeMetric label="CD parasite" value={formatNumber(aero.aerodynamics.parasiteDragCoefficient, 3, aero.validity.drag)} />
+        <ComputeMetric
           label="CD total"
           note={cdVerdict?.text}
           noteTone={cdVerdict?.tone}
           value={formatNumber(aero.aerodynamics.dragCoefficient, 3, aero.validity.drag)}
           verification={machCdVerification}
         />
-        <Metric label="Drag reference area" value={formatWithUnit(aero.geometry.dragReferenceAreaM2, 3, "m2", aero.validity.drag)} />
-        <Metric label="Drag" value={formatWithUnit(aero.aerodynamics.dragN, 1, "N", aero.validity.drag)} />
-        <Metric label="Cruise power" value={formatPower(aero.aerodynamics.cruisePowerW, aero.validity.drag)} />
-        <Metric
+        <ComputeMetric label="Drag reference area" value={formatWithUnit(aero.geometry.dragReferenceAreaM2, 3, "m2", aero.validity.drag)} />
+        <ComputeMetric label="Drag" value={formatWithUnit(aero.aerodynamics.dragN, 1, "N", aero.validity.drag)} />
+        <ComputeMetric label="Cruise power" value={formatPower(aero.aerodynamics.cruisePowerW, aero.validity.drag)} />
+        <ComputeMetric
           label="L/D"
           note={ldVerdict?.text}
           noteTone={ldVerdict?.tone}
           value={formatNumber(aero.aerodynamics.liftToDrag, 1, aero.validity.lift)}
           verification={machLdVerification}
         />
-        <Metric
-          label="Stall speed"
-          note={aero.lex.active ? `LEX corridor lowers stall by ${aero.lex.stallSpeedReductionPct.toFixed(1)}%` : undefined}
-          noteTone={aero.lex.active ? "good" : undefined}
-          value={formatLexStallSpeed(aero)}
+      </ComputeGroup>
+
+      <ComputeGroup icon={<Wind size={17} />} title="LEX & Blown Wing">
+        <ComputeMetric
+          label="Flight regime"
+          note={stallAdders ? `${stallAdders.cleanStallKt.toFixed(1)} kt high AoA, ${stallAdders.appliedStallKt.toFixed(1)} kt full stall` : undefined}
+          noteTone={flightRegimeFor(aero).tone}
+          value={flightRegimeFor(aero).label}
         />
-        <Metric
+        <ComputeMetric label="Clean stall speed" value={stallAdders ? `${stallAdders.cleanStallKt.toFixed(1)} kt` : "--"} />
+        <ComputeMetric
+          label="High-AoA band"
+          note="Between clean stall and full stall"
+          noteTone={stallAdders && stallAdders.highAoABandKt > 0 ? "good" : undefined}
+          value={stallAdders ? `${stallAdders.appliedStallKt.toFixed(1)}-${stallAdders.cleanStallKt.toFixed(1)} kt` : "--"}
+        />
+        <ComputeMetric
+          label="Full stall speed"
+          note={stallAdders && stallAdders.totalReductionKt > 0 ? `${stallAdders.totalReductionKt.toFixed(1)} kt slower than clean` : undefined}
+          noteTone={stallAdders && stallAdders.totalReductionKt > 0 ? "good" : undefined}
+          value={stallAdders ? `${stallAdders.appliedStallKt.toFixed(1)} kt` : "--"}
+        />
+        <ComputeMetric
+          label="Added stall margin"
+          note={stallAdders ? `${stallAdders.cleanCruiseMargin.toFixed(2)}x clean / ${stallAdders.appliedCruiseMargin.toFixed(2)}x applied` : undefined}
+          noteTone={stallAdders && stallAdders.marginGain > 0 ? "good" : undefined}
+          value={stallAdders ? `+${stallAdders.marginGain.toFixed(2)}x` : "--"}
+        />
+        <ComputeMetric
           label="CLmax"
-          note={aero.lex.active ? `vortex over ${aero.lex.influencedAreaM2.toFixed(3)} m2` : undefined}
-          noteTone={aero.lex.active ? "good" : undefined}
+          note={clMaxNote(aero)}
+          noteTone={aero.lex.active || aero.rotorBlownWing.active || aero.wingevon.active ? "good" : undefined}
           value={formatLexClMax(aero)}
         />
+        <ComputeMetric label="CLmax for 30 kt" value={formatRequiredClMaxForStall(aero, 30)} />
+        <ComputeMetric label="CLmax for 25 kt" value={formatRequiredClMaxForStall(aero, 25)} />
+        <ComputeMetric
+          label="Stall AoA"
+          note={aero.lex.active || aero.rotorBlownWing.active || aero.wingevon.active ? "clean / applied" : undefined}
+          noteTone={aero.lex.active || aero.rotorBlownWing.active || aero.wingevon.active ? "good" : undefined}
+          value={formatStallAoA(aero)}
+        />
+        <ComputeMetric
+          label="Wingevon stall margin"
+          note={aero.wingevon.active ? `${(aero.wingevon.areaRatio * 100).toFixed(0)}% wing area, ${(aero.wingevon.aoaBlendFactor * 100).toFixed(0)}% AoA blend` : "mark an outer wing panel as Wingevon"}
+          noteTone={aero.wingevon.active ? "good" : undefined}
+          value={stallAdders && aero.wingevon.active ? `${stallAdders.wingevonReductionKt.toFixed(1)} kt / +${aero.wingevon.deltaMaxLiftCoefficient.toFixed(2)} CLmax` : "--"}
+        />
+        <ComputeMetric label="Wingevon area" value={formatWithUnit(aero.wingevon.areaM2, 3, "m2", aero.wingevon.active)} />
+        <ComputeMetric label="Wingevon effective AoA" value={aero.wingevon.active ? `${aero.wingevon.effectiveStallAngleDeg.toFixed(1)} deg` : "--"} />
+        <ComputeMetric
+          label="LEX stall margin"
+          note={aero.lex.active ? `${aero.lex.influencedAreaM2.toFixed(3)} m2 influenced` : "draw LEX lifting surface to enable"}
+          noteTone={aero.lex.active ? "good" : undefined}
+          value={stallAdders && aero.lex.active ? `${stallAdders.lexReductionKt.toFixed(1)} kt / +${aero.lex.deltaMaxLiftCoefficient.toFixed(2)} CLmax` : "--"}
+        />
+        <ComputeMetric label="LEX area" value={formatWithUnit(aero.geometry.lexAreaM2, 3, "m2", aero.lex.areaM2 > 0)} />
+        <ComputeMetric label="LEX influenced wing" value={formatWithUnit(aero.lex.influencedWingAreaM2, 3, "m2", aero.lex.influencedWingAreaM2 > 0)} />
+        <ComputeMetric label="LEX influenced body" value={formatWithUnit(aero.lex.influencedBodyAreaM2, 3, "m2", aero.lex.influencedBodyAreaM2 > 0)} />
+        <ComputeMetric label="LEX vortex strength" value={aero.lex.active ? aero.lex.vortexStrength.toFixed(2) : "--"} />
+        <ComputeMetric
+          label="Blown wing stall margin"
+          note={aero.rotorBlownWing.active ? `${(aero.rotorBlownWing.blownAreaRatio * 100).toFixed(0)}% wing coverage` : "needs rotor disks over the wing"}
+          noteTone={aero.rotorBlownWing.active ? "good" : undefined}
+          value={stallAdders && aero.rotorBlownWing.active ? `${stallAdders.blownReductionKt.toFixed(1)} kt / +${aero.rotorBlownWing.deltaMaxLiftCoefficient.toFixed(2)} CLmax` : "--"}
+        />
+        <ComputeMetric label="Blown wing area" value={formatWithUnit(aero.rotorBlownWing.blownAreaM2, 3, "m2", aero.rotorBlownWing.active)} />
+        <ComputeMetric label="Blown q ratio" value={aero.rotorBlownWing.active ? `${aero.rotorBlownWing.dynamicPressureRatio.toFixed(2)}x` : "--"} />
       </ComputeGroup>
 
       <ComputeGroup icon={<Gauge size={17} />} title="Geometry">
-        <Metric label="Wing area" value={formatWithUnit(aero.geometry.wingAreaM2, 3, "m2", aero.validity.lift)} />
-        <Metric label="Projected span" value={formatWithUnit(aero.geometry.wingSpanM, 2, "m", aero.validity.lift)} />
-        <Metric label="True span" value={formatWithUnit(aero.geometry.wingTrueSpanM, 2, "m", aero.validity.lift)} />
-        <Metric label="Dihedral" value={formatWithUnit(aero.geometry.averageDihedralDeg, 1, "deg", aero.validity.lift)} />
-        <Metric label="Mean chord" value={formatWithUnit(aero.geometry.meanChordM, 3, "m", aero.validity.lift)} />
-        <Metric label="Aspect ratio" value={formatNumber(aero.geometry.aspectRatio, 2, aero.validity.lift)} />
-        <Metric label="Tailplane area" value={formatWithUnit(aero.geometry.tailplaneAreaM2, 3, "m2", aero.validity.tailVolume)} />
-        <Metric label="Tail arm" value={formatWithUnit(aero.geometry.tailplaneArmM, 2, "m", aero.validity.tailVolume)} />
-        <Metric label="Fin area" value={formatWithUnit(aero.geometry.finAreaM2, 3, "m2", aero.validity.finVolume)} />
-        <Metric label="Fin arm" value={formatWithUnit(aero.geometry.finArmM, 2, "m", aero.validity.finVolume)} />
-        <Metric label="LEX area" value={formatWithUnit(aero.geometry.lexAreaM2, 3, "m2", aero.lex.areaM2 > 0)} />
-        <Metric label="LEX influenced area" value={formatWithUnit(aero.lex.influencedAreaM2, 3, "m2", aero.lex.influencedAreaM2 > 0)} />
-        <Metric label="LEX influenced wing" value={formatWithUnit(aero.lex.influencedWingAreaM2, 3, "m2", aero.lex.influencedWingAreaM2 > 0)} />
-        <Metric label="LEX influenced body" value={formatWithUnit(aero.lex.influencedBodyAreaM2, 3, "m2", aero.lex.influencedBodyAreaM2 > 0)} />
-        <Metric label="LEX vortex strength" value={aero.lex.active ? aero.lex.vortexStrength.toFixed(2) : "--"} />
+        <ComputeMetric label="Wing area" value={formatWithUnit(aero.geometry.wingAreaM2, 3, "m2", aero.validity.lift)} />
+        <ComputeMetric label="Projected span" value={formatWithUnit(aero.geometry.wingSpanM, 2, "m", aero.validity.lift)} />
+        <ComputeMetric label="True span" value={formatWithUnit(aero.geometry.wingTrueSpanM, 2, "m", aero.validity.lift)} />
+        <ComputeMetric label="Dihedral" value={formatWithUnit(aero.geometry.averageDihedralDeg, 1, "deg", aero.validity.lift)} />
+        <ComputeMetric label="Mean chord" value={formatWithUnit(aero.geometry.meanChordM, 3, "m", aero.validity.lift)} />
+        <ComputeMetric label="Aspect ratio" value={formatNumber(aero.geometry.aspectRatio, 2, aero.validity.lift)} />
+        <ComputeMetric label="Tailplane area" value={formatWithUnit(aero.geometry.tailplaneAreaM2, 3, "m2", aero.validity.tailVolume)} />
+        <ComputeMetric label="Tail arm" value={formatWithUnit(aero.geometry.tailplaneArmM, 2, "m", aero.validity.tailVolume)} />
+        <ComputeMetric label="Fin area" value={formatWithUnit(aero.geometry.finAreaM2, 3, "m2", aero.validity.finVolume)} />
+        <ComputeMetric label="Fin arm" value={formatWithUnit(aero.geometry.finArmM, 2, "m", aero.validity.finVolume)} />
       </ComputeGroup>
 
       <ComputeGroup icon={<Activity size={17} />} title="Stability & Mass">
-        <Metric label="Mass" value={`${aero.mass.totalMassKg.toFixed(2)} kg`} />
-        <Metric label="Wing loading" value={formatWithUnit(aero.mass.wingLoadingKgM2, 1, "kg/m2", aero.validity.lift)} />
-        <Metric label="CoM X" value={`${aero.stability.centerOfMassY.toFixed(3)} m`} />
-        <Metric
+        <ComputeMetric label="Mass" value={`${aero.mass.totalMassKg.toFixed(2)} kg`} />
+        <ComputeMetric label="Wing loading" value={formatWithUnit(aero.mass.wingLoadingKgM2, 1, "kg/m2", aero.validity.lift)} />
+        <ComputeMetric label="CoM X" value={`${aero.stability.centerOfMassY.toFixed(3)} m`} />
+        <ComputeMetric
           label="CoP X"
           value={formatWithUnit(aero.stability.centerOfPressureY, 3, "m", aero.validity.lift)}
           verification={typeof machAcCadexX === "number" ? `MachUpX AC X: ${machAcCadexX.toFixed(3)} m` : undefined}
         />
-        <Metric
+        <ComputeMetric
           label="Static margin"
           note={staticMarginVerdict?.text}
           noteTone={staticMarginVerdict?.tone}
           value={formatWithUnit(aero.stability.staticMarginPct, 1, "%", aero.validity.lift)}
           verification={typeof machStaticMarginCadexPct === "number" ? `MachUpX verified: ${machStaticMarginCadexPct.toFixed(1)} %` : undefined}
         />
-        <Metric label="Pitch stability" note={staticMarginVerdict?.text} noteTone={staticMarginVerdict?.tone} value={formatWithUnit(aero.stability.staticMarginPct, 1, "% SM", aero.validity.lift)} />
-        <Metric label="Roll stability" note={rollVerdict?.text} noteTone={rollVerdict?.tone} value={aero.validity.lift ? aero.stability.rollStabilityLabel : "--"} />
-        <Metric
+        <ComputeMetric label="Pitch stability" note={staticMarginVerdict?.text} noteTone={staticMarginVerdict?.tone} value={formatWithUnit(aero.stability.staticMarginPct, 1, "% SM", aero.validity.lift)} />
+        <ComputeMetric label="Roll stability" note={rollVerdict?.text} noteTone={rollVerdict?.tone} value={aero.validity.lift ? aero.stability.rollStabilityLabel : "--"} />
+        <ComputeMetric
           label="Dihedral effect"
           note={rollVerdict?.text}
           noteTone={rollVerdict?.tone}
           value={formatNumber(aero.stability.rollStabilityIndex, 2, aero.validity.lift)}
         />
-        <Metric label="Yaw stability" note={finVolumeVerdict?.text} noteTone={finVolumeVerdict?.tone} value={formatNumber(aero.stability.finVolumeCoefficient, 3, aero.validity.finVolume)} />
-        <Metric label="Horizontal tail volume" note={tailVolumeVerdict?.text} noteTone={tailVolumeVerdict?.tone} value={formatNumber(aero.stability.tailVolumeCoefficient, 3, aero.validity.tailVolume)} />
-        <Metric label="Vertical fin volume" note={finVolumeVerdict?.text} noteTone={finVolumeVerdict?.tone} value={formatNumber(aero.stability.finVolumeCoefficient, 3, aero.validity.finVolume)} />
+        <ComputeMetric label="Yaw stability" note={finVolumeVerdict?.text} noteTone={finVolumeVerdict?.tone} value={formatNumber(aero.stability.finVolumeCoefficient, 3, aero.validity.finVolume)} />
+        <ComputeMetric label="Horizontal tail volume" note={tailVolumeVerdict?.text} noteTone={tailVolumeVerdict?.tone} value={formatNumber(aero.stability.tailVolumeCoefficient, 3, aero.validity.tailVolume)} />
+        <ComputeMetric label="Vertical fin volume" note={finVolumeVerdict?.text} noteTone={finVolumeVerdict?.tone} value={formatNumber(aero.stability.finVolumeCoefficient, 3, aero.validity.finVolume)} />
       </ComputeGroup>
 
       <ComputeGroup icon={<Calculator size={17} />} title="Rotors & Inertia">
-        <Metric label="Rotors" value={`${aero.propulsion.rotorCount}`} />
-        <Metric label="Rotor disk area" value={formatWithUnit(aero.geometry.rotorDiskAreaM2, 3, "m2", aero.validity.rotor)} />
-        <Metric label="Disk loading" note={diskLoadingVerdict?.text} noteTone={diskLoadingVerdict?.tone} value={formatWithUnit(aero.propulsion.rotorDiskLoadingNpm2, 0, "N/m2", aero.validity.rotor)} />
-        <Metric label="Hover thrust / rotor" value={formatWithUnit(aero.propulsion.hoverThrustPerRotorN, 1, "N", aero.validity.rotor)} />
-        <Metric label="Hover power" value={formatPower(aero.propulsion.hoverPowerTotalW, aero.validity.rotor)} />
-        <Metric label="Roll inertia" value={`${aero.inertia.rollKgM2.toFixed(3)} kg m2`} />
-        <Metric label="Pitch inertia" value={`${aero.inertia.pitchKgM2.toFixed(3)} kg m2`} />
-        <Metric label="Yaw inertia" value={`${aero.inertia.yawKgM2.toFixed(3)} kg m2`} />
+        <ComputeMetric label="Rotors" value={`${aero.propulsion.rotorCount}`} />
+        <ComputeMetric label="Rotor disk area" value={formatWithUnit(aero.geometry.rotorDiskAreaM2, 3, "m2", aero.validity.rotor)} />
+        <ComputeMetric label="Disk loading" note={diskLoadingVerdict?.text} noteTone={diskLoadingVerdict?.tone} value={formatWithUnit(aero.propulsion.rotorDiskLoadingNpm2, 0, "N/m2", aero.validity.rotor)} />
+        <ComputeMetric label="Hover thrust / rotor" value={formatWithUnit(aero.propulsion.hoverThrustPerRotorN, 1, "N", aero.validity.rotor)} />
+        <ComputeMetric label="Hover power" value={formatPower(aero.propulsion.hoverPowerTotalW, aero.validity.rotor)} />
+        <ComputeMetric label="Roll inertia" value={`${aero.inertia.rollKgM2.toFixed(3)} kg m2`} />
+        <ComputeMetric label="Pitch inertia" value={`${aero.inertia.pitchKgM2.toFixed(3)} kg m2`} />
+        <ComputeMetric label="Yaw inertia" value={`${aero.inertia.yawKgM2.toFixed(3)} kg m2`} />
       </ComputeGroup>
 
       <section className="compute-panel compute-wide">
@@ -277,36 +344,36 @@ export function ComputeDashboard({ project, projectName }: { project: SizingProj
           <PanelHeading icon={<Gauge size={17} />} title="MachUpX Solver" />
           {machResult ? (
             <div className="compute-machupx-grid">
-              <Metric label="MachUpX alpha" value={formatOptionalWithUnit(machResult.alphaDeg, 1, "deg")} />
-              <Metric label="MachUpX CL" value={formatOptionalNumber(machResult.CL, 3)} />
-              <Metric label="MachUpX lifting CD" value={formatOptionalNumber(machResult.CD, 3)} />
-              <Metric label="MachUpX L/D" value={formatOptionalNumber(machResult.LD, 1)} />
-              <Metric label="Aero center X" value={formatOptionalWithUnit(machAcCadexX, 3, "m")} />
-              <Metric label="Aero center Z" value={formatArrayValue(machAc?.aero_center, 2, 3, "m")} />
-              <Metric label="Cm at AC" value={formatOptionalNumber(machAc?.Cm_ac, 3)} />
-              <Metric label="CL alpha" value={formatOptionalNumber(machStability?.["CL,a"], 2)} />
-              <Metric label="Pitch stability Cm alpha" value={formatOptionalNumber(machStability?.["Cm,a"], 2)} />
-              <Metric label="Roll stability Cl beta" value={formatOptionalNumber(machStability?.["Cl_w,b"] ?? machStability?.["Cl,b"], 3)} />
-              <Metric label="Yaw stability Cn beta" value={formatOptionalNumber(machStability?.["Cn_w,b"] ?? machStability?.["Cn,b"], 3)} />
-              <Metric label="MachUpX static margin" value={formatOptionalWithUnit(machStaticMarginCadexPct, 1, "%")} />
-              <Metric label="Roll damping" value={formatOptionalNumber(machDamping?.["Cl,pbar"], 3)} />
-              <Metric label="Pitch damping" value={formatOptionalNumber(machDamping?.["Cm,qbar"], 2)} />
-              <Metric label="Yaw damping" value={formatOptionalNumber(machDamping?.["Cn,rbar"], 3)} />
-              <Metric label="Max section CL" value={formatOptionalNumber(machSpanwise?.maxSectionCL, 2)} />
-              <Metric label="Max Reynolds" value={formatOptionalNumber(machSpanwise?.maxRe, 0)} />
-              <Metric label="Solved surfaces" value={machSpanwise?.surfaceCount !== undefined ? String(machSpanwise.surfaceCount) : "--"} />
-              <Metric label="Pitch trim" value={machTrim?.ok ? "available" : "no elevator control"} />
+              <ComputeMetric label="MachUpX alpha" value={formatOptionalWithUnit(machResult.alphaDeg, 1, "deg")} />
+              <ComputeMetric label="MachUpX CL" value={formatOptionalNumber(machResult.CL, 3)} />
+              <ComputeMetric label="MachUpX lifting CD" value={formatOptionalNumber(machResult.CD, 3)} />
+              <ComputeMetric label="MachUpX L/D" value={formatOptionalNumber(machResult.LD, 1)} />
+              <ComputeMetric label="Aero center X" value={formatOptionalWithUnit(machAcCadexX, 3, "m")} />
+              <ComputeMetric label="Aero center Z" value={formatArrayValue(machAc?.aero_center, 2, 3, "m")} />
+              <ComputeMetric label="Cm at AC" value={formatOptionalNumber(machAc?.Cm_ac, 3)} />
+              <ComputeMetric label="CL alpha" value={formatOptionalNumber(machStability?.["CL,a"], 2)} />
+              <ComputeMetric label="Pitch stability Cm alpha" value={formatOptionalNumber(machStability?.["Cm,a"], 2)} />
+              <ComputeMetric label="Roll stability Cl beta" value={formatOptionalNumber(machStability?.["Cl_w,b"] ?? machStability?.["Cl,b"], 3)} />
+              <ComputeMetric label="Yaw stability Cn beta" value={formatOptionalNumber(machStability?.["Cn_w,b"] ?? machStability?.["Cn,b"], 3)} />
+              <ComputeMetric label="MachUpX static margin" value={formatOptionalWithUnit(machStaticMarginCadexPct, 1, "%")} />
+              <ComputeMetric label="Roll damping" value={formatOptionalNumber(machDamping?.["Cl,pbar"], 3)} />
+              <ComputeMetric label="Pitch damping" value={formatOptionalNumber(machDamping?.["Cm,qbar"], 2)} />
+              <ComputeMetric label="Yaw damping" value={formatOptionalNumber(machDamping?.["Cn,rbar"], 3)} />
+              <ComputeMetric label="Max section CL" value={formatOptionalNumber(machSpanwise?.maxSectionCL, 2)} />
+              <ComputeMetric label="Max Reynolds" value={formatOptionalNumber(machSpanwise?.maxRe, 0)} />
+              <ComputeMetric label="Solved surfaces" value={machSpanwise?.surfaceCount !== undefined ? String(machSpanwise.surfaceCount) : "--"} />
+              <ComputeMetric label="Pitch trim" value={machTrim?.ok ? "available" : "no elevator control"} />
             </div>
           ) : (
             <div className="compute-machupx-grid">
-              <Metric label="MachUpX status" note={machAttempt?.message ?? machUpX?.message} noteTone={machAttempt ? "bad" : "caution"} value={machAttempt ? "out of range" : "running"} />
-              <Metric label="Target CL" value={formatOptionalNumber(machUpX?.targetCL ?? machAttempt?.targetCL, 3)} />
-              <Metric label="Alpha low" value={formatOptionalWithUnit(machAttempt?.low?.alphaDeg, 1, "deg")} />
-              <Metric label="CL low" value={formatOptionalNumber(machAttempt?.low?.CL, 3)} />
-              <Metric label="Alpha high" value={formatOptionalWithUnit(machAttempt?.high?.alphaDeg, 1, "deg")} />
-              <Metric label="CL high" value={formatOptionalNumber(machAttempt?.high?.CL, 3)} />
-              <Metric label="Alpha zero" value={formatOptionalWithUnit(machAttempt?.sample?.alphaDeg, 1, "deg")} />
-              <Metric label="CL at zero alpha" value={formatOptionalNumber(machAttempt?.sample?.CL, 3)} />
+              <ComputeMetric label="MachUpX status" note={machAttempt?.message ?? machUpX?.message} noteTone={machAttempt ? "bad" : "caution"} value={machAttempt ? "out of range" : "running"} />
+              <ComputeMetric label="Target CL" value={formatOptionalNumber(machUpX?.targetCL ?? machAttempt?.targetCL, 3)} />
+              <ComputeMetric label="Alpha low" value={formatOptionalWithUnit(machAttempt?.low?.alphaDeg, 1, "deg")} />
+              <ComputeMetric label="CL low" value={formatOptionalNumber(machAttempt?.low?.CL, 3)} />
+              <ComputeMetric label="Alpha high" value={formatOptionalWithUnit(machAttempt?.high?.alphaDeg, 1, "deg")} />
+              <ComputeMetric label="CL high" value={formatOptionalNumber(machAttempt?.high?.CL, 3)} />
+              <ComputeMetric label="Alpha zero" value={formatOptionalWithUnit(machAttempt?.sample?.alphaDeg, 1, "deg")} />
+              <ComputeMetric label="CL at zero alpha" value={formatOptionalNumber(machAttempt?.sample?.CL, 3)} />
             </div>
           )}
         </section>
@@ -351,12 +418,12 @@ function SpeedSweepPanel({ sweep }: { sweep: SpeedSweep }) {
       <PanelHeading icon={<Activity size={17} />} title="Speed Curves" />
       <div className="compute-graph-grid">
         <div className="compute-speed-summary">
-          <Metric label="Best endurance" value={`${sweep.bestEnduranceSpeedKt.toFixed(1)} kt`} />
-          <Metric label="Best range" value={`${sweep.bestRangeSpeedKt.toFixed(1)} kt`} />
-          <Metric label="Cruise target" value={`${sweep.cruiseSpeedKt.toFixed(1)} kt`} />
-          <Metric label="Stall estimate" value={`${sweep.stallSpeedKt.toFixed(1)} kt`} />
-          <Metric label="Min fly speed" value={`${sweep.minimumFlyableSpeedKt.toFixed(1)} kt`} />
-          <Metric label={sweep.energySource} value={`${sweep.availableEnergyWh.toFixed(0)} Wh`} />
+          <ComputeMetric label="Best endurance" value={`${sweep.bestEnduranceSpeedKt.toFixed(1)} kt`} />
+          <ComputeMetric label="Best range" value={`${sweep.bestRangeSpeedKt.toFixed(1)} kt`} />
+          <ComputeMetric label="Cruise target" value={`${sweep.cruiseSpeedKt.toFixed(1)} kt`} />
+          <ComputeMetric label="Stall estimate" value={`${sweep.stallSpeedKt.toFixed(1)} kt`} />
+          <ComputeMetric label="Min fly speed" value={`${sweep.minimumFlyableSpeedKt.toFixed(1)} kt`} />
+          <ComputeMetric label={sweep.energySource} value={`${sweep.availableEnergyWh.toFixed(0)} Wh`} />
         </div>
         <CurveChart
           color="#7dd3fc"
@@ -480,7 +547,7 @@ function DragPowerOverlayChart({
   return (
     <div className="compute-curve-card compute-overlay-card">
       <div className="compute-curve-title">
-        <span>Drag / power overlay</span>
+        <InlineInfoLabel label="Drag / power overlay" />
         <strong>{cruisePoint ? formatPower(cruisePoint.y) : "--"}</strong>
       </div>
       <div className="compute-curve-legend">
@@ -550,7 +617,7 @@ function CurveChart({
   return (
     <div className="compute-curve-card">
       <div className="compute-curve-title">
-        <span>{label}</span>
+        <InlineInfoLabel label={label} />
         <strong>{valuePoint ? formatValue(valuePoint.y) : "--"}</strong>
       </div>
       <svg aria-label={`${label} speed curve`} role="img" viewBox={`0 0 ${width} ${height}`}>
@@ -645,13 +712,12 @@ function uniqueSortedNumbers(values: number[]) {
 }
 
 function speedSweepEnergy(project: SizingProject, aero: NonNullable<ReturnType<typeof computeSketchAerodynamics>>) {
-  const reserveFactor = 1 + Math.max(project.mission.reservePct, 0) / 100;
   const batteryMassKg = project.shapes
     .filter((shape) => shape.role === "part" && shape.partType === "battery")
     .reduce((total, shape) => total + batteryMassEstimate(shape), 0);
   if (batteryMassKg > 0) {
     return {
-      availableEnergyWh: (batteryMassKg * Math.max(project.mission.batteryEnergyDensityWhKg, 1)) / reserveFactor,
+      availableEnergyWh: usableEnergyFromInstalledWh(batteryMassKg * Math.max(project.mission.batteryEnergyDensityWhKg, 1), project.mission.reservePct),
       source: "Actual usable" as const,
     };
   }
@@ -687,12 +753,26 @@ function PanelHeading({ icon, title }: { icon: ReactNode; title: string }) {
   );
 }
 
-function MetricTile({ label, value }: { label: string; value: string }) {
+function ComputeMetricTile({ info, label, value }: { info?: string; label: string; value: string }) {
+  const resolvedInfo = info ?? computeInfoFor(label);
   return (
     <div className="compute-metric-tile">
-      <span>{label}</span>
+      <span className={`metric-label ${resolvedInfo ? "has-info" : ""}`} data-info={resolvedInfo}>
+        <span>{label}</span>
+        {resolvedInfo ? <span className="metric-tooltip">{resolvedInfo}</span> : null}
+      </span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function InlineInfoLabel({ label }: { label: string }) {
+  const info = computeInfoFor(label);
+  return (
+    <span className={`metric-label ${info ? "has-info" : ""}`} data-info={info}>
+      <span>{label}</span>
+      {info ? <span className="metric-tooltip">{info}</span> : null}
+    </span>
   );
 }
 
@@ -704,18 +784,78 @@ function formatWithUnit(value: number, decimals: number, unit: string, valid = t
   return valid && Number.isFinite(value) ? `${value.toFixed(decimals)} ${unit}` : "--";
 }
 
-function formatLexStallSpeed(aero: NonNullable<ReturnType<typeof computeSketchAerodynamics>>) {
-  if (!aero.validity.lift) return "--";
-  const cleanKt = aero.aerodynamics.stallSpeedCleanMS / 0.514444;
-  const lexKt = aero.aerodynamics.stallSpeedMS / 0.514444;
-  if (!aero.lex.active) return `${lexKt.toFixed(1)} kt`;
-  return `${cleanKt.toFixed(1)} kt clean / ${lexKt.toFixed(1)} kt LEX`;
-}
-
 function formatLexClMax(aero: NonNullable<ReturnType<typeof computeSketchAerodynamics>>) {
   if (!aero.validity.lift) return "--";
-  if (!aero.lex.active) return aero.aerodynamics.maxLiftCoefficientClean.toFixed(2);
-  return `${aero.aerodynamics.maxLiftCoefficientClean.toFixed(2)} clean / ${aero.aerodynamics.maxLiftCoefficientWithLex.toFixed(2)} LEX`;
+  if (!aero.lex.active && !aero.rotorBlownWing.active && !aero.wingevon.active) return aero.aerodynamics.maxLiftCoefficientClean.toFixed(2);
+  return `${aero.aerodynamics.maxLiftCoefficientClean.toFixed(2)} clean / ${aero.aerodynamics.maxLiftCoefficientWithLex.toFixed(2)} applied`;
+}
+
+function formatStallAoA(aero: NonNullable<ReturnType<typeof computeSketchAerodynamics>>) {
+  if (!aero.validity.lift) return "--";
+  const clean = aero.aerodynamics.stallAngleCleanDeg;
+  const applied = aero.aerodynamics.stallAngleDeg;
+  if (!aero.lex.active && !aero.rotorBlownWing.active && !aero.wingevon.active) return `${applied.toFixed(1)} deg`;
+  return `${clean.toFixed(1)} deg / ${applied.toFixed(1)} deg`;
+}
+
+function flightRegimeFor(aero: NonNullable<ReturnType<typeof computeSketchAerodynamics>>) {
+  if (!aero.validity.lift) return { label: "--", tone: undefined as undefined };
+  const required = aero.aerodynamics.liftCoefficient;
+  const clean = Math.max(aero.aerodynamics.maxLiftCoefficientClean, 0.001);
+  const highLift = Math.max(aero.aerodynamics.maxLiftCoefficientWithLex, clean);
+  if (required <= clean) return { label: "Flying", tone: "good" as const };
+  if (required <= highLift) return { label: "High AoA", tone: "caution" as const };
+  return { label: "Stalled", tone: "bad" as const };
+}
+
+function formatRequiredClMaxForStall(aero: NonNullable<ReturnType<typeof computeSketchAerodynamics>>, speedKt: number) {
+  if (!aero.validity.lift || aero.geometry.wingAreaM2 <= 0) return "--";
+  const speedMS = speedKt * 0.514444;
+  const requiredClMax = (2 * aero.mass.totalMassKg * 9.80665) / Math.max(aero.assumptions.rhoKgM3 * speedMS * speedMS * aero.geometry.wingAreaM2, 0.001);
+  const appliedClMax = Math.max(aero.aerodynamics.maxLiftCoefficientWithLex, 0.001);
+  const margin = appliedClMax / requiredClMax;
+  return `${requiredClMax.toFixed(2)} need / ${margin.toFixed(2)}x`;
+}
+
+function clMaxNote(aero: NonNullable<ReturnType<typeof computeSketchAerodynamics>>) {
+  const notes = [
+    aero.wingevon.active ? `Wingevon ${(aero.wingevon.areaRatio * 100).toFixed(0)}% area` : "",
+    aero.lex.active ? `LEX over ${aero.lex.influencedAreaM2.toFixed(3)} m2` : "",
+    aero.rotorBlownWing.active ? `rotor flow over ${aero.rotorBlownWing.blownAreaM2.toFixed(3)} m2` : "",
+  ].filter(Boolean);
+  return notes.length ? notes.join("; ") : undefined;
+}
+
+function buildStallMarginAdders(aero: NonNullable<ReturnType<typeof computeSketchAerodynamics>>) {
+  if (!aero.validity.lift || aero.aerodynamics.stallSpeedCleanMS <= 0) return undefined;
+  const cleanClMax = Math.max(aero.aerodynamics.maxLiftCoefficientClean, 0.001);
+  const lexClMax = Math.max(cleanClMax + (aero.lex.active ? aero.lex.deltaMaxLiftCoefficient : 0), 0.001);
+  const blownClMax = Math.max(cleanClMax + (aero.rotorBlownWing.active ? aero.rotorBlownWing.deltaMaxLiftCoefficient : 0), 0.001);
+  const wingevonClMax = Math.max(cleanClMax + (aero.wingevon.active ? aero.wingevon.deltaMaxLiftCoefficient : 0), 0.001);
+  const appliedClMax = Math.max(aero.aerodynamics.maxLiftCoefficientWithLex, cleanClMax);
+  const cleanStallKt = aero.aerodynamics.stallSpeedCleanMS / 0.514444;
+  const stallForClMax = (clMax: number) => cleanStallKt * Math.sqrt(cleanClMax / Math.max(clMax, 0.001));
+  const lexStallKt = stallForClMax(lexClMax);
+  const blownStallKt = stallForClMax(blownClMax);
+  const wingevonStallKt = stallForClMax(wingevonClMax);
+  const appliedStallKt = aero.aerodynamics.stallSpeedMS > 0
+    ? aero.aerodynamics.stallSpeedMS / 0.514444
+    : stallForClMax(appliedClMax);
+  const cleanCruiseMargin = cleanClMax / Math.max(aero.aerodynamics.liftCoefficient, 0.001);
+  const appliedCruiseMargin = appliedClMax / Math.max(aero.aerodynamics.liftCoefficient, 0.001);
+
+  return {
+    appliedCruiseMargin,
+    appliedStallKt,
+    blownReductionKt: Math.max(0, cleanStallKt - blownStallKt),
+    cleanCruiseMargin,
+    cleanStallKt,
+    highAoABandKt: Math.max(0, cleanStallKt - appliedStallKt),
+    lexReductionKt: Math.max(0, cleanStallKt - lexStallKt),
+    marginGain: Math.max(0, appliedCruiseMargin - cleanCruiseMargin),
+    totalReductionKt: Math.max(0, cleanStallKt - appliedStallKt),
+    wingevonReductionKt: Math.max(0, cleanStallKt - wingevonStallKt),
+  };
 }
 
 function formatOptionalNumber(value: number | null | undefined, decimals: number) {

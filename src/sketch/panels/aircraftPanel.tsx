@@ -59,10 +59,12 @@ export function EngineComputePanel() {
 
 export function AircraftPanel({
   analysis,
+  gRating,
   shapes,
   onDeleteAircraft,
 }: {
   analysis?: SizingAnalysis;
+  gRating?: number;
   shapes: SizeShape[];
   onDeleteAircraft: () => void;
 }) {
@@ -70,7 +72,7 @@ export function AircraftPanel({
   const partCounts = countParts(shapes);
   const tailplaneSize = computeTailplaneSize(shapes);
   const wingSummary = useMemo(() => computeNamedLiftingSurfaceSummary(shapes, "wing"), [shapes]);
-  const massBreakdown = useMemo(() => computeMassBreakdown(shapes), [shapes]);
+  const massBreakdown = useMemo(() => computeMassBreakdown(shapes, gRating), [gRating, shapes]);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   function handleDeleteAircraft() {
     if (!deleteConfirming) {
@@ -134,16 +136,16 @@ export function AircraftPanel({
   );
 }
 
-function computeMassBreakdown(shapes: SizeShape[]) {
+function computeMassBreakdown(shapes: SizeShape[], gRating?: number) {
   return shapes.reduce(
     (totals, shape) => {
       if (shape.role === "body") {
-        const massKg = bodyMassEstimate(shape, shapes);
+        const massKg = bodyMassEstimate(shape, shapes, gRating);
         totals.bodiesKg += massKg;
         totals.totalKg += massKg;
       }
       if (shape.role === "liftingSurface") {
-        const massKg = liftingSurfaceMassEstimate(shape, shapes);
+        const massKg = liftingSurfaceMassEstimate(shape, shapes, gRating);
         totals.liftingKg += massKg;
         totals.totalKg += massKg;
       }
@@ -167,6 +169,7 @@ function computeNamedLiftingSurfaceSummary(shapes: SizeShape[], name: "wing") {
   const sections = shapes.filter((shape) => {
     if (shape.role !== "liftingSurface") return false;
     const kind = shape.liftingSurfaceKind ?? "wing";
+    if (name === "wing" && kind === "wingevon") return true;
     return kind === name || shape.label.toLowerCase().includes(name);
   });
   let areaM2 = 0;

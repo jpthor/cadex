@@ -40,6 +40,7 @@ export const motorSamples: MotorSample[] = [
 export type PropellerSample = {
   diameterIn: number;
   id: string;
+  maxRpm?: number;
   name: string;
   peakEfficiency: number;
   peakEfficiencyMph: number;
@@ -72,11 +73,17 @@ export const propellerSamples: PropellerSample[] = [
   { id: "uav-40x18", name: "UAV 40x18 CF", diameterIn: 40, pitchIn: 18, staticRpm: 2600, staticThrustN: 520, staticPowerW: 12500, peakEfficiency: 0.76, peakEfficiencyRpm: 3600, peakEfficiencyMph: 64, peakPowerW: 22000, peakThrustN: 410, source: "scaled large UAV carbon prop reference" },
   { id: "uav-48x20", name: "UAV 48x20 CF", diameterIn: 48, pitchIn: 20, staticRpm: 2100, staticThrustN: 760, staticPowerW: 18500, peakEfficiency: 0.77, peakEfficiencyRpm: 3000, peakEfficiencyMph: 62, peakPowerW: 31000, peakThrustN: 590, source: "scaled large UAV carbon prop reference" },
   { id: "uav-52x22", name: "UAV 52x22 CF", diameterIn: 52, pitchIn: 22, staticRpm: 1900, staticThrustN: 910, staticPowerW: 23500, peakEfficiency: 0.77, peakEfficiencyRpm: 2700, peakEfficiencyMph: 62, peakPowerW: 38000, peakThrustN: 700, source: "scaled large UAV carbon prop reference" },
-  { id: "uav-56x24", name: "UAV 56x24 CF", diameterIn: 56, pitchIn: 24, staticRpm: 1700, staticThrustN: 1080, staticPowerW: 30000, peakEfficiency: 0.78, peakEfficiencyRpm: 2400, peakEfficiencyMph: 61, peakPowerW: 47000, peakThrustN: 820, source: "scaled large UAV carbon prop reference" },
+  { id: "hobbywing-mfp-56x20", name: "Hobbywing MFP 56x20", diameterIn: 56, pitchIn: 20, maxRpm: 2400, staticRpm: 2478, staticThrustN: 60077 * 0.00980665, staticPowerW: 9064.4, peakEfficiency: 0.78, peakEfficiencyRpm: 2000, peakEfficiencyMph: 60, peakPowerW: 4891.7, peakThrustN: 40351 * 0.00980665, source: "Hobbywing X13 G2 69V MFP 56x20 measured thrust table" },
+  { id: "uav-56x24", name: "UAV 56x24 CF", diameterIn: 56, pitchIn: 24, staticRpm: 1700, staticThrustN: 1080, staticPowerW: 30000, peakEfficiency: 0.78, peakEfficiencyRpm: 2400, peakEfficiencyMph: 61, peakPowerW: 47000, peakThrustN: 820, source: "scaled large UAV carbon prop reference - estimate" },
   { id: "uav-56x30", name: "UAV 56x30 CF", diameterIn: 56, pitchIn: 30, staticRpm: 1900, staticThrustN: 1120, staticPowerW: 31500, peakEfficiency: 0.79, peakEfficiencyRpm: 2700, peakEfficiencyMph: 74, peakPowerW: 52000, peakThrustN: 840, source: "Maytech 56x30 foldable prop reference, scaled performance" },
-  { id: "fw-48x48", name: "Fixed-wing 48x48 CF", diameterIn: 48, pitchIn: 48, staticRpm: 3400, staticThrustN: 720, staticPowerW: 26000, peakEfficiency: 0.82, peakEfficiencyRpm: 3600, peakEfficiencyMph: 150, peakPowerW: 36000, peakThrustN: 560, source: "Sensenich/Ultra-Prop fixed-wing UAV high-speed range, estimated" },
-  { id: "fw-52x56", name: "Fixed-wing 52x56 CF", diameterIn: 52, pitchIn: 56, staticRpm: 3200, staticThrustN: 820, staticPowerW: 28500, peakEfficiency: 0.82, peakEfficiencyRpm: 3400, peakEfficiencyMph: 165, peakPowerW: 42000, peakThrustN: 620, source: "Sensenich/Ultra-Prop fixed-wing UAV high-speed range, estimated" },
-  { id: "fw-56x60", name: "Fixed-wing 56x60 CF", diameterIn: 56, pitchIn: 60, staticRpm: 3000, staticThrustN: 920, staticPowerW: 30000, peakEfficiency: 0.81, peakEfficiencyRpm: 3200, peakEfficiencyMph: 175, peakPowerW: 48000, peakThrustN: 700, source: "Sensenich/Ultra-Prop fixed-wing UAV high-speed range, estimated" },
+  { id: "transition-52x32", name: "Transition 52x32 CF", diameterIn: 52, pitchIn: 32, staticRpm: 2262, staticThrustN: 880, staticPowerW: 24970, peakEfficiency: 0.785, peakEfficiencyRpm: 2917, peakEfficiencyMph: 92, peakPowerW: 39176, peakThrustN: 676, source: "interpolated between UAV 52x22 and fixed-wing 52x56 references" },
+  { id: "transition-52x42", name: "Transition 52x42 CF", diameterIn: 52, pitchIn: 42, staticRpm: 2644, staticThrustN: 854, staticPowerW: 26441, peakEfficiency: 0.797, peakEfficiencyRpm: 3118, peakEfficiencyMph: 123, peakPowerW: 40353, peakThrustN: 653, source: "interpolated between UAV 52x22 and fixed-wing 52x56 references" },
+  { id: "transition-56x36", name: "Transition 56x36 CF", diameterIn: 56, pitchIn: 36, staticRpm: 2120, staticThrustN: 1080, staticPowerW: 31200, peakEfficiency: 0.794, peakEfficiencyRpm: 2800, peakEfficiencyMph: 94, peakPowerW: 51200, peakThrustN: 812, source: "interpolated between UAV 56x30 and fixed-wing 56x60 references" },
+  { id: "transition-56x42", name: "Transition 56x42 CF", diameterIn: 56, pitchIn: 42, staticRpm: 2340, staticThrustN: 1040, staticPowerW: 30900, peakEfficiency: 0.798, peakEfficiencyRpm: 2900, peakEfficiencyMph: 114, peakPowerW: 50400, peakThrustN: 784, source: "interpolated between UAV 56x30 and fixed-wing 56x60 references" },
+  { id: "transition-56x48", name: "Transition 56x48 CF", diameterIn: 56, pitchIn: 48, staticRpm: 2560, staticThrustN: 1000, staticPowerW: 30600, peakEfficiency: 0.802, peakEfficiencyRpm: 3000, peakEfficiencyMph: 135, peakPowerW: 49600, peakThrustN: 756, source: "interpolated between UAV 56x30 and fixed-wing 56x60 references" },
+  { id: "fw-48x48", name: "Fixed-wing 48x48 CF", diameterIn: 48, pitchIn: 48, staticRpm: 3400, staticThrustN: 720, staticPowerW: 26000, peakEfficiency: 0.82, peakEfficiencyRpm: 3600, peakEfficiencyMph: 150, peakPowerW: 36000, peakThrustN: 560, source: "fixed-wing high-pitch prop estimate; replace with measured prop/motor table before design freeze" },
+  { id: "fw-52x56", name: "Fixed-wing 52x56 CF", diameterIn: 52, pitchIn: 56, staticRpm: 3200, staticThrustN: 820, staticPowerW: 28500, peakEfficiency: 0.82, peakEfficiencyRpm: 3400, peakEfficiencyMph: 165, peakPowerW: 42000, peakThrustN: 620, source: "fixed-wing high-pitch prop estimate; replace with measured prop/motor table before design freeze" },
+  { id: "fw-56x60", name: "Fixed-wing 56x60 CF", diameterIn: 56, pitchIn: 60, staticRpm: 3000, staticThrustN: 920, staticPowerW: 30000, peakEfficiency: 0.81, peakEfficiencyRpm: 3200, peakEfficiencyMph: 175, peakPowerW: 48000, peakThrustN: 700, source: "fixed-wing high-pitch prop estimate; replace with measured prop/motor table before design freeze" },
 ];
 
 export type BatteryInputs = {
@@ -118,6 +125,8 @@ export const batterySamples: BatterySample[] = [
   { id: "pack-24s-50ah-10c", name: "24S 50Ah 10C", cells: 24, capacityAh: 50, cRating: 10, massKg: 23.4 },
   { id: "pack-24s-65ah-8c", name: "24S 65Ah 8C", cells: 24, capacityAh: 65, cRating: 8, massKg: 30.0 },
   { id: "pack-24s-80ah-6c", name: "24S 80Ah 6C", cells: 24, capacityAh: 80, cRating: 6, massKg: 37.5 },
+  { id: "pack-24s-80ah-8c", name: "24S 80Ah 8C", cells: 24, capacityAh: 80, cRating: 8, massKg: 39.5 },
+  { id: "pack-24s-80ah-12c", name: "24S 80Ah 12C", cells: 24, capacityAh: 80, cRating: 12, massKg: 43.5 },
 ];
 
 export type RotorDefinition = {
@@ -211,21 +220,28 @@ export function computePropulsionSizing(
   const safeBatteryEnergyDensityWhKg = Math.max(batteryEnergyDensityWhKg, 0);
   const safeCapacityAh = batteryPack ? Math.max(batteryPack.capacityAh, 0) : (safeBatteryMassKg * safeBatteryEnergyDensityWhKg) / safeVoltage;
   const safeCRating = Math.max(batteryPack?.cRating ?? battery.cRating, 0);
+  const batteryMaxCurrentA = safeCapacityAh * safeCRating;
+  const batteryMaxPowerW = batteryMaxCurrentA * safeVoltage;
   const rotorPitchM = Math.max(propeller?.pitchIn ?? inputs.rotorPitchIn, 0) * 0.0254;
   const propellerDiameterM = propeller ? propeller.diameterIn * 0.0254 : 0;
   const noLoadRpm = motor ? motor.kvRpmV * safeVoltage : 5200;
   const motorVoltageLoadedRpm = motor ? noLoadRpm * 0.82 : noLoadRpm;
+  const maxShaftPowerPerMotorW = Math.max(0, Math.min(
+    motor?.continuousPowerW ?? Number.POSITIVE_INFINITY,
+    batteryMaxPowerW > 0 ? batteryMaxPowerW / safeMotorCount : 0,
+  ));
   const motorPowerLimitedRpm =
     motor && propeller && propeller.staticPowerW > 0
-      ? propeller.staticRpm * Math.pow(Math.max(motor.continuousPowerW, 1) / propeller.staticPowerW, 1 / 3)
+      ? propeller.staticRpm * Math.pow(Math.max(maxShaftPowerPerMotorW, 1) / propeller.staticPowerW, 1 / 3)
       : motorVoltageLoadedRpm;
-  const safeRpm = Math.max(Math.min(motorVoltageLoadedRpm, motorPowerLimitedRpm), 0);
+  const propellerMaxRpm = propeller?.maxRpm && propeller.maxRpm > 0 ? propeller.maxRpm : Number.POSITIVE_INFINITY;
+  const safeRpm = Math.max(Math.min(motorVoltageLoadedRpm, motorPowerLimitedRpm, propellerMaxRpm), 0);
   const rpmRatio = propeller && propeller.staticRpm > 0 ? safeRpm / propeller.staticRpm : 0;
   const availableStaticThrustPerMotorN = propeller ? propeller.staticThrustN * Math.pow(rpmRatio, 2) : 0;
   const fallbackThrustPerMotorN = safeMassKg * 9.80665 * 1.6 / safeMotorCount;
   const thrustPerMotorN = propeller ? availableStaticThrustPerMotorN : fallbackThrustPerMotorN;
   const totalThrustN = thrustPerMotorN * safeMotorCount;
-  const availableThrustToWeight = totalThrustN / Math.max(safeMassKg * 9.80665, 0.001);
+  const staticThrustToWeight = totalThrustN / Math.max(safeMassKg * 9.80665, 0.001);
   const requiredHoverThrustPerMotorN = safeMassKg * 9.80665 / safeMotorCount;
   const referenceRotorDiameterM = propellerDiameterM || sizingRotorDiameterM;
   const sizingRotorAreaM2 = referenceRotorDiameterM > 0 ? Math.PI * Math.pow(referenceRotorDiameterM / 2, 2) : 0;
@@ -241,36 +257,61 @@ export function computePropulsionSizing(
   const inducedVelocityMS = Math.sqrt(thrustPerMotorN / (2 * 1.225 * Math.max(diskAreaPerRotorM2, 0.001)));
   const availableStaticPowerPerMotorW = propeller ? propeller.staticPowerW * Math.pow(rpmRatio, 3) : 0;
   const powerPerMotorW = propeller ? availableStaticPowerPerMotorW : (thrustPerMotorN * inducedVelocityMS) / safeEfficiency;
+  const requiredHoverInducedVelocityMS = Math.sqrt(requiredHoverThrustPerMotorN / (2 * 1.225 * Math.max(diskAreaPerRotorM2, 0.001)));
+  const idealHoverPowerPerMotorW = requiredHoverThrustPerMotorN * requiredHoverInducedVelocityMS;
+  const hoverPowerPerMotorW = propeller && availableStaticThrustPerMotorN > 0 && availableStaticPowerPerMotorW > 0
+    ? availableStaticPowerPerMotorW * Math.pow(requiredHoverThrustPerMotorN / Math.max(availableStaticThrustPerMotorN, 0.001), 1.5)
+    : idealHoverPowerPerMotorW / Math.max(safeEfficiency, 0.001);
+  const hoverPropEfficiency = Math.min(0.86, Math.max(0.2, idealHoverPowerPerMotorW / Math.max(hoverPowerPerMotorW, 0.001)));
   const totalPowerW = powerPerMotorW * safeMotorCount;
   const currentPerMotorA = powerPerMotorW / safeVoltage;
   const takeoffCurrentA = totalPowerW / safeVoltage;
   const cruisePowerW = totalPowerW * 0.45;
   const cruiseCurrentA = cruisePowerW / safeVoltage;
-  const batteryMaxCurrentA = safeCapacityAh * safeCRating;
   const takeoffCapacityAh = safeCapacityAh * 0.2;
   const cruiseCapacityAh = safeCapacityAh * 0.8;
   const takeoffMin = takeoffCurrentA > 0 ? (takeoffCapacityAh / takeoffCurrentA) * 60 : 0;
   const cruiseMin = cruiseCurrentA > 0 ? (cruiseCapacityAh / cruiseCurrentA) * 60 : 0;
   const usefulPitchSpeedMS = pitchSpeedMS * safeEfficiency;
+  const cruiseEstimateMS = usefulPitchSpeedMS * 0.75;
+  const peakEfficiencySpeedMS = propeller ? propeller.peakEfficiencyMph * 0.44704 : cruiseEstimateMS;
+  const cruiseSpeedMismatch = peakEfficiencySpeedMS > 0 ? Math.abs(cruiseEstimateMS - peakEfficiencySpeedMS) / peakEfficiencySpeedMS : 0;
+  const cruisePropEfficiency = propeller
+    ? Math.min(0.9, Math.max(0.25, propeller.peakEfficiency * (1 - Math.min(0.32, cruiseSpeedMismatch * 0.28))))
+    : safeEfficiency;
   const staticThrustPerMotorN = propeller
     ? availableStaticThrustPerMotorN
     : Math.cbrt(Math.max(0, 2 * 1.225 * diskAreaPerRotorM2 * Math.pow(powerPerMotorW * safeEfficiency, 2)));
   const staticThrustTotalN = staticThrustPerMotorN * safeMotorCount;
+  // Momentum theory hover limit: P_actual = T^(3/2) / (FM * sqrt(2 rho A)).
+  // Solve for T using the motor/battery-limited shaft power and selected prop hover figure of merit.
+  const hoverPowerLimitedThrustPerMotorN = Math.cbrt(Math.max(0, 2 * 1.225 * diskAreaPerRotorM2 * Math.pow(powerPerMotorW * hoverPropEfficiency, 2)));
+  const adjustedTakeoffThrustPerMotorN = Math.min(staticThrustPerMotorN, hoverPowerLimitedThrustPerMotorN);
+  const adjustedTakeoffThrustTotalN = adjustedTakeoffThrustPerMotorN * safeMotorCount;
+  const adjustedTakeoffThrustToWeight = adjustedTakeoffThrustTotalN / Math.max(safeMassKg * 9.80665, 0.001);
   return {
     currentPerMotorA,
-    availableThrustToWeight,
+    adjustedTakeoffThrustPerMotorN,
+    adjustedTakeoffThrustToWeight,
+    adjustedTakeoffThrustTotalKgf: adjustedTakeoffThrustTotalN / 9.80665,
+    adjustedTakeoffThrustTotalN,
+    availableThrustToWeight: adjustedTakeoffThrustToWeight,
     batteryMaxCurrentA,
+    batteryMaxPowerW,
     batteryCapacityAh: safeCapacityAh,
     batteryMassKg: safeBatteryMassKg,
     cruiseSpeedHighMS: usefulPitchSpeedMS * 0.85,
     cruiseSpeedLowMS: usefulPitchSpeedMS * 0.65,
     cruiseCurrentA,
+    cruisePropEfficiency,
     diskAreaPerRotorM2,
     effectiveDiskLoadingNpm2: safeDiskLoading,
     effectivePropEfficiency: safeEfficiency,
+    hoverPropEfficiency,
     motorLoadedRpm: safeRpm,
     motorNoLoadRpm: noLoadRpm,
     motorPowerLimitedRpm,
+    maxShaftPowerPerMotorW,
     propellerDataSource: propeller?.source,
     propellerStaticPowerPerMotorW: availableStaticPowerPerMotorW,
     propellerStaticThrustPerMotorN: availableStaticThrustPerMotorN,
@@ -283,6 +324,7 @@ export function computePropulsionSizing(
     rotorPitchM,
     staticThrustPerMotorKgf: staticThrustPerMotorN / 9.80665,
     staticThrustPerMotorN,
+    staticThrustToWeight,
     staticThrustTotalKgf: staticThrustTotalN / 9.80665,
     staticThrustTotalN,
     takeoffCurrentA,

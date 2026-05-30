@@ -839,11 +839,12 @@
       "sizingReferenceShapes": [],
       "sketchCanvasView": {
         "height": 874,
-        "originX": 204.2129102698273,
-        "originY": 127.42185280762048,
-        "scale": 148.8171975101266,
+        "originX": 160.9050155841386,
+        "originY": 145.8768511739881,
+        "scale": 190,
         "width": 843
-      }
+      },
+      "sketchScaleUnit": "cm"
     },
     "timeline": [
       {
@@ -1696,11 +1697,12 @@
     "sizingReferenceShapes": [],
     "sketchCanvasView": {
       "height": 874,
-      "originX": 204.2129102698273,
-      "originY": 127.42185280762048,
-      "scale": 148.8171975101266,
+      "originX": 160.9050155841386,
+      "originY": 145.8768511739881,
+      "scale": 190,
       "width": 843
-    }
+    },
+    "sketchScaleUnit": "cm"
   },
-  "updatedAt": 1780049583882
+  "updatedAt": 1780129074000
 }

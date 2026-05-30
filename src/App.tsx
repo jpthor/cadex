@@ -37,12 +37,16 @@ import { ProjectBrowser } from "./components/browser/ProjectBrowser";
 import { CadCanvas } from "./components/canvas/CadCanvas";
 import { toDisplayUnit } from "./components/browser/units";
 import { ComputeDashboard } from "./components/compute/ComputeDashboard";
+import { FinalDashboard } from "./components/final/FinalDashboard";
+import { EnduranceDashboard } from "./components/jet/EnduranceDashboard";
+import { IJetDashboard } from "./components/jet/IJetDashboard";
 import { ProjectMenu } from "./components/design/ProjectMenu";
 import { JetDashboard } from "./components/jet/JetDashboard";
 import { MaxDashboard } from "./components/max/MaxDashboard";
 import { TimelineItem } from "./components/design/TimelineItem";
 import { PropulsionWorkspace } from "./components/propulsion/propulsionPanels";
 import { SizingDashboard } from "./components/sizing/sizingPanels";
+import { DependencyInfoBar } from "./components/ui/DependencyInfoBar";
 import { FormatMenu } from "./components/ui/FormatMenu";
 import { PanelTitle } from "./components/ui/PanelTitle";
 import { SettingsDialog } from "./components/ui/SettingsDialog";
@@ -78,7 +82,8 @@ function formatSelectedContext(selectedGeometry: SelectedGeometry | null) {
 
 function loadStoredAppMode(): AppMode {
   const storedMode = localStorage.getItem(appModeStorageKey);
-  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "propulsion" || storedMode === "jet" || storedMode === "max" || storedMode === "design"
+  if (storedMode === "design") return "final";
+  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "propulsion" || storedMode === "jet" || storedMode === "endurance" || storedMode === "ijet" || storedMode === "final" || storedMode === "max"
     ? storedMode
     : "sizing";
 }
@@ -750,11 +755,17 @@ export default function App() {
             <button className={appMode === "jet" ? "active" : ""} onClick={() => setAppMode("jet")}>
               Jet
             </button>
+            <button className={appMode === "endurance" ? "active" : ""} onClick={() => setAppMode("endurance")}>
+              Endurance
+            </button>
+            <button className={appMode === "ijet" ? "active" : ""} onClick={() => setAppMode("ijet")}>
+              iJet
+            </button>
             <button className={appMode === "max" ? "active" : ""} onClick={() => setAppMode("max")}>
               Max
             </button>
-            <button className={appMode === "design" ? "active" : ""} onClick={() => setAppMode("design")}>
-              Design
+            <button className={appMode === "final" ? "active" : ""} onClick={() => setAppMode("final")}>
+              Final
             </button>
           </div>
         </div>
@@ -794,11 +805,12 @@ export default function App() {
             </button>
           </>
         ) : null}
-        <div className="status-pill">{status}</div>
         <button className="tool-button toolbar-settings-button" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings">
           <Settings size={18} />
         </button>
       </header>
+
+      <DependencyInfoBar mode={appMode} />
 
       {appMode === "design" ? (
         <>
@@ -926,13 +938,39 @@ export default function App() {
             onSizingProjectChange={updateSizingProject}
           />
         </>
-      ) : appMode === "max" ? (
+      ) : appMode === "endurance" ? (
         <>
-          <MaxDashboard
+          <EnduranceDashboard
             aircraftMassKg={liveSizingAnalysis?.totalMassKg ?? 0}
             batteryEnergyDensityWhKg={sizingProject.mission.batteryEnergyDensityWhKg}
             propulsionState={propulsionState}
             sizingProject={sizingProject}
+          />
+        </>
+      ) : appMode === "ijet" ? (
+        <>
+          <IJetDashboard
+            aircraftMassKg={liveSizingAnalysis?.totalMassKg ?? 0}
+            batteryEnergyDensityWhKg={sizingProject.mission.batteryEnergyDensityWhKg}
+            propulsionState={propulsionState}
+            sizingProject={sizingProject}
+          />
+        </>
+      ) : appMode === "final" ? (
+        <>
+          <FinalDashboard
+            aircraftMassKg={liveSizingAnalysis?.totalMassKg ?? 0}
+            batteryEnergyDensityWhKg={sizingProject.mission.batteryEnergyDensityWhKg}
+            propulsionState={propulsionState}
+            projectName={activeAircraftProject?.name ?? project.name}
+            sizingProject={sizingProject}
+          />
+        </>
+      ) : appMode === "max" ? (
+        <>
+          <MaxDashboard
+            project={sizingProject}
+            onProjectChange={updateSizingProject}
           />
           <footer className="timeline size-footer">
             <div className="timeline-title">
@@ -967,6 +1005,9 @@ export default function App() {
           onModelChange={setModel}
         />
       ) : null}
+      <div className="app-status-bar" role="status" aria-live="polite">
+        {status}
+      </div>
     </div>
   );
 }

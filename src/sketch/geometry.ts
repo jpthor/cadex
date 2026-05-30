@@ -8,6 +8,7 @@ import type {
   SizeCadGeometry,
   SizeSnapAttachment,
   SizingProject,
+  LiftingSurfaceKind,
 } from "../sizing/index.ts";
 import {
   inferredBatteryThicknessM,
@@ -658,7 +659,7 @@ export function cadGeometryForLiftingSurface(shape: SizeShape, shapes: SizeShape
     spanM,
     rootChordM,
     tipChordM,
-    airfoil: shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012",
+    airfoil: shape.airfoil ?? shape.airfoilStations?.root ?? "NACA 0012",
     incidenceDeg: shape.incidenceStationsDeg?.root ?? shape.incidenceDeg ?? 0,
   };
 }
@@ -1125,7 +1126,7 @@ export function smootherStep(value: number) {
 export function frontProjectionShape(shape: SizeShape, progress: number, shapes: SizeShape[]): SizeShape {
   if (shape.sketchViewMode === "side") return sideAuthoredFrontProjection(shape, shapes);
   if (shape.role === "referenceLine") return topAuthoredReferenceFrontProjection(shape, progress, shapes);
-  if (shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing" && liftingSurfaceHasDihedral(shape, shapes)) {
+  if (shape.role === "liftingSurface" && isWingLikeKind(shape.liftingSurfaceKind ?? "wing") && liftingSurfaceHasDihedral(shape, shapes)) {
     return { ...shape, points: dihedralWingFrontSection(shape, shapes, progress) };
   }
   if (!referenceRoles.includes(shape.role) && progress >= 1) return projectCadGeometryShape(shape, shapes, "front");
@@ -1300,6 +1301,10 @@ export function projectCadGeometryShape(shape: SizeShape, shapes: SizeShape[], v
       : withProjectedPoints(shape, applyPointXOffset(rotorSideSection({ ...shape, points: canonicalPartPoints(shape) }, 1, shapes, sideProjectionFrame(shapes)), geometry.centerM[2]), viewMode);
   }
   return { ...shape, points: [] };
+}
+
+function isWingLikeKind(kind: LiftingSurfaceKind) {
+  return kind === "wing" || kind === "wingevon";
 }
 
 function projectFlatLexShape(shape: SizeShape, shapes: SizeShape[], viewMode: "front" | "side"): SizeShape {
@@ -1514,16 +1519,17 @@ export function bodySideSectionAroundPlane(shape: SizeShape, plane: SizeShape, p
 
 export function liftingSurfaceSideSection(shape: SizeShape, progress: number, frame: SideProjectionFrame) {
   const bounds = shapeBounds(shape);
+  const airfoil = shape.airfoil ?? shape.airfoilStations?.root ?? "NACA 0012";
   const stations = [
-    { t: 0, airfoil: shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012", incidenceDeg: shape.incidenceStationsDeg?.root ?? shape.incidenceDeg ?? 0 },
-    { t: 1, airfoil: shape.airfoilStations?.tip ?? shape.airfoil ?? "NACA 0012", incidenceDeg: shape.incidenceStationsDeg?.tip ?? shape.incidenceDeg ?? 0 },
+    { t: 0, incidenceDeg: shape.incidenceStationsDeg?.root ?? shape.incidenceDeg ?? 0 },
+    { t: 1, incidenceDeg: shape.incidenceStationsDeg?.tip ?? shape.incidenceDeg ?? 0 },
   ];
   return stations.flatMap((station, index) => {
     const stationX = bounds.minX + (bounds.maxX - bounds.minX) * station.t;
     const extents = chordExtentsAtX(shape.points, stationX) ?? { minY: bounds.minY, maxY: bounds.maxY };
     const leadingY = extents.maxY;
     const chordM = extents.minY - extents.maxY;
-    return airfoilSideSection(leadingY, chordM, station.airfoil, progress, frame, station.incidenceDeg, index > 0);
+    return airfoilSideSection(leadingY, chordM, airfoil, progress, frame, station.incidenceDeg, index > 0);
   });
 }
 
@@ -2029,9 +2035,7 @@ export function pointSetBounds(pointSets: SizePoint[][]) {
 }
 
 export function airfoilThicknessRatioAtStation(shape: SizeShape, stationT: number) {
-  const root = airfoilThicknessRatio(shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012");
-  const tip = airfoilThicknessRatio(shape.airfoilStations?.tip ?? shape.airfoil ?? "NACA 0012");
-  return lerp(root, tip, clamp(stationT, 0, 1));
+  return airfoilThicknessRatio(shape.airfoil ?? shape.airfoilStations?.root ?? "NACA 0012");
 }
 
 export function airfoilThicknessRatio(name: string) {

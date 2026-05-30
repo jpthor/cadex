@@ -67,7 +67,7 @@ export const scaleUnits = ["mm", "cm", "m"] as const;
 export const referenceRoles: SizeShapeRole[] = ["referenceLine", "mirrorPlane"];
 export const airfoilOptions = ["NACA 0012", "NACA 0010", "NACA 2412", "NACA 4412", "Clark Y", "MH 32", "Selig S1223"];
 export function defaultAirfoilForLiftingSurface(kind: LiftingSurfaceKind) {
-  if (kind === "wing") return "NACA 2412";
+  if (kind === "wing" || kind === "wingevon") return "NACA 2412";
   if (kind === "fin") return "NACA 0010";
   return "NACA 0012";
 }

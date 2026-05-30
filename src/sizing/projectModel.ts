@@ -4,7 +4,7 @@ const legacyImplicitMirrorShapeId = "implicit-y-axis-mirror";
 export type SizeDrawMode = "line" | "spline";
 export type BodyMaterial = "aluminium" | "fibreglass" | "carbonFibre";
 export type PartType = "payload" | "battery" | "motor" | "rotor" | "electronics";
-export type LiftingSurfaceKind = "wing" | "tailplane" | "fin" | "lex";
+export type LiftingSurfaceKind = "wing" | "wingevon" | "tailplane" | "fin" | "lex";
 
 export type SizePoint = {
   xM: number;
@@ -113,6 +113,7 @@ export type SizingMission = {
   enduranceMin: number;
   hoverTimeMin: number;
   reservePct: number;
+  gRating: number;
   diskLoadingNpm2: number;
   cruiseLiftCoefficient: number;
   tailVolumeTarget: number;
@@ -173,6 +174,7 @@ const defaultMission: SizingMission = {
   enduranceMin: 20,
   hoverTimeMin: 2,
   reservePct: 20,
+  gRating: 2,
   diskLoadingNpm2: 65,
   cruiseLiftCoefficient: 0.55,
   tailVolumeTarget: 0.55,
@@ -207,6 +209,7 @@ export const partTypeLabels: Record<PartType, string> = {
 
 export const liftingSurfaceKindLabels: Record<LiftingSurfaceKind, string> = {
   wing: "Wing",
+  wingevon: "Wingevon",
   tailplane: "Tailplane",
   fin: "Fin",
   lex: "LEX",
@@ -253,6 +256,7 @@ export function normalizeSizingProject(input: unknown): SizingProject {
       enduranceMin: numberOr(candidate.mission?.enduranceMin, 20),
       hoverTimeMin: numberOr(candidate.mission?.hoverTimeMin, 2),
       reservePct: numberOr(candidate.mission?.reservePct, 20),
+      gRating: normalizeGRating(candidate.mission?.gRating),
       diskLoadingNpm2: numberOr(candidate.mission?.diskLoadingNpm2, 65),
       cruiseLiftCoefficient: numberOr(candidate.mission?.cruiseLiftCoefficient, 0.55),
       tailVolumeTarget: numberOr(candidate.mission?.tailVolumeTarget, 0.55),
@@ -269,6 +273,11 @@ export function normalizeSizingProject(input: unknown): SizingProject {
 
 function normalizeScaleUnit(value: unknown): "mm" | "cm" | "m" {
   return value === "mm" || value === "cm" || value === "m" ? value : "cm";
+}
+
+function normalizeGRating(value: unknown) {
+  const rating = Math.round(numberOr(value, defaultMission.gRating));
+  return Math.min(6, Math.max(2, rating));
 }
 
 function normalizeCanvasView(value: unknown): SizingCanvasView | undefined {
@@ -296,6 +305,14 @@ function normalizeShape(shape: SizeShape): SizeShape {
   const partType = role === "part" ? normalizePartType(shape.partType) : undefined;
   const liftingSurfaceKind = role === "liftingSurface" ? normalizeLiftingSurfaceKind(shape.liftingSurfaceKind) : undefined;
   const defaultAirfoil = liftingSurfaceKind ? defaultAirfoilForLiftingSurface(liftingSurfaceKind) : "NACA 0012";
+  const surfaceAirfoil =
+    role === "liftingSurface"
+      ? typeof shape.airfoilStations?.root === "string"
+        ? shape.airfoilStations.root
+        : typeof shape.airfoilStations?.root10 === "string"
+          ? shape.airfoilStations.root10
+          : shape.airfoil ?? defaultAirfoil
+      : undefined;
   const points: SizePoint[] = Array.isArray(shape.points)
     ? shape.points.map((point) => ({
         xM: Math.abs(numberOr(point.xM, 0)),
@@ -314,13 +331,13 @@ function normalizeShape(shape: SizeShape): SizeShape {
     label: typeof shape.label === "string" ? shape.label : roleLabels[role],
     drawMode: shape.drawMode === "spline" ? "spline" : "line",
     points: partType === "rotor" ? normalizeRotorSpanPoints(points) : points,
-    airfoil: role === "liftingSurface" ? shape.airfoil ?? defaultAirfoil : undefined,
+    airfoil: surfaceAirfoil,
     liftingSurfaceKind,
     airfoilStations:
       role === "liftingSurface"
         ? {
-            root: typeof shape.airfoilStations?.root === "string" ? shape.airfoilStations.root : shape.airfoilStations?.root10 ?? shape.airfoil ?? defaultAirfoil,
-            tip: typeof shape.airfoilStations?.tip === "string" ? shape.airfoilStations.tip : shape.airfoilStations?.tip90 ?? shape.airfoil ?? defaultAirfoil,
+            root: surfaceAirfoil,
+            tip: surfaceAirfoil,
           }
         : undefined,
     incidenceDeg: role === "liftingSurface" ? numberOr(shape.incidenceDeg, 0) : undefined,
@@ -486,11 +503,11 @@ function normalizePartType(value: unknown): PartType {
 }
 
 function normalizeLiftingSurfaceKind(value: unknown): LiftingSurfaceKind {
-  return value === "tailplane" || value === "fin" || value === "lex" || value === "wing" ? value : "wing";
+  return value === "tailplane" || value === "fin" || value === "lex" || value === "wingevon" || value === "wing" ? value : "wing";
 }
 
 function defaultAirfoilForLiftingSurface(kind: LiftingSurfaceKind) {
-  if (kind === "wing") return "NACA 2412";
+  if (kind === "wing" || kind === "wingevon") return "NACA 2412";
   if (kind === "fin") return "NACA 0010";
   return "NACA 0012";
 }

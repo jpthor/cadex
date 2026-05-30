@@ -387,8 +387,7 @@ function liftingSurfacePreviewFromShape(shape: SizeShape, shapes: SizeShape[]): 
   const rootX = Math.abs(bounds.minX) <= 0.002 ? 0 : bounds.minX;
   const tipX = Math.abs(bounds.maxX - rootX) < 0.01 ? rootX + 0.05 : bounds.maxX;
   const span = Math.max(tipX - rootX, 0.01);
-  const rootAirfoil = shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012";
-  const tipAirfoil = shape.airfoilStations?.tip ?? shape.airfoil ?? rootAirfoil;
+  const airfoil = shape.airfoil ?? shape.airfoilStations?.root ?? "NACA 0012";
   const stations = Array.from({ length: 15 }, (_, index) => index / 14);
   const sections = stations.map((station) => {
     const xM = rootX + span * station;
@@ -397,12 +396,10 @@ function liftingSurfacePreviewFromShape(shape: SizeShape, shapes: SizeShape[]): 
     const trailingY = Math.min(extents.maxY, extents.minY);
     const chordM = Math.max(leadingY - trailingY, 0.001);
     return airfoilSection3D({
-      airfoil: rootAirfoil,
-      blendT: station,
+      airfoil,
       chordM,
       incidenceDeg: incidenceAtStation(shape, station),
       leadingY,
-      tipAirfoil,
       xM,
       zOffsetM: liftingSurfaceCenterZAtX(shape, shapes, xM),
     });
@@ -432,26 +429,22 @@ function nearestChordExtentsAtX(points: SizePoint[], xM: number, rootX: number, 
 
 function airfoilSection3D({
   airfoil,
-  blendT = 0,
   chordM,
   incidenceDeg,
   leadingY,
-  tipAirfoil,
   xM,
   zOffsetM,
 }: {
   airfoil: string;
-  blendT?: number;
   chordM: number;
   incidenceDeg: number;
   leadingY: number;
-  tipAirfoil?: string;
   xM: number;
   zOffsetM: number;
 }) {
   const upper: THREE.Vector3[] = [];
   const lower: THREE.Vector3[] = [];
-  const thicknessRatio = Math.max(mix(airfoilThicknessRatio(airfoil), airfoilThicknessRatio(tipAirfoil ?? airfoil), blendT), 0.04);
+  const thicknessRatio = Math.max(airfoilThicknessRatio(airfoil), 0.04);
   const incidenceRad = (incidenceDeg * Math.PI) / 180;
   const cos = Math.cos(incidenceRad);
   const sin = Math.sin(incidenceRad);
@@ -459,16 +452,11 @@ function airfoilSection3D({
     const t = index / 28;
     const chordOffsetM = -chordM * t;
     const halfThicknessM = nacaSymmetricHalfThickness(t, thicknessRatio, chordM);
-    const camberM = mix(airfoilCamberAtStation(airfoil, t, chordM), airfoilCamberAtStation(tipAirfoil ?? airfoil, t, chordM), blendT);
+    const camberM = airfoilCamberAtStation(airfoil, t, chordM);
     upper.push(airfoilPoint3D(xM, leadingY, chordOffsetM, camberM + halfThicknessM, cos, sin, zOffsetM));
     lower.unshift(airfoilPoint3D(xM, leadingY, chordOffsetM, camberM - halfThicknessM, cos, sin, zOffsetM));
   }
   return [...upper, ...lower, upper[0].clone()];
-}
-
-function mix(from: number, to: number, progress: number) {
-  const t = Math.min(Math.max(progress, 0), 1);
-  return from + (to - from) * t;
 }
 
 function airfoilPoint3D(xM: number, leadingY: number, chordOffsetM: number, heightM: number, cos: number, sin: number, zOffsetM: number) {
@@ -842,20 +830,17 @@ function sideViewAirfoilSections(shape: SizeShape, stationX: number, zOffset: nu
   const rootZ = Math.abs(bounds.minX) <= 0.002 ? 0 : bounds.minX;
   const tipZ = Math.abs(bounds.maxX - rootZ) < 0.01 ? rootZ + 0.05 : bounds.maxX;
   const span = Math.max(tipZ - rootZ, 0.01);
-  const rootAirfoil = shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012";
-  const tipAirfoil = shape.airfoilStations?.tip ?? shape.airfoil ?? rootAirfoil;
+  const airfoil = shape.airfoil ?? shape.airfoilStations?.root ?? "NACA 0012";
   return [0, 1].map((station) => {
     const zM = rootZ + span * station;
     const extents = chordExtentsAtX(shape.points, zM) ?? nearestChordExtentsAtX(shape.points, zM, rootZ, tipZ) ?? { minY: bounds.minY, maxY: bounds.maxY };
     const leadingY = Math.max(extents.maxY, extents.minY);
     const trailingY = Math.min(extents.maxY, extents.minY);
     return sideViewAirfoilSection3D({
-      airfoil: rootAirfoil,
-      blendT: station,
+      airfoil,
       chordM: Math.max(leadingY - trailingY, 0.001),
       leadingY,
       stationX,
-      tipAirfoil,
       zM: zM + zOffset,
     });
   });
@@ -863,29 +848,25 @@ function sideViewAirfoilSections(shape: SizeShape, stationX: number, zOffset: nu
 
 function sideViewAirfoilSection3D({
   airfoil,
-  blendT,
   chordM,
   leadingY,
   stationX,
-  tipAirfoil,
   zM,
 }: {
   airfoil: string;
-  blendT: number;
   chordM: number;
   leadingY: number;
   stationX: number;
-  tipAirfoil: string;
   zM: number;
 }) {
   const upper: THREE.Vector3[] = [];
   const lower: THREE.Vector3[] = [];
-  const thicknessRatio = Math.max(mix(airfoilThicknessRatio(airfoil), airfoilThicknessRatio(tipAirfoil), blendT), 0.04);
+  const thicknessRatio = Math.max(airfoilThicknessRatio(airfoil), 0.04);
   for (let index = 0; index <= 28; index += 1) {
     const t = index / 28;
     const chordOffsetM = -chordM * t;
     const halfThicknessM = nacaSymmetricHalfThickness(t, thicknessRatio, chordM);
-    const camberM = mix(airfoilCamberAtStation(airfoil, t, chordM), airfoilCamberAtStation(tipAirfoil, t, chordM), blendT);
+    const camberM = airfoilCamberAtStation(airfoil, t, chordM);
     upper.push(new THREE.Vector3(stationX + camberM + halfThicknessM, leadingY + chordOffsetM, zM));
     lower.unshift(new THREE.Vector3(stationX + camberM - halfThicknessM, leadingY + chordOffsetM, zM));
   }

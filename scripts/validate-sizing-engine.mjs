@@ -5,12 +5,14 @@ import {
   batteryMassEstimate,
   computeSketchAerodynamics,
   computeSizingAnalysis,
+  installedEnergyForMissionWh,
   liftingSurfaceMassEstimate,
   liftingSurfaceSkinAreaEstimate,
   motorMassEstimate,
   normalizeSizingProject,
   rotorMassPerRotorEstimate,
   rotorTotalMassEstimate,
+  usableEnergyFromInstalledWh,
 } from "../src/sizing/index.ts";
 
 const carbonFibreDensityKgM3 = 1600;
@@ -18,9 +20,11 @@ const thicknessM = 0.0012;
 const payloadKg = 1;
 const batteryMassKg = 0.62;
 const inferredBatteryMassKg = 0.2 * 0.1 * 0.028 * 1700;
+const reserveMissionEnergyWh = 900;
 
 const bodySurfaceAreaM2 = 2 * Math.PI * 0.05 * 0.1 + 2 * Math.PI * 0.1 * 1 + 2 * Math.PI * 0.05 * 0.1;
 const bodyMassKg = bodySurfaceAreaM2 * thicknessM * carbonFibreDensityKgM3;
+const g4SkinScale = Math.sqrt(4 / 2);
 const offsetBodyHalfAreaM2 = 0.1;
 const offsetBodyPerimeterM = 2.2;
 const offsetBodySurfaceAreaM2 = (offsetBodyHalfAreaM2 * 2 + offsetBodyPerimeterM * thicknessM) * 2;
@@ -104,6 +108,12 @@ const analysis = computeSizingAnalysis(project);
 
 approx(bodySurfaceAreaEstimate(project.shapes[0]), bodySurfaceAreaM2, "body mirrored surface area");
 approx(bodyMassEstimate(project.shapes[0]), bodyMassKg, "body material mass");
+approx(bodyMassEstimate(project.shapes[0], project.shapes, 4), bodyMassKg * g4SkinScale, "carbon body skin mass scales with G rating");
+approx(
+  bodyMassEstimate({ ...project.shapes[0], bodyMaterial: "aluminium" }, project.shapes, 4),
+  bodySurfaceAreaM2 * thicknessM * 2700,
+  "non-carbon body skin mass does not scale with G rating",
+);
 approx(
   bodySurfaceAreaEstimate({
     id: "offset-body",
@@ -156,7 +166,16 @@ approx(
 );
 approx(liftingSurfaceSkinAreaEstimate(project.shapes[1]), wingSurfaceAreaM2, "lifting surface mirrored skin area");
 approx(liftingSurfaceMassEstimate(project.shapes[1]), wingMassKg, "lifting surface material mass");
+approx(liftingSurfaceMassEstimate(project.shapes[1], project.shapes, 4), wingMassKg * g4SkinScale, "carbon lifting skin mass scales with G rating");
+approx(
+  computeSizingAnalysis({ ...project, mission: { ...project.mission, gRating: 4 } }).totalMassKg,
+  bodyMassKg * g4SkinScale + wingMassKg * g4SkinScale + payloadKg + inferredBatteryMassKg,
+  "project G rating scales carbon skin mass in sketch analysis",
+);
 approx(batteryMassEstimate(project.shapes[3]), inferredBatteryMassKg, "battery mass ignores stale manual mass and uses inferred LiPo volume");
+approx(installedEnergyForMissionWh(reserveMissionEnergyWh, 10), 1000, "10% reserve installs enough energy to land with 10% remaining");
+approx(usableEnergyFromInstalledWh(1000, 10), reserveMissionEnergyWh, "10% reserve leaves 90% usable energy");
+approx(installedEnergyForMissionWh(reserveMissionEnergyWh, 20), 1125, "20% reserve installs mission energy divided by 0.8");
 approx(
   motorMassEstimate({
     id: "motor",

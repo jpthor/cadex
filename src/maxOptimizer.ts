@@ -69,6 +69,7 @@ export function computeMaxOptimization({
   });
   const currentBatteryLimited = currentComparison.bestRangeCommand.enduranceLimiter === "battery";
   const minimumBatteryMassKg = currentBatteryLimited ? currentBattery.massKg : 0;
+  const selectedEngine = turbineEngineOptions.find((engine) => engine.id === sizingProject.mission.turbineEngineId) ?? turbineEngineOptions[0];
   const fuelMinutes = uniqueSorted([5, 10, 15, 20, 30, 45, 60, sizingProject.mission.turbineFuelMin]).filter((value) => value > 0);
   const propulsionCandidates = prefilterPropulsionCandidates({
     baseAircraftMassKg,
@@ -83,7 +84,7 @@ export function computeMaxOptimization({
   let evaluatedCount = 0;
 
   for (const propulsion of propulsionCandidates) {
-    for (const engine of turbineEngineOptions) {
+    for (const engine of [selectedEngine]) {
       for (const fuelMin of fuelMinutes) {
         evaluatedCount += 1;
         const candidateAircraftMassKg = propulsion.aircraftMassKg;

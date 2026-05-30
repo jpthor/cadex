@@ -62,15 +62,15 @@ assert.ok(command80.hybrid.fuelBurnKgMin > 0, "hybrid command burns kerosene");
 const command100 = comparison.commandThrust.find((point) => point.commandPct === 100);
 assert.ok(command100, "100% command point exists");
 assert.ok(Math.abs(command100.hybrid.fuelBurnKgMin - comparison.engine.fuelKgPerMin * comparison.engineCount) < 1e-9, "full-command hybrid fuel burn includes both turbine engines");
-assert.ok(command80.hybrid.rangeNm > 0, "hybrid command produces a range estimate");
+assert.equal(command80.hybrid.rangeNm > 0, command80.hybrid.flyable, "hybrid command only produces range when level-flight power is available");
 assert.equal(command80.hybrid.motorCurrentA, command80.motor.motorCurrentA, "hybrid command drives motor at the same command as the motor reference");
 assert.ok(command80.hybrid.speedKt >= command80.motor.speedKt, "hybrid command does not reduce speed at the same command");
-assert.ok(Number.isFinite(command80.hybrid.batteryEnduranceMin), "hybrid command reports battery time");
+assert.equal(Number.isFinite(command80.hybrid.batteryEnduranceMin), command80.hybrid.flyable, "hybrid command reports battery time only when level flight is available");
 assert.ok(Number.isFinite(command80.hybrid.fuelEnduranceMin), "hybrid command reports fuel time");
 assert.ok(["battery", "fuel"].includes(command80.hybrid.enduranceLimiter), "hybrid command reports the endurance limiter");
 assert.ok(command80.hybrid.enduranceMin <= (comparison.fullFuelMassKg * (1 - missionReservePct / 100)) / command80.hybrid.fuelBurnKgMin + 0.001, "hybrid endurance keeps mission fuel reserve");
-assert.ok(command80.motor.speedKt > 0, "motor command computes a drag-limited speed");
-assert.ok(command80.hybrid.speedKt > 0, "hybrid command computes a drag-limited speed");
+assert.equal(command80.motor.speedKt > 0, command80.motor.flyable, "motor command only reports speed when level-flight power is available");
+assert.equal(command80.hybrid.speedKt > 0, command80.hybrid.flyable, "hybrid command only reports speed when level-flight power is available");
 assert.equal(command80.motor.pitchOverspeedPct > 0, command80.motor.speedKt > command80.motor.pitchSpeedKt, "motor pitch overspeed flag follows computed speed");
 assert.equal(command80.hybrid.pitchOverspeedPct > 0, command80.hybrid.speedKt > command80.hybrid.pitchSpeedKt, "hybrid pitch overspeed flag follows computed speed");
 const command30 = comparison.commandThrust.find((point) => point.commandPct === 30);
@@ -79,7 +79,13 @@ assert.equal(command30.hybrid.pitchSpeedKt, command100.hybrid.pitchSpeedKt, "hyb
 assert.ok(command30.hybrid.fuelEfficiencyFactor > command80.hybrid.fuelEfficiencyFactor, "low jet command is less fuel efficient per thrust");
 assert.equal(comparison.bestRangeSweep.length, 19, "hybrid best-range sweep covers 10% to 100% command in 5% steps");
 assert.ok(comparison.bestRangeCommand.rangeNm >= Math.max(...comparison.bestRangeSweep.map((point) => point.rangeNm)), "best range command is the range maximum");
-assert.ok(comparison.bestRangeSweep.some((point) => point.enduranceLimiter === "battery"), "best-range sweep includes battery-limited points");
+assert.ok(comparison.bestRangeSweep.some((point) => point.flyable) || comparison.bestRangeSweep.every((point) => point.rangeNm === 0), "best-range sweep either finds flyable points or reports zero range");
+assert.equal(comparison.iJetSweep.length, 10, "iJet sweep covers 10% to 100% prop command in 10% steps");
+assert.ok(comparison.iJetBestRangeCommand.rangeNm >= Math.max(...comparison.iJetSweep.map((point) => point.rangeNm)), "iJet best range command is the range maximum");
+assert.ok(comparison.iJetSweep.every((point) => point.fuelCommandPct >= 0 && point.fuelCommandPct <= 100), "iJet fuel command stays in turbine command bounds");
+for (const point of comparison.iJetSweep.filter((entry) => entry.balanceStatus === "matched")) {
+  assert.ok(Math.abs(point.batteryEnduranceMin - point.fuelEnduranceMin) <= 0.05, "matched iJet points deplete battery and fuel together");
+}
 assert.ok(comparison.landing.massKg < comparison.aircraftMassKg, "landing mass is lower after fuel burn");
 assert.ok(comparison.dryMassKg > 1, "dry mass does not collapse below the selected fuel mass");
 assert.equal(comparison.landing.fuelPct, missionReservePct, "landing keeps mission fuel reserve");

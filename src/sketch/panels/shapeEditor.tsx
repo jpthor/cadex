@@ -18,6 +18,7 @@ import {
   batteryVolumeEstimate,
   bodyMassEstimate,
   bodySurfaceAreaEstimate,
+  effectiveSkinThicknessMm,
   inferredBatteryThicknessM,
   liftingSurfaceMassEstimate,
   liftingSurfaceSkinAreaEstimate,
@@ -63,6 +64,7 @@ export function ShapeSelector({
 
 export function ShapeEditor({
   activeAirfoilStation,
+  gRating,
   mirrorPlanes,
   shapes,
   shape,
@@ -72,6 +74,7 @@ export function ShapeEditor({
   onDelete,
 }: {
   activeAirfoilStation: AirfoilStation;
+  gRating?: number;
   mirrorPlanes: SizeShape[];
   shapes: SizeShape[];
   shape: SizeShape;
@@ -88,6 +91,11 @@ export function ShapeEditor({
   const motorVolumeM3 = shape.partType === "motor" ? motorVolumeEstimate(shape) : 0;
   const motorMassKg = shape.partType === "motor" ? motorMassEstimate(shape) : 0;
   const relatedShapes = shapes.length ? shapes : mirrorPlanes;
+  const effectiveThicknessMm = effectiveSkinThicknessMm(shape, gRating);
+  const hasGScaledCarbonSkin =
+    (shape.role === "body" || shape.role === "liftingSurface") &&
+    (shape.bodyMaterial ?? "carbonFibre") === "carbonFibre" &&
+    effectiveThicknessMm > (shape.bodyThicknessMm ?? 1.2) + 0.001;
   const sideViewStationOptions = sideViewStationAnchorOptions(shape, relatedShapes);
   const selectedSideViewStation = sideViewStationOptions.find((option) => option.id === (shape.sideViewStationId ?? implicitMirrorShapeId));
   const zStationOptions = zStationAnchorOptions(shape, relatedShapes);
@@ -156,25 +164,16 @@ export function ShapeEditor({
             ))}
           </div>
           {shape.liftingSurfaceKind !== "lex" ? <div className="airfoil-panel">
-            <div className="segmented-control sizing-role-control" aria-label="Aerofoil station">
-              <button className={activeAirfoilStation === "root" ? "active" : ""} onClick={() => onActiveAirfoilStationChange("root")}>
-                Root
-              </button>
-              <button className={activeAirfoilStation === "tip" ? "active" : ""} onClick={() => onActiveAirfoilStationChange("tip")}>
-                Tip
-              </button>
-            </div>
             <label className="sizing-field">
               <span>Aerofoil</span>
               <select
-                value={stationAirfoil(shape, activeAirfoilStation)}
+                value={shape.airfoil ?? shape.airfoilStations?.root ?? shape.airfoilStations?.root10 ?? "NACA 0012"}
                 onChange={(event) =>
                   onChange({
                     airfoil: event.target.value,
                     airfoilStations: {
-                      root: stationAirfoil(shape, "root"),
-                      tip: stationAirfoil(shape, "tip"),
-                      [activeAirfoilStation]: event.target.value,
+                      root: event.target.value,
+                      tip: event.target.value,
                     },
                   })
                 }
@@ -238,8 +237,10 @@ export function ShapeEditor({
                 { label: "Area", value: `${drawnLiftingAreaM2.toFixed(3)} m2` },
                 ...(liftingStats ? [{ label: liftingAreaScope, value: `${liftingStats.areaM2.toFixed(3)} m2` }] : []),
                 { label: "Skin area", value: `${liftingSurfaceSkinAreaEstimate(shape, relatedShapes).toFixed(3)} m2` },
-                { label: "Mass", value: `${liftingSurfaceMassEstimate(shape, relatedShapes).toFixed(3)} kg` },
+                ...(hasGScaledCarbonSkin ? [{ label: "Effective skin", value: `${effectiveThicknessMm.toFixed(2)} mm` }] : []),
+                { label: "Mass", value: `${liftingSurfaceMassEstimate(shape, relatedShapes, gRating).toFixed(3)} kg` },
               ]}
+              notes={hasGScaledCarbonSkin ? [`Carbon skin is scaled by ${gRating}G load rating.`] : []}
             />
           ) : null}
         </>
@@ -266,8 +267,9 @@ export function ShapeEditor({
             onChange={(bodyThicknessMm) => onChange({ bodyThicknessMm })}
           />
           <div className="shape-readout">
-            <span>Planform skin area {bodySurfaceAreaEstimate(shape, relatedShapes).toFixed(3)} m2</span>
-            <span>Body mass {bodyMassEstimate(shape, relatedShapes).toFixed(3)} kg</span>
+            <span>Planform skin area {bodySurfaceAreaEstimate(shape, relatedShapes, gRating).toFixed(3)} m2</span>
+            {hasGScaledCarbonSkin ? <span>Effective carbon skin {effectiveThicknessMm.toFixed(2)} mm at {gRating}G</span> : null}
+            <span>Body mass {bodyMassEstimate(shape, relatedShapes, gRating).toFixed(3)} kg</span>
           </div>
         </>
       ) : referenceRoles.includes(shape.role) ? (
@@ -499,11 +501,6 @@ function formatDimension(valueM: number) {
   if (!Number.isFinite(valueM)) return "-";
   const magnitude = Math.abs(valueM);
   return magnitude >= 1 ? `${magnitude.toFixed(2)} m` : `${Math.round(magnitude * 1000)} mm`;
-}
-
-function stationAirfoil(shape: SizeShape, station: AirfoilStation) {
-  if (station === "root") return shape.airfoilStations?.root ?? shape.airfoilStations?.root10 ?? shape.airfoil ?? "NACA 0012";
-  return shape.airfoilStations?.tip ?? shape.airfoilStations?.tip90 ?? shape.airfoil ?? "NACA 0012";
 }
 
 function stationIncidence(shape: SizeShape, station: AirfoilStation) {

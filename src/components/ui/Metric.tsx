@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 
 export function Metric({
+  info,
   label,
   note,
   noteTone = "neutral",
   value,
   verification,
 }: {
+  info?: string;
   label: string;
   note?: string;
   noteTone?: "good" | "caution" | "bad" | "neutral";
@@ -15,8 +17,9 @@ export function Metric({
 }) {
   return (
     <div className="analysis-metric">
-      <span>
-        {label}
+      <span className={`metric-label ${info ? "has-info" : ""}`} data-info={info}>
+        <span>{label}</span>
+        {info ? <span className="metric-tooltip">{info}</span> : null}
         {note ? <small className={`metric-note ${noteTone}`}>{note}</small> : null}
         {verification ? <small>{verification}</small> : null}
       </span>
@@ -25,10 +28,13 @@ export function Metric({
   );
 }
 
-export function MetricTile({ label, value }: { label: string; value: string }) {
+export function MetricTile({ info, label, value }: { info?: string; label: string; value: string }) {
   return (
     <div className="metric-tile">
-      <span>{label}</span>
+      <span className={`metric-label ${info ? "has-info" : ""}`} data-info={info}>
+        <span>{label}</span>
+        {info ? <span className="metric-tooltip">{info}</span> : null}
+      </span>
       <strong>{value}</strong>
     </div>
   );

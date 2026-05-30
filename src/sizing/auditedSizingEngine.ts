@@ -11,6 +11,10 @@ type LiftingStats = {
 };
 type AeroStats = ReturnType<typeof liftingSurfaceAeroStats>;
 
+function isWingLikeKind(kind: LiftingSurfaceKind) {
+  return kind === "wing" || kind === "wingevon";
+}
+
 export type SketchAeroComputation = {
   validity: {
     lift: boolean;
@@ -66,6 +70,12 @@ export type SketchAeroComputation = {
     cruisePowerW: number;
     maxLiftCoefficientClean: number;
     maxLiftCoefficientWithLex: number;
+    highAoAStartSpeedMS: number;
+    fullStallSpeedMS: number;
+    highAoAStartAngleDeg: number;
+    fullStallAngleDeg: number;
+    stallAngleCleanDeg: number;
+    stallAngleDeg: number;
     stallSpeedCleanMS: number;
     stallSpeedMS: number;
   };
@@ -79,6 +89,23 @@ export type SketchAeroComputation = {
     influencedBodyAreaM2: number;
     influencedWingAreaM2: number;
     vortexStrength: number;
+    stallSpeedReductionPct: number;
+  };
+  rotorBlownWing: {
+    active: boolean;
+    blownAreaM2: number;
+    blownAreaRatio: number;
+    dynamicPressureRatio: number;
+    deltaMaxLiftCoefficient: number;
+    stallSpeedReductionPct: number;
+  };
+  wingevon: {
+    active: boolean;
+    areaM2: number;
+    areaRatio: number;
+    aoaBlendFactor: number;
+    effectiveStallAngleDeg: number;
+    deltaMaxLiftCoefficient: number;
     stallSpeedReductionPct: number;
   };
   propulsion: {
@@ -113,6 +140,7 @@ export const auditedSizingAssumptions = {
   rotorShellThicknessClampM: { min: 0.0008, max: 0.003 },
   liftingSurfaceEffectiveness: {
     wing: 1,
+    wingevon: 1,
     tailplane: 0.9,
     fin: 0.7,
     lex: 0.45,
@@ -128,21 +156,22 @@ export const auditedSizingAssumptions = {
 };
 
 export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "mission">): SizingAnalysis {
+  const gRating = normalizeSkinGRating(project.mission.gRating);
   const bodies = project.shapes.filter((shape) => shape.role === "body");
   const lifting = project.shapes.filter((shape) => shape.role === "liftingSurface");
   const parts = project.shapes.filter((shape) => shape.role === "part");
   const liftingStats = lifting.map((shape) => liftingSurfaceStats(shape, project.shapes));
-  const bodyMass = sum(bodies.map((shape) => bodyMassEstimate(shape, project.shapes)));
-  const liftingMass = sum(lifting.map((shape) => liftingSurfaceMassEstimate(shape, project.shapes)));
+  const bodyMass = sum(bodies.map((shape) => bodyMassEstimate(shape, project.shapes, gRating)));
+  const liftingMass = sum(lifting.map((shape) => liftingSurfaceMassEstimate(shape, project.shapes, gRating)));
   const partMass = sum(parts.map((shape) => partMassEstimate(shape, project.shapes)));
   const totalMassKg = Math.max(bodyMass + liftingMass + partMass, 0.1);
   const massItems = [
-    ...bodies.map((shape) => ({ point: shapeCentroid(shape), lateralRadiusM: shapeLateralRadiusM(shape, project.shapes), mass: bodyMassEstimate(shape, project.shapes) })),
-    ...lifting.map((shape) => ({ point: shapeCentroid(shape), lateralRadiusM: shapeLateralRadiusM(shape, project.shapes), mass: liftingSurfaceMassEstimate(shape, project.shapes) })),
+    ...bodies.map((shape) => ({ point: shapeCentroid(shape), lateralRadiusM: shapeLateralRadiusM(shape, project.shapes), mass: bodyMassEstimate(shape, project.shapes, gRating) })),
+    ...lifting.map((shape) => ({ point: shapeCentroid(shape), lateralRadiusM: shapeLateralRadiusM(shape, project.shapes), mass: liftingSurfaceMassEstimate(shape, project.shapes, gRating) })),
     ...parts.map((shape) => ({ point: shapeCentroid(shape), lateralRadiusM: shapeLateralRadiusM(shape, project.shapes), mass: partMassEstimate(shape, project.shapes) })),
   ];
   const com = weightedCenter(massItems);
-  const wingStats = liftingStats.filter((stats) => stats.kind === "wing");
+  const wingStats = liftingStats.filter((stats) => isWingLikeKind(stats.kind));
   const tailStats = liftingStats.filter((stats) => stats.kind === "tailplane");
   const referenceStats = wingStats.length ? wingStats : liftingStats;
   const wingAreaM2 = Math.max(sum(referenceStats.map((stats) => stats.areaM2)), 0.01);
@@ -212,10 +241,11 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
   const liftingStats = project.shapes
     .filter((shape) => shape.role === "liftingSurface")
     .map((shape) => liftingSurfaceStats(shape, project.shapes));
-  const wingStats = liftingStats.filter((stats) => stats.kind === "wing");
+  const wingStats = liftingStats.filter((stats) => isWingLikeKind(stats.kind));
   const tailStats = liftingStats.filter((stats) => stats.kind === "tailplane");
   const finStats = liftingStats.filter((stats) => stats.kind === "fin");
   const lexStats = liftingStats.filter((stats) => stats.kind === "lex");
+  const wingevonStats = liftingStats.filter((stats) => stats.kind === "wingevon");
   const referenceStats = wingStats.length ? wingStats : liftingStats;
   const wingAreaM2 = sum(referenceStats.map((stats) => stats.areaM2));
   const wingSpanM = Math.max(0, ...referenceStats.map((stats) => stats.spanM));
@@ -268,8 +298,19 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
   const dragN = hasDragReference ? dynamicPressurePa * dragReferenceAreaM2 * dragCoefficient : 0;
   const cruisePowerW = hasDragReference ? (dragN * cruiseSpeedMS) / auditedSizingAssumptions.propulsiveEfficiency : 0;
   const maxLiftCoefficientClean = auditedSizingAssumptions.maxLiftCoefficient;
+  const wingAirfoil = wingAirfoilProperties(project.shapes, wingStats, aspectRatio);
   const lexVortex = estimateLexVortex(project.shapes, lexStats, wingStats, wingAreaM2, wingAerodynamicCenterY);
-  const maxLiftCoefficientWithLex = maxLiftCoefficientClean + lexVortex.deltaMaxLiftCoefficient;
+  const rotorBlownWing = estimateRotorBlownWing(project.shapes, wingAreaM2, maxLiftCoefficientClean + lexVortex.deltaMaxLiftCoefficient, analysis.hoverThrustPerRotorN ?? 0, weightN);
+  const wingevon = estimateWingevonStallRelief(wingevonStats, wingAreaM2, maxLiftCoefficientClean);
+  const maxLiftCoefficientWithLex = maxLiftCoefficientClean + lexVortex.deltaMaxLiftCoefficient + rotorBlownWing.deltaMaxLiftCoefficient + wingevon.deltaMaxLiftCoefficient;
+  const stallAngleCleanDeg = hasAerodynamicReference
+    ? wingAirfoil.zeroLiftAngleDeg + maxLiftCoefficientClean / Math.max(wingAirfoil.finiteLiftSlopePerDeg, 0.001) - wingAirfoil.incidenceDeg
+    : 0;
+  const stallAngleAppliedRigidDeg = hasAerodynamicReference
+    ? wingAirfoil.zeroLiftAngleDeg + maxLiftCoefficientWithLex / Math.max(wingAirfoil.finiteLiftSlopePerDeg, 0.001) - wingAirfoil.incidenceDeg
+    : 0;
+  const wingevonEffectiveStallAngleDeg = wingevon.active && hasAerodynamicReference ? stallAngleCleanDeg / Math.max(wingevon.aoaBlendFactor, 0.001) : 0;
+  const stallAngleDeg = wingevon.active ? Math.max(stallAngleAppliedRigidDeg, wingevonEffectiveStallAngleDeg) : stallAngleAppliedRigidDeg;
   const stallSpeedCleanMS = hasAerodynamicReference
     ? Math.sqrt((2 * weightN) / Math.max(auditedSizingAssumptions.rhoKgM3 * wingAreaM2 * maxLiftCoefficientClean, 0.001))
     : 0;
@@ -293,6 +334,8 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
     lexStats.length && !wingStats.length ? "LEX surfaces need a marked wing before vortex-lift stall estimates are meaningful." : "",
     lexStats.length && wingStats.length && lexVortex.influencedAreaM2 <= 0.001 ? "LEX vortex corridor does not pass over downstream body or lifting area." : "",
     lexVortex.active ? "LEX vortex lift is an estimate for medium/high AoA only; validate with CFD or testing before relying on stall margin." : "",
+    rotorBlownWing.active ? "Rotor-blown wing lift is a first-pass powered-lift estimate; validate with CFD, wind-tunnel, or flight test before relying on stall margin." : "",
+    wingevon.active ? "Wingevon stall relief assumes the all-moving tip floats with local relative airflow; validate hinge range, control authority, and low-speed dynamics." : "",
   ].filter(Boolean));
 
   return {
@@ -350,6 +393,12 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
       cruisePowerW,
       maxLiftCoefficientClean,
       maxLiftCoefficientWithLex,
+      highAoAStartSpeedMS: stallSpeedCleanMS,
+      fullStallSpeedMS: stallSpeedMS,
+      highAoAStartAngleDeg: stallAngleCleanDeg,
+      fullStallAngleDeg: stallAngleDeg,
+      stallAngleCleanDeg,
+      stallAngleDeg,
       stallSpeedCleanMS,
       stallSpeedMS,
     },
@@ -364,6 +413,23 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
       influencedWingAreaM2: lexVortex.influencedWingAreaM2,
       vortexStrength: lexVortex.vortexStrength,
       stallSpeedReductionPct: stallSpeedCleanMS > 0 ? (1 - stallSpeedMS / stallSpeedCleanMS) * 100 : 0,
+    },
+    rotorBlownWing: {
+      active: rotorBlownWing.active,
+      blownAreaM2: rotorBlownWing.blownAreaM2,
+      blownAreaRatio: wingAreaM2 > 0 ? rotorBlownWing.blownAreaM2 / wingAreaM2 : 0,
+      dynamicPressureRatio: rotorBlownWing.dynamicPressureRatio,
+      deltaMaxLiftCoefficient: rotorBlownWing.deltaMaxLiftCoefficient,
+      stallSpeedReductionPct: stallSpeedCleanMS > 0 ? (1 - stallSpeedMS / Math.max(stallSpeedCleanMS, 0.001)) * 100 : 0,
+    },
+    wingevon: {
+      active: wingevon.active,
+      areaM2: wingevon.areaM2,
+      areaRatio: wingevon.areaRatio,
+      aoaBlendFactor: wingevon.aoaBlendFactor,
+      effectiveStallAngleDeg: wingevonEffectiveStallAngleDeg,
+      deltaMaxLiftCoefficient: wingevon.deltaMaxLiftCoefficient,
+      stallSpeedReductionPct: stallSpeedCleanMS > 0 ? (1 - stallSpeedMS / Math.max(stallSpeedCleanMS, 0.001)) * 100 : 0,
     },
     propulsion: {
       rotorCount: analysis.rotorCount ?? 0,
@@ -426,6 +492,138 @@ function estimateLexVortex(
   };
 }
 
+function estimateRotorBlownWing(
+  shapes: SizeShape[],
+  wingAreaM2: number,
+  baseMaxLiftCoefficient: number,
+  hoverThrustPerRotorN: number,
+  weightN: number,
+) {
+  const empty = { active: false, blownAreaM2: 0, dynamicPressureRatio: 1, deltaMaxLiftCoefficient: 0 };
+  if (wingAreaM2 <= 0.001 || hoverThrustPerRotorN <= 0 || weightN <= 0) return empty;
+  const wingShapes = shapes.filter((shape) => shape.role === "liftingSurface" && isWingLikeKind(shape.liftingSurfaceKind ?? "wing"));
+  const rotorShapes = shapes.filter((shape) => shape.role === "part" && shape.partType === "rotor");
+  if (!wingShapes.length || !rotorShapes.length) return empty;
+  const rotorDisks = rotorShapes.flatMap((shape) => rotorDiskInstances(shape, shapes));
+  if (!rotorDisks.length) return empty;
+  const blownAreaM2 = Math.min(
+    wingAreaM2,
+    sum(wingShapes.map((shape) => sampledRotorDiskOverlapArea(shape, shapes, rotorDisks))),
+  );
+  const blownAreaRatio = clamp(blownAreaM2 / Math.max(wingAreaM2, 0.001), 0, 0.85);
+  if (blownAreaRatio <= 0.005) return empty;
+  const totalRotorDiskAreaM2 = sum(rotorDisks.map((disk) => Math.PI * disk.radiusM * disk.radiusM));
+  const cleanStallSpeedMS = Math.sqrt((2 * weightN) / Math.max(auditedSizingAssumptions.rhoKgM3 * wingAreaM2 * auditedSizingAssumptions.maxLiftCoefficient, 0.001));
+  const inducedVelocityMS = Math.sqrt(hoverThrustPerRotorN / Math.max(2 * auditedSizingAssumptions.rhoKgM3 * totalRotorDiskAreaM2 / Math.max(rotorDisks.length, 1), 0.001));
+  const slipstreamVelocityMS = inducedVelocityMS * 1.6;
+  const dynamicPressureRatio = clamp((cleanStallSpeedMS * cleanStallSpeedMS + slipstreamVelocityMS * slipstreamVelocityMS) / Math.max(cleanStallSpeedMS * cleanStallSpeedMS, 0.001), 1, 3.5);
+  const effectiveness = 0.55;
+  const deltaMaxLiftCoefficient = clamp(baseMaxLiftCoefficient * blownAreaRatio * (dynamicPressureRatio - 1) * effectiveness, 0, 0.75);
+  return {
+    active: deltaMaxLiftCoefficient > 0.01,
+    blownAreaM2,
+    dynamicPressureRatio,
+    deltaMaxLiftCoefficient,
+  };
+}
+
+function estimateWingevonStallRelief(wingevonStats: LiftingStats[], wingAreaM2: number, cleanMaxLiftCoefficient: number) {
+  const areaM2 = sum(wingevonStats.map((stats) => stats.areaM2));
+  const areaRatio = clamp(areaM2 / Math.max(wingAreaM2, 0.001), 0, 0.55);
+  if (areaRatio <= 0.005) {
+    return {
+      active: false,
+      areaM2: 0,
+      areaRatio: 0,
+      aoaBlendFactor: 1,
+      deltaMaxLiftCoefficient: 0,
+    };
+  }
+
+  const floatingLocalAoAFactor = 0.25;
+  const aoaBlendFactor = clamp((1 - areaRatio) + areaRatio * floatingLocalAoAFactor, 0.45, 1);
+  const floatingPanelMaxLiftCoefficient = 2.2;
+  const deltaMaxLiftCoefficient = clamp((floatingPanelMaxLiftCoefficient - cleanMaxLiftCoefficient) * areaRatio, 0, 0.65);
+
+  return {
+    active: true,
+    areaM2,
+    areaRatio,
+    aoaBlendFactor,
+    deltaMaxLiftCoefficient,
+  };
+}
+
+type RotorDiskInstance = {
+  center: SizePoint;
+  radiusM: number;
+};
+
+function rotorDiskInstances(shape: SizeShape, shapes: SizeShape[]): RotorDiskInstance[] {
+  const radiusM = rotorDiameterEstimate(shape, shapes) / 2;
+  if (radiusM <= 0) return [];
+  const localMirrorPlane = shapes.find((candidate) => mirrorPlaneAppliesToShape(shape, candidate) && shapeTouchesLine(shape, candidate));
+  const baseCenter = rotorCenter(shape);
+  const centers = [baseCenter];
+  if (localMirrorPlane) centers.push(rotorCenter({ ...shape, points: mirrorAcrossLine(shape.points, localMirrorPlane) }));
+  const withImplicitMirror = centers.flatMap((center) => Math.abs(center.xM) <= auditedSizingAssumptions.mirrorAxisTouchToleranceM
+    ? [center]
+    : [center, { ...center, xM: -center.xM }]
+  );
+  return withImplicitMirror.map((center) => ({ center, radiusM }));
+}
+
+function rotorCenter(shape: SizeShape): SizePoint {
+  if (!shape.points.length) return { xM: 0, yM: 0 };
+  return {
+    xM: sum(shape.points.map((point) => point.xM)) / shape.points.length,
+    yM: sum(shape.points.map((point) => point.yM)) / shape.points.length,
+  };
+}
+
+function sampledRotorDiskOverlapArea(shape: SizeShape, shapes: SizeShape[], rotorDisks: RotorDiskInstance[]) {
+  const polygons = logicalPlanformPolygons(shape, shapes);
+  return sum(polygons.map((polygon) => sampledCircleOverlapArea(polygon, rotorDisks)));
+}
+
+function logicalPlanformPolygons(shape: SizeShape, shapes: SizeShape[]) {
+  const localMirrorPlane = shapes.find((candidate) => mirrorPlaneAppliesToShape(shape, candidate) && shapeTouchesLine(shape, candidate));
+  const basePolygons = [shape.points];
+  if (localMirrorPlane) basePolygons.push(mirrorAcrossLine(shape.points, localMirrorPlane));
+  return basePolygons.flatMap((points) => polygonTouchesMirrorAxis(points)
+    ? [points]
+    : [points, points.map((point) => ({ ...point, xM: -point.xM }))]
+  );
+}
+
+function polygonTouchesMirrorAxis(points: SizePoint[]) {
+  return points.some((point) => Math.abs(point.xM) <= auditedSizingAssumptions.mirrorAxisTouchToleranceM);
+}
+
+function sampledCircleOverlapArea(points: SizePoint[], disks: RotorDiskInstance[]) {
+  if (points.length < 3 || !disks.length) return 0;
+  const areaM2 = polygonArea(points);
+  if (areaM2 <= 0) return 0;
+  const bounds = rawPointBounds(points);
+  const xSpan = Math.max(bounds.maxX - bounds.minX, 0.001);
+  const ySpan = Math.max(bounds.maxY - bounds.minY, 0.001);
+  const xSamples = clamp(Math.ceil(xSpan / 0.025), 10, 54);
+  const ySamples = clamp(Math.ceil(ySpan / 0.025), 10, 54);
+  let insideCount = 0;
+  let coveredCount = 0;
+  for (let xi = 0; xi < xSamples; xi += 1) {
+    const xM = bounds.minX + ((xi + 0.5) / xSamples) * xSpan;
+    for (let yi = 0; yi < ySamples; yi += 1) {
+      const yM = bounds.minY + ((yi + 0.5) / ySamples) * ySpan;
+      const point = { xM, yM };
+      if (!pointInPolygon(point, points)) continue;
+      insideCount += 1;
+      if (disks.some((disk) => distance(point, disk.center) <= disk.radiusM)) coveredCount += 1;
+    }
+  }
+  return insideCount > 0 ? areaM2 * (coveredCount / insideCount) : 0;
+}
+
 type LexVortexCorridor = {
   startX: number;
   startY: number;
@@ -457,7 +655,7 @@ function downstreamLexInfluence(shapes: SizeShape[], corridors: LexVortexCorrido
     totals.totalAreaM2 += totalAreaM2;
     totals.weightedAreaM2 += totalAreaM2 * weight;
     if (shape.role === "body") totals.bodyAreaM2 += totalAreaM2;
-    if (shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing") totals.wingAreaM2 += totalAreaM2;
+    if (shape.role === "liftingSurface" && isWingLikeKind(shape.liftingSurfaceKind ?? "wing")) totals.wingAreaM2 += totalAreaM2;
     return totals;
   }, empty);
 }
@@ -466,7 +664,7 @@ function lexInfluenceWeight(shape: SizeShape) {
   if (shape.role === "body") return 0.35;
   if (shape.role !== "liftingSurface") return 0;
   const kind = shape.liftingSurfaceKind ?? "wing";
-  if (kind === "wing") return 1;
+  if (isWingLikeKind(kind)) return 1;
   if (kind === "tailplane") return 0.45;
   return 0;
 }
@@ -504,7 +702,7 @@ function pointInLexVortexCorridor(point: SizePoint, corridor: LexVortexCorridor)
 }
 
 function wingShapesDihedralStats(shapes: SizeShape[]) {
-  const wingShapes = shapes.filter((shape) => shape.role === "liftingSurface" && (shape.liftingSurfaceKind ?? "wing") === "wing");
+  const wingShapes = shapes.filter((shape) => shape.role === "liftingSurface" && isWingLikeKind(shape.liftingSurfaceKind ?? "wing"));
   const panelStats = wingShapes.map((shape) => wingShapeDihedralStats(shape, shapes)).filter((stats) => stats.projectedSpanM > 0);
   const projectedSpanM = sum(panelStats.map((stats) => stats.projectedSpanM));
   const trueSpanM = sum(panelStats.map((stats) => stats.trueSpanM));
@@ -664,16 +862,36 @@ function shapeLateralRadiusM(shape: SizeShape, shapes: SizeShape[]) {
   return sum(shape.points.map((point) => Math.abs(point.xM))) / shape.points.length;
 }
 
-export function bodyMassEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
+export function bodyMassEstimate(shape: SizeShape, shapes: SizeShape[] = [], gRating?: number) {
   const density = auditedSizingAssumptions.bodyMaterialDensityKgM3[shape.bodyMaterial ?? auditedSizingAssumptions.defaultBodyMaterial];
-  const thicknessM = Math.max(shape.bodyThicknessMm ?? 1.2, 0) / 1000;
-  return bodySurfaceAreaEstimate(shape, shapes) * thicknessM * density;
+  const thicknessM = effectiveSkinThicknessM(shape, gRating);
+  return bodySurfaceAreaEstimate(shape, shapes, gRating) * thicknessM * density;
 }
 
-export function liftingSurfaceMassEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
+export function liftingSurfaceMassEstimate(shape: SizeShape, shapes: SizeShape[] = [], gRating?: number) {
   const density = auditedSizingAssumptions.bodyMaterialDensityKgM3[shape.bodyMaterial ?? auditedSizingAssumptions.defaultBodyMaterial];
-  const thicknessM = Math.max(shape.bodyThicknessMm ?? 1.2, 0) / 1000;
+  const thicknessM = effectiveSkinThicknessM(shape, gRating);
   return liftingSurfaceSkinAreaEstimate(shape, shapes) * thicknessM * density;
+}
+
+export function effectiveSkinThicknessMm(shape: SizeShape, gRating?: number) {
+  return effectiveSkinThicknessM(shape, gRating) * 1000;
+}
+
+function effectiveSkinThicknessM(shape: SizeShape, gRating?: number) {
+  const baseThicknessM = Math.max(shape.bodyThicknessMm ?? 1.2, 0) / 1000;
+  return baseThicknessM * skinThicknessScaleForGRating(shape, gRating);
+}
+
+export function skinThicknessScaleForGRating(shape: SizeShape, gRating?: number) {
+  const material = shape.bodyMaterial ?? auditedSizingAssumptions.defaultBodyMaterial;
+  if (material !== "carbonFibre") return 1;
+  return Math.pow(normalizeSkinGRating(gRating) / 2, 0.5);
+}
+
+function normalizeSkinGRating(value: unknown) {
+  const numericValue = typeof value === "number" && Number.isFinite(value) ? value : 2;
+  return Math.min(6, Math.max(2, Math.round(numericValue)));
 }
 
 export function partMassEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
@@ -787,12 +1005,12 @@ function rotorDiameterPoints(shape: SizeShape, shapes: SizeShape[]) {
   return shape.points;
 }
 
-export function bodySurfaceAreaEstimate(shape: SizeShape, shapes: SizeShape[] = []) {
+export function bodySurfaceAreaEstimate(shape: SizeShape, shapes: SizeShape[] = [], gRating?: number) {
   if (shape.points.length < 3) return 0;
   const localMirrorPlane = shapes.find((candidate) => mirrorPlaneAppliesToShape(shape, candidate) && shapeTouchesLine(shape, candidate));
   if (localMirrorPlane) return revolvedSurfaceAreaAroundLine(shape.points, localMirrorPlane);
   if (touchesMirrorAxis(shape)) return revolvedSurfaceArea(shape.points);
-  const thicknessM = Math.max(shape.bodyThicknessMm ?? 1.2, 0) / 1000;
+  const thicknessM = effectiveSkinThicknessM(shape, gRating);
   const halfPlanformAreaM2 = polygonArea(shape.points);
   const halfPerimeterM = closedPerimeter(shape.points);
   return (halfPlanformAreaM2 * 2 + halfPerimeterM * thicknessM) * 2;
@@ -978,22 +1196,51 @@ function longitudinalNeutralPointWeight(entry: AeroStats) {
   return entry.liftSlopeWeight * auditedSizingAssumptions.tailplaneDynamicPressureRatio * downwashFactor;
 }
 
-function blendedAirfoilProperties(shape: SizeShape) {
-  const root = airfoilProperties(shape.airfoilStations?.root ?? shape.airfoil ?? "NACA 0012");
-  const tip = airfoilProperties(shape.airfoilStations?.tip ?? shape.airfoil ?? "NACA 0012");
+function wingAirfoilProperties(shapes: SizeShape[], wingStats: LiftingStats[], aspectRatio: number) {
+  const wingShapes = shapes.filter((shape) => shape.role === "liftingSurface" && isWingLikeKind(shape.liftingSurfaceKind ?? "wing"));
+  const totalAreaM2 = Math.max(sum(wingStats.map((stats) => stats.areaM2)), 0.001);
+  const liftSlopePerDeg = sum(
+    wingShapes.map((shape, index) => blendedAirfoilProperties(shape).liftSlopePerDeg * (wingStats[index]?.areaM2 ?? 0)),
+  ) / totalAreaM2 || 0.102;
+  const zeroLiftAngleDeg = sum(
+    wingShapes.map((shape, index) => blendedAirfoilProperties(shape).zeroLiftAngleDeg * (wingStats[index]?.areaM2 ?? 0)),
+  ) / totalAreaM2 || 0;
+  const incidenceDeg = sum(
+    wingShapes.map((shape, index) => averageIncidenceDeg(shape) * (wingStats[index]?.areaM2 ?? 0)),
+  ) / totalAreaM2 || 0;
+  const liftSlopePerRad = liftSlopePerDeg * 180 / Math.PI;
+  const finiteLiftSlopePerRad = aspectRatio > 0.1
+    ? liftSlopePerRad / (1 + liftSlopePerRad / Math.max(Math.PI * auditedSizingAssumptions.oswaldEfficiency * aspectRatio, 0.001))
+    : liftSlopePerRad;
   return {
-    liftSlopePerDeg: (root.liftSlopePerDeg + tip.liftSlopePerDeg) / 2,
+    finiteLiftSlopePerDeg: finiteLiftSlopePerRad * Math.PI / 180,
+    incidenceDeg,
+    zeroLiftAngleDeg,
+  };
+}
+
+function blendedAirfoilProperties(shape: SizeShape) {
+  const surface = airfoilProperties(shape.airfoil ?? shape.airfoilStations?.root ?? "NACA 0012");
+  return {
+    liftSlopePerDeg: surface.liftSlopePerDeg,
+    zeroLiftAngleDeg: surface.zeroLiftAngleDeg,
   };
 }
 
 function airfoilProperties(name: string) {
   const normalized = name.toLowerCase().replace(/\s+/g, "");
-  if (normalized.includes("s1223")) return { liftSlopePerDeg: 0.105 };
-  if (normalized.includes("clarky")) return { liftSlopePerDeg: 0.103 };
-  if (normalized.includes("mh32")) return { liftSlopePerDeg: 0.101 };
-  if (normalized.includes("4412")) return { liftSlopePerDeg: 0.104 };
-  if (normalized.includes("2412")) return { liftSlopePerDeg: 0.104 };
-  return { liftSlopePerDeg: 0.102 };
+  if (normalized.includes("s1223")) return { liftSlopePerDeg: 0.105, zeroLiftAngleDeg: -4.5 };
+  if (normalized.includes("clarky")) return { liftSlopePerDeg: 0.103, zeroLiftAngleDeg: -3.2 };
+  if (normalized.includes("mh32")) return { liftSlopePerDeg: 0.101, zeroLiftAngleDeg: -1.4 };
+  if (normalized.includes("4412")) return { liftSlopePerDeg: 0.104, zeroLiftAngleDeg: -3.8 };
+  if (normalized.includes("2412")) return { liftSlopePerDeg: 0.104, zeroLiftAngleDeg: -2.2 };
+  return { liftSlopePerDeg: 0.102, zeroLiftAngleDeg: 0 };
+}
+
+function averageIncidenceDeg(shape: SizeShape) {
+  const root = shape.incidenceStationsDeg?.root ?? shape.incidenceDeg ?? 0;
+  const tip = shape.incidenceStationsDeg?.tip ?? shape.incidenceDeg ?? root;
+  return (root + tip) / 2;
 }
 
 function weightedCenter(items: { point: SizePoint; mass: number }[]) {
