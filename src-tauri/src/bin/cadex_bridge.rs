@@ -194,7 +194,7 @@ fn create_aircraft_project(body: &str) -> Result<Value, String> {
     } else {
         name
     };
-    let state = stamp_project_state(request.state, &id, name);
+    let state = strip_generated_project_state(stamp_project_state(request.state, &id, name));
     let path = aircraft_project_path(&id)?;
     write_project_file(&path, &state)?;
     append_project_journal(&path, None, &state, "create")?;
@@ -237,7 +237,7 @@ fn save_aircraft_project(body: &str) -> Result<Value, String> {
         .or_else(|| request.state.get("name").and_then(|value| value.as_str()))
         .unwrap_or("Untitled aircraft")
         .to_string();
-    let state = stamp_project_state(request.state, &id, &name);
+    let state = strip_generated_project_state(stamp_project_state(request.state, &id, &name));
     write_project_file(&path, &state)?;
     append_project_journal(&path, current.as_ref(), &state, "save")?;
     Ok(json!({ "project": project_entry_from_state(&state, &path), "state": state }))
@@ -268,6 +268,26 @@ fn stamp_project_state(mut state: Value, id: &str, name: &str) -> Value {
     object.insert("schemaVersion".to_string(), json!(1));
     object.insert("updatedAt".to_string(), json!(chrono_like_timestamp_ms()));
     state
+}
+
+fn strip_generated_project_state(mut state: Value) -> Value {
+    strip_openfoam_generated_reports(&mut state);
+    if let Some(project) = state.get_mut("project") {
+        strip_openfoam_generated_reports(project);
+    }
+    state
+}
+
+fn strip_openfoam_generated_reports(value: &mut Value) {
+    let Some(openfoam) = value
+        .get_mut("sizing")
+        .and_then(|sizing| sizing.get_mut("openFoam"))
+        .and_then(|openfoam| openfoam.as_object_mut())
+    else {
+        return;
+    };
+    openfoam.remove("geometryReport");
+    openfoam.remove("caseReports");
 }
 
 fn project_entry_from_state(state: &Value, path: &Path) -> ProjectEntry {

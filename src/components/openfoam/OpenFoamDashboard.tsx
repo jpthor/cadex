@@ -189,12 +189,10 @@ function readOpenFoamProjectState(stored: OpenFoamStoredState | undefined): Open
   if (!stored) return {};
   const tailSizingResult = normalizeTailSizingResult(stored.tailSizingResult);
   return {
-    geometryReport: stored.geometryReport as OpenFoamReport | undefined,
     geometryFingerprint: stored.geometryFingerprint,
     movementControls: stored.movementControls,
     surfaceCaptures: stored.surfaceCaptures,
     activeSurfaceCaptureId: stored.activeSurfaceCaptureId,
-    caseReports: stored.caseReports as OpenFoamDashboardState["caseReports"],
     closedCases: [],
     tailSizingJob: stored.tailSizingJob === "complete" && tailSizingResult ? "complete" : "idle",
     tailSizingResult,
@@ -213,29 +211,21 @@ function normalizeTailSizingResult(value: unknown): TailplaneSizingTest | undefi
 
 function buildOpenFoamProjectState(cache: OpenFoamDashboardState, saved?: OpenFoamStoredState): OpenFoamStoredState | undefined {
   const savedState = readOpenFoamProjectState(saved);
-  const caseReports = Object.fromEntries(
-    Object.entries(cache.caseReports ?? {}).filter(([, report]) => Boolean(report)),
-  ) as OpenFoamDashboardState["caseReports"];
-  const mergedCaseReports = { ...(savedState.caseReports ?? {}), ...(caseReports ?? {}) };
   const mergedClosedCases: TestCaseKind[] = [];
   const tailSizingResult = cache.tailSizingResult ?? savedState.tailSizingResult;
   const movementControls = cache.movementControls ?? savedState.movementControls;
   const surfaceCaptures = cache.surfaceCaptures ?? savedState.surfaceCaptures;
   const activeSurfaceCaptureId = cache.surfaceCaptures ? cache.activeSurfaceCaptureId : savedState.activeSurfaceCaptureId;
   const hasSavedWork =
-    Boolean(cache.geometryReport ?? savedState.geometryReport) ||
     Boolean(movementControls?.length) ||
     Boolean(surfaceCaptures?.length) ||
-    Boolean(tailSizingResult) ||
-    Boolean(Object.values(mergedCaseReports).some(Boolean));
+    Boolean(tailSizingResult);
   if (!hasSavedWork) return undefined;
   return {
-    geometryReport: (cache.geometryReport ?? savedState.geometryReport) as Record<string, unknown> | undefined,
     geometryFingerprint: cache.geometryFingerprint ?? savedState.geometryFingerprint,
     movementControls,
     surfaceCaptures,
     activeSurfaceCaptureId,
-    caseReports: mergedCaseReports as OpenFoamStoredState["caseReports"],
     closedCases: mergedClosedCases,
     tailSizingJob: cache.tailSizingJob === "complete" || savedState.tailSizingJob === "complete" ? "complete" : "idle",
     tailSizingResult,
@@ -505,47 +495,48 @@ export function OpenFoamDashboard({
   return (
     <main className="compute-dashboard openfoam-dashboard">
       <section className="compute-panel compute-wide openfoam-tab-panel">
-        <div className="openfoam-section-head">
-          <PanelHeading icon={activeTestCase?.icon ?? <FlaskConical size={17} />} title={activeTestCase?.title ?? "Prepare"} />
-          {activeTab === "prepare" ? (
-            <JobButton
-              disabled={Boolean(runningJob)}
-              icon={<FlaskConical size={16} />}
-              label="Prepare"
-              running={runningJob === "prepare"}
-              onClick={() => void runJob("prepare")}
-            />
-          ) : activeTestCase ? (
-            <JobButton
-              disabled={Boolean(runningJob) || !geometryReport}
-              icon={<Play size={16} />}
-              label={activeTestCase.runLabel}
-              running={activeTestCase.kind === "tailSizing" ? tailSizingJob === "running" : runningJob === activeTestCase.kind}
-              onClick={() => {
-                if (activeTestCase.kind === "tailSizing") runTailSizingTest();
-                else void runJob(activeTestCase.kind);
-              }}
-            />
-          ) : null}
-        </div>
-        <div className="openfoam-tabs" aria-label="OpenFOAM pages">
-          <button className={activeTab === "prepare" ? "active" : ""} onClick={() => setActiveTab("prepare")} type="button">
-            <FlaskConical size={15} />
-            <span>Prepare</span>
-          </button>
-          {geometryValidated
-            ? testCases.map((testCase) => (
-                <button
-                  className={activeTab === testCase.kind ? "active" : ""}
-                  key={testCase.kind}
-                  onClick={() => setActiveTab(testCase.kind)}
-                  type="button"
-                >
-                  {testCase.icon}
-                  <span>{testCase.title.replace(/^Test Case: /, "")}</span>
-                </button>
-              ))
-            : null}
+        <div className="openfoam-tabs-row">
+          <div className="openfoam-tabs" aria-label="OpenFOAM pages">
+            <button className={activeTab === "prepare" ? "active" : ""} onClick={() => setActiveTab("prepare")} type="button">
+              <FlaskConical size={15} />
+              <span>Prepare</span>
+            </button>
+            {geometryValidated
+              ? testCases.map((testCase) => (
+                  <button
+                    className={activeTab === testCase.kind ? "active" : ""}
+                    key={testCase.kind}
+                    onClick={() => setActiveTab(testCase.kind)}
+                    type="button"
+                  >
+                    {testCase.icon}
+                    <span>{testCase.title.replace(/^Test Case: /, "")}</span>
+                  </button>
+                ))
+              : null}
+          </div>
+          <div className="openfoam-tab-action">
+            {activeTab === "prepare" ? (
+              <JobButton
+                disabled={Boolean(runningJob)}
+                icon={<FlaskConical size={16} />}
+                label="Prepare geometry"
+                running={runningJob === "prepare"}
+                onClick={() => void runJob("prepare")}
+              />
+            ) : activeTestCase ? (
+              <JobButton
+                disabled={Boolean(runningJob) || !geometryReport}
+                icon={<Play size={16} />}
+                label={activeTestCase.runLabel}
+                running={activeTestCase.kind === "tailSizing" ? tailSizingJob === "running" : runningJob === activeTestCase.kind}
+                onClick={() => {
+                  if (activeTestCase.kind === "tailSizing") runTailSizingTest();
+                  else void runJob(activeTestCase.kind);
+                }}
+              />
+            ) : null}
+          </div>
         </div>
         <OpenFoamMissionParameters activeTab={activeTab} onProjectChange={onProjectChange} project={project} />
         {activeTestCase ? <p className="openfoam-tab-description">{activeTestCase.description}</p> : null}
@@ -2706,6 +2697,7 @@ function defaultMovementControl(component: OpenFoamPreviewComponent, enabled = t
     componentKind: component.kind,
     label: component.label,
     axis: isFin ? "vertical-hinge" : "span-hinge",
+    deflectionDeg: 0,
     minDeg: isWingevon ? -25 : -20,
     maxDeg: isWingevon ? 25 : 20,
     neutralDeg: 0,
@@ -2801,9 +2793,19 @@ function OpenFoamMovementEditor({
       </div>
       <div className="openfoam-movement-field-row">
         <label className="openfoam-movement-field">
+          <span>Scene deflection</span>
+          <input
+            type="number"
+            value={control.deflectionDeg ?? 0}
+            onChange={(event) => onPatch({ deflectionDeg: clamp(Number(event.target.value), control.minDeg, control.maxDeg) })}
+          />
+        </label>
+        <label className="openfoam-movement-field">
           <span>Neutral deg</span>
           <input type="number" value={control.neutralDeg} onChange={(event) => onPatch({ neutralDeg: Number(event.target.value) })} />
         </label>
+      </div>
+      <div className="openfoam-movement-field-row">
         <label className="openfoam-movement-field">
           <span>Hinge % chord</span>
           <input
@@ -2815,8 +2817,6 @@ function OpenFoamMovementEditor({
             onChange={(event) => onPatch({ hingeChordFraction: clamp(Number(event.target.value) / 100, 0, 1) })}
           />
         </label>
-      </div>
-      <div className="openfoam-movement-field-row">
         <label className="openfoam-movement-field">
           <span>Hinge span %</span>
           <input
@@ -2828,6 +2828,8 @@ function OpenFoamMovementEditor({
             onChange={(event) => onPatch({ hingeSpanFraction: clamp(Number(event.target.value) / 100, 0, 1) })}
           />
         </label>
+      </div>
+      <div className="openfoam-movement-field-row">
         <label className="openfoam-movement-field">
           <span>Hinge height %</span>
           <input
@@ -2839,10 +2841,14 @@ function OpenFoamMovementEditor({
             onChange={(event) => onPatch({ hingeVerticalFraction: clamp(Number(event.target.value) / 100, 0, 1) })}
           />
         </label>
+        <div className="openfoam-movement-field openfoam-movement-field-note">
+          <span>Pose handle</span>
+          <strong>Drag orange</strong>
+        </div>
       </div>
       <div className="openfoam-movement-summary">
         <span>{axisDescription(control.axis)}</span>
-        <span>Drag the green hinge handle in the canvas for left/right and up/down placement.</span>
+        <span>Drag green to place the hinge. Drag orange to pose the part before Capture.</span>
         <strong>{formatSigned(control.minDeg, 0)} to {formatSigned(control.maxDeg, 0)} deg</strong>
       </div>
       <button className="openfoam-movement-remove" onClick={onRemove} type="button">Clear movement</button>
@@ -2936,8 +2942,10 @@ function OpenFoamMovementCanvas({
     let selectedMesh: THREE.Mesh | undefined;
     let selectedControlForHinge: OpenFoamMovementControl | undefined;
     let selectedHingeBox: THREE.Box3 | undefined;
+    let selectedComponentGroup: THREE.Group | undefined;
     let hingeLine: THREE.Line | undefined;
     let hingeHandle: THREE.Mesh | undefined;
+    let poseHandle: THREE.Mesh | undefined;
     for (const component of components) {
       const positions: number[] = [];
       for (const tri of component.triangles) {
@@ -2947,9 +2955,14 @@ function OpenFoamMovementCanvas({
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
       geometry.computeVertexNormals();
+      geometry.computeBoundingBox();
+      const componentBox = geometry.boundingBox?.clone();
       const isCandidate = component.kind === "wingevon" || component.kind === "tailplane" || component.kind === "fin";
       const isSelected = component.name === selectedComponentName;
       const configured = controlMap.has(component.name);
+      const control = controlMap.get(component.name);
+      const componentGroup = new THREE.Group();
+      componentGroup.name = `${component.name}_pose`;
       const material = new THREE.MeshStandardMaterial({
         color: isSelected ? new THREE.Color("#facc15") : configured ? new THREE.Color("#86efac") : new THREE.Color(component.color),
         emissive: isSelected ? new THREE.Color("#3f2a05") : new THREE.Color("#000000"),
@@ -2964,15 +2977,24 @@ function OpenFoamMovementCanvas({
       mesh.name = component.name;
       mesh.userData.componentName = component.name;
       mesh.userData.componentKind = component.kind;
-      group.add(mesh);
+      componentGroup.add(mesh);
       if (isCandidate) selectableMeshes.push(mesh);
-      if (isSelected) selectedMesh = mesh;
+      if (isSelected) {
+        selectedMesh = mesh;
+        selectedComponentGroup = componentGroup;
+      }
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geometry, 24),
         new THREE.LineBasicMaterial({ color: isSelected ? 0xfef08a : 0xdbeafe, transparent: true, opacity: isCandidate ? 0.62 : 0.32, depthWrite: false }),
       );
       edges.renderOrder = isCandidate ? 3 : 2;
-      group.add(edges);
+      componentGroup.add(edges);
+      if (isSelected && componentBox) {
+        poseHandle = movementPoseHandleForBox(componentBox, control ?? defaultMovementControl(component, false));
+        componentGroup.add(poseHandle);
+      }
+      if (componentBox && control?.enabled) applyHingePoseToObject(componentGroup, componentBox, control);
+      group.add(componentGroup);
     }
 
     if (selectedMesh) {
@@ -3022,6 +3044,7 @@ function OpenFoamMovementCanvas({
     let animationFrame = 0;
     let dragging = false;
     let draggingHinge = false;
+    let draggingPose = false;
     let panning = false;
     let moved = false;
     let startPointer = { x: 0, y: 0 };
@@ -3029,6 +3052,8 @@ function OpenFoamMovementCanvas({
     let lastTrackballPoint = new THREE.Vector3();
     let hingeDragPlane: THREE.Plane | undefined;
     let pendingHingePatch: Partial<OpenFoamMovementControl> | undefined;
+    let pendingPosePatch: Partial<OpenFoamMovementControl> | undefined;
+    let poseStartDeflection = 0;
     const setPointerFromEvent = (event: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -3047,6 +3072,18 @@ function OpenFoamMovementCanvas({
     const onPointerDown = (event: PointerEvent) => {
       event.preventDefault();
       setPointerFromEvent(event);
+      const poseHit = poseHandle ? raycaster.intersectObject(poseHandle, false)[0] : undefined;
+      if (poseHit && selectedMesh && selectedControlForHinge && selectedHingeBox && selectedComponentGroup) {
+        dragging = true;
+        draggingPose = true;
+        moved = true;
+        pendingPosePatch = undefined;
+        poseStartDeflection = selectedControlForHinge.deflectionDeg ?? 0;
+        startPointer = { x: event.clientX, y: event.clientY };
+        lastPointer = startPointer;
+        renderer.domElement.setPointerCapture(event.pointerId);
+        return;
+      }
       const handleHit = hingeHandle ? raycaster.intersectObject(hingeHandle, false)[0] : undefined;
       if (handleHit && selectedMesh && selectedControlForHinge && selectedHingeBox && hingeLine && hingeHandle) {
         dragging = true;
@@ -3072,6 +3109,17 @@ function OpenFoamMovementCanvas({
     const onPointerMove = (event: PointerEvent) => {
       if (!dragging) return;
       event.preventDefault();
+      if (draggingPose) {
+        moved = true;
+        if (selectedControlForHinge && selectedHingeBox && selectedComponentGroup) {
+          const deltaDeg = (event.clientX - startPointer.x) * 0.18 - (event.clientY - startPointer.y) * 0.28;
+          const deflectionDeg = clamp(poseStartDeflection + deltaDeg, selectedControlForHinge.minDeg, selectedControlForHinge.maxDeg);
+          pendingPosePatch = { deflectionDeg };
+          selectedControlForHinge = { ...selectedControlForHinge, deflectionDeg, enabled: true };
+          applyHingePoseToObject(selectedComponentGroup, selectedHingeBox, selectedControlForHinge);
+        }
+        return;
+      }
       if (draggingHinge) {
         moved = true;
         if (hingeDragPlane && selectedControlForHinge && selectedHingeBox && hingeLine && hingeHandle) {
@@ -3116,6 +3164,14 @@ function OpenFoamMovementCanvas({
       if (hit?.object instanceof THREE.Mesh) onSelectComponent(String(hit.object.userData.componentName));
     };
     const onPointerUp = (event: PointerEvent) => {
+      if (draggingPose) {
+        if (selectedMesh && pendingPosePatch) onHingeChangeRef.current(selectedMesh.name, { ...pendingPosePatch, enabled: true });
+        dragging = false;
+        draggingPose = false;
+        pendingPosePatch = undefined;
+        if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
+        return;
+      }
       if (draggingHinge) {
         if (selectedMesh && pendingHingePatch) onHingeChangeRef.current(selectedMesh.name, pendingHingePatch);
         dragging = false;
@@ -3132,7 +3188,9 @@ function OpenFoamMovementCanvas({
     const onPointerCancel = (event: PointerEvent) => {
       dragging = false;
       draggingHinge = false;
+      draggingPose = false;
       pendingHingePatch = undefined;
+      pendingPosePatch = undefined;
       hingeDragPlane = undefined;
       if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
     };
@@ -3241,10 +3299,48 @@ function movementHingeVisualForMesh(mesh: THREE.Mesh, control: OpenFoamMovementC
   return { box, line, handle };
 }
 
+function movementPoseHandleForBox(box: THREE.Box3, control: OpenFoamMovementControl) {
+  const size = box.getSize(new THREE.Vector3());
+  const handleRadius = Math.max(size.length() * 0.055, 0.045);
+  const handle = new THREE.Mesh(
+    new THREE.SphereGeometry(handleRadius, 24, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0xf97316,
+      emissive: 0x4a1d04,
+      metalness: 0,
+      roughness: 0.32,
+      depthTest: false,
+    }),
+  );
+  handle.name = "part-pose-handle";
+  handle.renderOrder = 35;
+  handle.position.copy(movementPoseHandlePoint(box, control));
+  return handle;
+}
+
 function meshGeometryBox(mesh: THREE.Mesh) {
   const geometry = mesh.geometry as THREE.BufferGeometry;
   geometry.computeBoundingBox();
   return geometry.boundingBox?.clone();
+}
+
+function movementPoseHandlePoint(box: THREE.Box3, control: OpenFoamMovementControl) {
+  const size = box.getSize(new THREE.Vector3());
+  const hinge = movementHingeHandlePoint(box, control);
+  const center = box.getCenter(new THREE.Vector3());
+  if (control.axis === "vertical-hinge") {
+    const oppositeX = hinge.x < center.x ? box.max.x : box.min.x;
+    const oppositeY = hinge.y < center.y ? box.max.y : box.min.y;
+    return new THREE.Vector3(oppositeX, oppositeY, center.z);
+  }
+  if (control.axis === "chord-hinge") {
+    const oppositeX = hinge.x < center.x ? box.max.x : box.min.x;
+    const oppositeZ = hinge.z < center.z ? box.max.z : box.min.z;
+    return new THREE.Vector3(oppositeX, center.y, oppositeZ);
+  }
+  const oppositeY = hinge.y < center.y ? box.max.y : box.min.y;
+  const oppositeZ = hinge.z < center.z ? box.max.z : box.min.z;
+  return new THREE.Vector3(center.x, oppositeY, size.z < 0.001 ? center.z : oppositeZ);
 }
 
 function movementHingeHandlePoint(box: THREE.Box3, control: OpenFoamMovementControl) {
@@ -3284,6 +3380,29 @@ function updateHingeVisual(line: THREE.Line, handle: THREE.Mesh, box: THREE.Box3
   line.geometry.dispose();
   line.geometry = new THREE.BufferGeometry().setFromPoints(movementHingeLinePoints(box, control));
   handle.position.copy(movementHingeHandlePoint(box, control));
+}
+
+function applyHingePoseToObject(object: THREE.Object3D, box: THREE.Box3, control: OpenFoamMovementControl) {
+  object.matrixAutoUpdate = false;
+  object.matrix.identity();
+  object.matrix.copy(hingePoseMatrix(box, control));
+  object.matrixWorldNeedsUpdate = true;
+}
+
+function hingePoseMatrix(box: THREE.Box3, control: OpenFoamMovementControl) {
+  const pivot = movementHingeHandlePoint(box, control);
+  const axis = movementAxisVector(control.axis);
+  const angle = ((control.deflectionDeg ?? 0) * Math.PI) / 180;
+  return new THREE.Matrix4()
+    .makeTranslation(pivot.x, pivot.y, pivot.z)
+    .multiply(new THREE.Matrix4().makeRotationAxis(axis, angle))
+    .multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z));
+}
+
+function movementAxisVector(axis: OpenFoamMovementAxis) {
+  if (axis === "vertical-hinge") return new THREE.Vector3(0, 0, 1);
+  if (axis === "chord-hinge") return new THREE.Vector3(0, 1, 0);
+  return new THREE.Vector3(1, 0, 0);
 }
 
 function hingePatchFromLocalPoint(box: THREE.Box3, axis: OpenFoamMovementAxis, point: THREE.Vector3): Partial<OpenFoamMovementControl> {

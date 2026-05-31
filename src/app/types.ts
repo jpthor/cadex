@@ -4,7 +4,7 @@ import type { SizingProject } from "../sizing";
 import type { unitOptions } from "./constants";
 
 export type DisplayUnit = (typeof unitOptions)[number];
-export type AppMode = "sizing" | "sketch" | "compute" | "openfoam" | "propulsion" | "jet" | "endurance" | "ijet" | "final" | "max" | "design";
+export type AppMode = "sizing" | "sketch" | "compute" | "openfoam" | "paraview" | "propulsion" | "jet" | "endurance" | "ijet" | "final" | "max" | "design";
 
 export type OpenVspSizingResult = {
   scriptPath: string;

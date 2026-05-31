@@ -44,6 +44,7 @@ import { ProjectMenu } from "./components/design/ProjectMenu";
 import { JetDashboard } from "./components/jet/JetDashboard";
 import { MaxDashboard } from "./components/max/MaxDashboard";
 import { OpenFoamDashboard } from "./components/openfoam/OpenFoamDashboard";
+import { ParaViewDashboard } from "./components/paraview/ParaViewDashboard";
 import { TimelineItem } from "./components/design/TimelineItem";
 import { PropulsionWorkspace } from "./components/propulsion/propulsionPanels";
 import { SizingDashboard } from "./components/sizing/sizingPanels";
@@ -84,7 +85,7 @@ function formatSelectedContext(selectedGeometry: SelectedGeometry | null) {
 function loadStoredAppMode(): AppMode {
   const storedMode = localStorage.getItem(appModeStorageKey);
   if (storedMode === "design") return "final";
-  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "openfoam" || storedMode === "propulsion" || storedMode === "jet" || storedMode === "endurance" || storedMode === "ijet" || storedMode === "final" || storedMode === "max"
+  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "openfoam" || storedMode === "paraview" || storedMode === "propulsion" || storedMode === "jet" || storedMode === "endurance" || storedMode === "ijet" || storedMode === "final" || storedMode === "max"
     ? storedMode
     : "sizing";
 }
@@ -140,18 +141,14 @@ function mergeOpenFoamState(
   if (!latest) return pending;
   const pendingUpdatedAt = pending.updatedAt ?? 0;
   const latestUpdatedAt = latest.updatedAt ?? 0;
-  const pendingCaseReports = pending.caseReports ?? {};
-  const latestCaseReports = latest.caseReports ?? {};
   const tailFromPending = Boolean(pending.tailSizingResult) && pendingUpdatedAt >= latestUpdatedAt;
   const movementControls = pending.movementControls ?? latest.movementControls;
   const surfaceCaptures = pending.surfaceCaptures ?? latest.surfaceCaptures;
   const activeSurfaceCaptureId = pending.surfaceCaptures ? pending.activeSurfaceCaptureId : latest.activeSurfaceCaptureId;
   return {
-    geometryReport: pending.geometryReport && pendingUpdatedAt >= latestUpdatedAt ? pending.geometryReport : latest.geometryReport ?? pending.geometryReport,
     movementControls,
     surfaceCaptures,
     activeSurfaceCaptureId,
-    caseReports: { ...latestCaseReports, ...pendingCaseReports },
     closedCases: Array.from(new Set([...(latest.closedCases ?? []), ...(pending.closedCases ?? [])])),
     tailSizingJob: tailFromPending ? pending.tailSizingJob : latest.tailSizingJob ?? pending.tailSizingJob,
     tailSizingResult: tailFromPending ? pending.tailSizingResult : latest.tailSizingResult ?? pending.tailSizingResult,
@@ -789,6 +786,9 @@ export default function App() {
             <button className={appMode === "openfoam" ? "active" : ""} onClick={() => setAppMode("openfoam")}>
               OpenFOAM
             </button>
+            <button className={appMode === "paraview" ? "active" : ""} onClick={() => setAppMode("paraview")}>
+              ParaView
+            </button>
             <button className={appMode === "propulsion" ? "active" : ""} onClick={() => setAppMode("propulsion")}>
               Propulsion
             </button>
@@ -1035,6 +1035,10 @@ export default function App() {
             onOpenFoamStateChange={updateOpenFoamState}
             onProjectChange={updateSizingProject}
           />
+        </>
+      ) : appMode === "paraview" ? (
+        <>
+          <ParaViewDashboard project={sizingProject} projectName={activeAircraftProject?.name ?? project.name} />
         </>
       ) : (
         <>

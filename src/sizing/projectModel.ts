@@ -160,12 +160,10 @@ export type SizingProject = {
 };
 
 export type OpenFoamStoredState = {
-  geometryReport?: Record<string, unknown>;
   geometryFingerprint?: string;
   movementControls?: OpenFoamMovementControl[];
   surfaceCaptures?: OpenFoamSurfaceCapture[];
   activeSurfaceCaptureId?: string;
-  caseReports?: Record<string, Record<string, unknown> | undefined>;
   closedCases?: string[];
   tailSizingJob?: "idle" | "complete";
   tailSizingResult?: unknown;
@@ -179,6 +177,7 @@ export type OpenFoamMovementControl = {
   componentKind: string;
   label?: string;
   axis: OpenFoamMovementAxis;
+  deflectionDeg: number;
   minDeg: number;
   maxDeg: number;
   neutralDeg: number;
@@ -316,7 +315,6 @@ export function normalizeSizingProject(input: unknown): SizingProject {
 function normalizeOpenFoamStoredState(value: unknown): OpenFoamStoredState | undefined {
   if (!value || typeof value !== "object") return undefined;
   const candidate = value as OpenFoamStoredState;
-  const geometryReport = isRecord(candidate.geometryReport) ? candidate.geometryReport : undefined;
   const geometryFingerprint = typeof candidate.geometryFingerprint === "string" ? candidate.geometryFingerprint : undefined;
   const movementControls = Array.isArray(candidate.movementControls)
     ? candidate.movementControls.map(normalizeOpenFoamMovementControl).filter(Boolean) as OpenFoamMovementControl[]
@@ -328,11 +326,6 @@ function normalizeOpenFoamStoredState(value: unknown): OpenFoamStoredState | und
     surfaceCaptures?.some((capture) => capture.id === candidate.activeSurfaceCaptureId)
       ? candidate.activeSurfaceCaptureId
       : undefined;
-  const caseReports = isRecord(candidate.caseReports)
-    ? Object.fromEntries(
-        Object.entries(candidate.caseReports).filter(([, report]) => report === undefined || isRecord(report)),
-      ) as OpenFoamStoredState["caseReports"]
-    : undefined;
   const closedCases = Array.isArray(candidate.closedCases)
     ? candidate.closedCases.filter((entry): entry is string => typeof entry === "string")
     : undefined;
@@ -340,14 +333,12 @@ function normalizeOpenFoamStoredState(value: unknown): OpenFoamStoredState | und
   const tailSizingResult = candidate.tailSizingResult && typeof candidate.tailSizingResult === "object" ? candidate.tailSizingResult : undefined;
   const updatedAt = typeof candidate.updatedAt === "number" && Number.isFinite(candidate.updatedAt) ? candidate.updatedAt : undefined;
   const hasState =
-    Boolean(geometryReport) ||
     Boolean(movementControls?.length) ||
     Boolean(surfaceCaptures?.length) ||
-    Boolean(caseReports && Object.values(caseReports).some(Boolean)) ||
     Boolean(closedCases?.length) ||
     Boolean(tailSizingResult);
   if (!hasState) return undefined;
-  return { geometryReport, geometryFingerprint, movementControls, surfaceCaptures, activeSurfaceCaptureId, caseReports, closedCases, tailSizingJob, tailSizingResult, updatedAt };
+  return { geometryFingerprint, movementControls, surfaceCaptures, activeSurfaceCaptureId, closedCases, tailSizingJob, tailSizingResult, updatedAt };
 }
 
 function normalizeOpenFoamMovementControl(value: unknown): OpenFoamMovementControl | undefined {
@@ -360,6 +351,7 @@ function normalizeOpenFoamMovementControl(value: unknown): OpenFoamMovementContr
     componentKind: typeof value.componentKind === "string" ? value.componentKind : "liftingSurface",
     label: typeof value.label === "string" ? value.label : undefined,
     axis,
+    deflectionDeg: clampNumber(value.deflectionDeg, 0, -90, 90),
     minDeg: clampNumber(value.minDeg, axis === "vertical-hinge" ? -25 : -20, -90, 90),
     maxDeg: clampNumber(value.maxDeg, axis === "vertical-hinge" ? 25 : 20, -90, 90),
     neutralDeg: clampNumber(value.neutralDeg, 0, -90, 90),

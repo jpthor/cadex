@@ -5257,14 +5257,32 @@ button {
   gap: 12px;
 }
 
+.openfoam-tabs-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .openfoam-tabs {
   display: flex;
   flex-wrap: wrap;
+  flex: 1 1 auto;
   gap: 6px;
   padding: 5px;
   border: 1px solid rgba(130, 165, 190, 0.2);
   border-radius: 7px;
   background: rgba(5, 14, 21, 0.72);
+}
+
+.openfoam-tab-action {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+}
+
+.openfoam-tab-action .openfoam-action {
+  min-height: 100%;
 }
 
 .openfoam-tabs button {
@@ -6329,6 +6347,82 @@ button {
   background: rgba(30, 55, 76, 0.95);
 }
 
+.paraview-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.paraview-render-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(130, 165, 190, 0.24);
+  border-radius: 7px;
+  background: #071018;
+}
+
+.paraview-render-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.paraview-render-head div {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paraview-render-head h3 {
+  margin: 0;
+  color: #f3f8fc;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.paraview-render-head span {
+  color: #9fb3c4;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.paraview-render-frame {
+  display: grid;
+  place-items: center;
+  min-height: 540px;
+  overflow: hidden;
+  border: 1px solid rgba(130, 165, 190, 0.18);
+  border-radius: 6px;
+  background: #050d14;
+}
+
+.paraview-render-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.paraview-empty {
+  display: grid;
+  gap: 6px;
+  max-width: 520px;
+  padding: 20px;
+  text-align: center;
+}
+
+.paraview-empty strong {
+  color: #f3f8fc;
+  font-size: 15px;
+}
+
+.paraview-empty span {
+  color: #a8bbca;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .openfoam-preview-canvas {
   min-height: 380px;
 }
@@ -6513,6 +6607,20 @@ button {
 .openfoam-movement-field input:focus {
   border-color: rgba(125, 208, 255, 0.72);
   box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.16);
+}
+
+.openfoam-movement-field-note {
+  min-height: 36px;
+  align-content: center;
+  padding: 7px 10px;
+  border: 1px solid rgba(249, 115, 22, 0.28);
+  border-radius: 6px;
+  background: rgba(79, 35, 8, 0.34);
+}
+
+.openfoam-movement-field-note strong {
+  color: #fed7aa;
+  font-size: 13px;
 }
 
 .openfoam-movement-field-row {

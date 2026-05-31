@@ -1854,6 +1854,7 @@ function normalizeMovementControls(value) {
       componentKind: typeof control.componentKind === "string" ? control.componentKind : "unknown",
       label: typeof control.label === "string" ? control.label : undefined,
       axis: ["span-hinge", "vertical-hinge", "chord-hinge"].includes(control.axis) ? control.axis : "span-hinge",
+      deflectionDeg: clampNumber(control.deflectionDeg, 0, -90, 90),
       minDeg: clampNumber(control.minDeg, -25, -90, 90),
       maxDeg: clampNumber(control.maxDeg, 25, -90, 90),
       neutralDeg: clampNumber(control.neutralDeg, 0, -90, 90),
