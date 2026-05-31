@@ -12,14 +12,16 @@ import {
   normalizeSizingProject,
   rotorMassPerRotorEstimate,
   rotorTotalMassEstimate,
+  tailplaneAuthorityFactor,
   usableEnergyFromInstalledWh,
+  auditedSizingAssumptions,
 } from "../src/sizing/index.ts";
 
 const carbonFibreDensityKgM3 = 1600;
 const thicknessM = 0.0012;
 const payloadKg = 1;
 const batteryMassKg = 0.62;
-const inferredBatteryMassKg = 0.2 * 0.1 * 0.028 * 1700;
+const inferredBatteryMassKg = 0.2 * 0.1 * 0.1 * 1700;
 const reserveMissionEnergyWh = 900;
 
 const bodySurfaceAreaM2 = 2 * Math.PI * 0.05 * 0.1 + 2 * Math.PI * 0.1 * 1 + 2 * Math.PI * 0.05 * 0.1;
@@ -275,12 +277,20 @@ const tailProject = {
 };
 const tailAnalysis = computeSizingAnalysis(tailProject);
 const tailArea = 0.5 * 0.08 * 2;
-const tailEffectiveness = 0.9 * 3.45;
+const tailEffectiveness = 0.9;
+const tailDynamicPressureRatio = auditedSizingAssumptions.tailplaneDynamicPressureRatio;
 const expectedTailWeightedCop =
-  (0.05 * wingSurfaceAreaM2 + (-0.68 - 0.08 * 0.25) * tailArea * tailEffectiveness) /
-  (wingSurfaceAreaM2 + tailArea * tailEffectiveness);
-approx(tailAnalysis.cop.yM, expectedTailWeightedCop, "downwash-weighted wing and tailplane CoP");
+  (0.05 * wingSurfaceAreaM2 + (-0.68 - 0.08 * 0.25) * tailArea * tailEffectiveness * tailDynamicPressureRatio) /
+  (wingSurfaceAreaM2 + tailArea * tailEffectiveness * tailDynamicPressureRatio);
+approx(tailAnalysis.cop.yM, expectedTailWeightedCop, "effectiveness-weighted wing and tailplane CoP");
 approx(tailAnalysis.wingAreaM2, wingSurfaceAreaM2, "wing reference area ignores tailplane");
+const expectedRawTailVolume = tailArea * Math.abs((-0.68 - 0.08 * 0.25) - 0.05) / (wingSurfaceAreaM2 * 0.2);
+approx(tailAnalysis.tailVolumeCoefficientRaw, expectedRawTailVolume, "raw geometric tail volume");
+approx(
+  tailAnalysis.tailVolumeCoefficient,
+  (tailAnalysis.tailVolumeCoefficientRaw ?? 0) * tailplaneAuthorityFactor(),
+  "effective tail volume includes rotor wake and all-moving authority",
+);
 
 const localMirroredTailProject = {
   mission: project.mission,
@@ -321,8 +331,8 @@ approx(
   "tailplane mirrors locally, then mirrors across origin",
 );
 const expectedLocalMirroredTailCop =
-  (0.05 * wingSurfaceAreaM2 + (-0.68 - 0.08 * 0.25) * localMirroredTailArea * tailEffectiveness) /
-  (wingSurfaceAreaM2 + localMirroredTailArea * tailEffectiveness);
+  (0.05 * wingSurfaceAreaM2 + (-0.68 - 0.08 * 0.25) * localMirroredTailArea * tailEffectiveness * tailDynamicPressureRatio) /
+  (wingSurfaceAreaM2 + localMirroredTailArea * tailEffectiveness * tailDynamicPressureRatio);
 approx(localMirroredTailAnalysis.cop.yM, expectedLocalMirroredTailCop, "local mirrored tailplane contributes doubled aerodynamic area");
 
 const distantMirrorPlaneTail = {

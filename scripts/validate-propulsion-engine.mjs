@@ -229,7 +229,7 @@ const sizingProject = {
   ],
 };
 
-const expectedBatteryMassKg = 0.02 * 0.028 * 1700;
+const expectedBatteryMassKg = 0.02 * 0.1 * 1700;
 approx(batteryMassFromSizing(sizingProject), expectedBatteryMassKg, "Propulsion receives inferred battery mass from Sizing");
 const rotorDefinition = rotorDefinitionFromSizing(sizingProject);
 assert.equal(rotorDefinition.bladeCount, 4, "Propulsion receives blade count from actual sketch rotor");

@@ -42,7 +42,10 @@ pub fn extract_output_text(response: &Value) -> Option<String> {
             .into_iter()
             .flatten()
         {
-            let kind = content.get("type").and_then(|value| value.as_str()).unwrap_or("");
+            let kind = content
+                .get("type")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
             if kind != "output_text" {
                 continue;
             }

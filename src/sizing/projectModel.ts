@@ -132,6 +132,7 @@ export type SizingAnalysis = {
   cop: SizePoint;
   staticMarginPct: number;
   tailplaneAreaM2?: number;
+  tailVolumeCoefficientRaw?: number;
   tailVolumeCoefficient?: number;
   rotorCount?: number;
   rotorThrustCenter?: SizePoint;
@@ -155,6 +156,45 @@ export type SizingProject = {
   analysis?: SizingAnalysis;
   components?: unknown;
   dimensions?: SizeDimension[];
+  openFoam?: OpenFoamStoredState;
+};
+
+export type OpenFoamStoredState = {
+  geometryReport?: Record<string, unknown>;
+  geometryFingerprint?: string;
+  movementControls?: OpenFoamMovementControl[];
+  surfaceCaptures?: OpenFoamSurfaceCapture[];
+  activeSurfaceCaptureId?: string;
+  caseReports?: Record<string, Record<string, unknown> | undefined>;
+  closedCases?: string[];
+  tailSizingJob?: "idle" | "complete";
+  tailSizingResult?: unknown;
+  updatedAt?: number;
+};
+
+export type OpenFoamMovementAxis = "span-hinge" | "vertical-hinge" | "chord-hinge";
+
+export type OpenFoamMovementControl = {
+  componentName: string;
+  componentKind: string;
+  label?: string;
+  axis: OpenFoamMovementAxis;
+  minDeg: number;
+  maxDeg: number;
+  neutralDeg: number;
+  hingeChordFraction: number;
+  hingeSpanFraction: number;
+  hingeVerticalFraction: number;
+  enabled: boolean;
+};
+
+export type OpenFoamSurfaceCapture = {
+  id: string;
+  title: string;
+  geometryFingerprint?: string;
+  createdAt: number;
+  componentCount?: number;
+  movementControls: OpenFoamMovementControl[];
 };
 
 export type SizingCanvasView = {
@@ -227,6 +267,7 @@ export function defaultSizingProject(): SizingProject {
     showSizingReference: true,
     sketchCanvasView: undefined,
     sketchScaleUnit: "cm",
+    openFoam: undefined,
   };
 }
 
@@ -268,7 +309,87 @@ export function normalizeSizingProject(input: unknown): SizingProject {
     },
     analysis: candidate.analysis,
     dimensions: Array.isArray(candidate.dimensions) ? candidate.dimensions.map(normalizeDimension).filter(Boolean) as SizeDimension[] : [],
+    openFoam: normalizeOpenFoamStoredState(candidate.openFoam),
   };
+}
+
+function normalizeOpenFoamStoredState(value: unknown): OpenFoamStoredState | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as OpenFoamStoredState;
+  const geometryReport = isRecord(candidate.geometryReport) ? candidate.geometryReport : undefined;
+  const geometryFingerprint = typeof candidate.geometryFingerprint === "string" ? candidate.geometryFingerprint : undefined;
+  const movementControls = Array.isArray(candidate.movementControls)
+    ? candidate.movementControls.map(normalizeOpenFoamMovementControl).filter(Boolean) as OpenFoamMovementControl[]
+    : undefined;
+  const surfaceCaptures = Array.isArray(candidate.surfaceCaptures)
+    ? candidate.surfaceCaptures.map(normalizeOpenFoamSurfaceCapture).filter(Boolean) as OpenFoamSurfaceCapture[]
+    : undefined;
+  const activeSurfaceCaptureId = typeof candidate.activeSurfaceCaptureId === "string" &&
+    surfaceCaptures?.some((capture) => capture.id === candidate.activeSurfaceCaptureId)
+      ? candidate.activeSurfaceCaptureId
+      : undefined;
+  const caseReports = isRecord(candidate.caseReports)
+    ? Object.fromEntries(
+        Object.entries(candidate.caseReports).filter(([, report]) => report === undefined || isRecord(report)),
+      ) as OpenFoamStoredState["caseReports"]
+    : undefined;
+  const closedCases = Array.isArray(candidate.closedCases)
+    ? candidate.closedCases.filter((entry): entry is string => typeof entry === "string")
+    : undefined;
+  const tailSizingJob = candidate.tailSizingJob === "complete" ? "complete" : "idle";
+  const tailSizingResult = candidate.tailSizingResult && typeof candidate.tailSizingResult === "object" ? candidate.tailSizingResult : undefined;
+  const updatedAt = typeof candidate.updatedAt === "number" && Number.isFinite(candidate.updatedAt) ? candidate.updatedAt : undefined;
+  const hasState =
+    Boolean(geometryReport) ||
+    Boolean(movementControls?.length) ||
+    Boolean(surfaceCaptures?.length) ||
+    Boolean(caseReports && Object.values(caseReports).some(Boolean)) ||
+    Boolean(closedCases?.length) ||
+    Boolean(tailSizingResult);
+  if (!hasState) return undefined;
+  return { geometryReport, geometryFingerprint, movementControls, surfaceCaptures, activeSurfaceCaptureId, caseReports, closedCases, tailSizingJob, tailSizingResult, updatedAt };
+}
+
+function normalizeOpenFoamMovementControl(value: unknown): OpenFoamMovementControl | undefined {
+  if (!isRecord(value)) return undefined;
+  const componentName = typeof value.componentName === "string" ? value.componentName : "";
+  if (!componentName) return undefined;
+  const axis = value.axis === "vertical-hinge" || value.axis === "chord-hinge" ? value.axis : "span-hinge";
+  return {
+    componentName,
+    componentKind: typeof value.componentKind === "string" ? value.componentKind : "liftingSurface",
+    label: typeof value.label === "string" ? value.label : undefined,
+    axis,
+    minDeg: clampNumber(value.minDeg, axis === "vertical-hinge" ? -25 : -20, -90, 90),
+    maxDeg: clampNumber(value.maxDeg, axis === "vertical-hinge" ? 25 : 20, -90, 90),
+    neutralDeg: clampNumber(value.neutralDeg, 0, -90, 90),
+    hingeChordFraction: clampNumber(value.hingeChordFraction, 0.25, 0, 1),
+    hingeSpanFraction: clampNumber(value.hingeSpanFraction, 0.5, 0, 1),
+    hingeVerticalFraction: clampNumber(value.hingeVerticalFraction, 0.5, 0, 1),
+    enabled: value.enabled !== false,
+  };
+}
+
+function normalizeOpenFoamSurfaceCapture(value: unknown): OpenFoamSurfaceCapture | undefined {
+  if (!isRecord(value)) return undefined;
+  const movementControls = Array.isArray(value.movementControls)
+    ? value.movementControls.map(normalizeOpenFoamMovementControl).filter(Boolean) as OpenFoamMovementControl[]
+    : [];
+  const id = typeof value.id === "string" && value.id.trim() ? value.id : `capture-${Math.random().toString(36).slice(2)}`;
+  const title = typeof value.title === "string" && value.title.trim() ? value.title.trim() : "Surface setup";
+  const createdAt = typeof value.createdAt === "number" && Number.isFinite(value.createdAt) ? value.createdAt : Date.now();
+  return {
+    id,
+    title,
+    geometryFingerprint: typeof value.geometryFingerprint === "string" ? value.geometryFingerprint : undefined,
+    createdAt,
+    componentCount: typeof value.componentCount === "number" && Number.isFinite(value.componentCount) ? value.componentCount : undefined,
+    movementControls,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeScaleUnit(value: unknown): "mm" | "cm" | "m" {

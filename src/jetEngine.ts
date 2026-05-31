@@ -73,10 +73,12 @@ export type EnduranceAssistPoint = {
   batteryEnduranceMin: number;
   batteryPowerW: number;
   commandPct: number;
+  endMassKg: number;
   enduranceMin: number;
   enduranceLimiter: "battery" | "fuel" | "none";
   flyable: boolean;
   fuelBurnKgMin: number;
+  fuelBurnedKg: number;
   fuelEnduranceMin: number;
   jetThrustN: number;
   minimumFlyableSpeedKt: number;
@@ -894,10 +896,12 @@ function solveEnduranceAssistPoint({
       batteryEnduranceMin: Number.POSITIVE_INFINITY,
       batteryPowerW: 0,
       commandPct: safeJetCommand * 100,
+      endMassKg: aircraftMassKg,
       enduranceLimiter: "none",
       enduranceMin: 0,
       flyable: false,
       fuelBurnKgMin,
+      fuelBurnedKg: 0,
       fuelEnduranceMin: fuelBurnKgMin > 0 ? fuelMassKg / fuelBurnKgMin : Number.POSITIVE_INFINITY,
       jetThrustN,
       minimumFlyableSpeedKt,
@@ -908,37 +912,101 @@ function solveEnduranceAssistPoint({
       speedKt,
     };
   }
-  const demand = flightDemandAtSpeed({
-    aero,
-    aspectRatio: Math.max(aero.geometry.aspectRatio, 0.1),
-    cruisePropEfficiency,
-    loadedPeakEfficiencySpeedMS,
-    oswaldEfficiency: Math.max(aero.assumptions.oswaldEfficiency, 0.1),
-    parasiteCd: Math.max(aero.aerodynamics.parasiteDragCoefficient, 0.001),
-    rhoKgM3: aero.assumptions.rhoKgM3,
-    speedMS,
-    weightN: Math.max(aircraftMassKg, 0.001) * gravity,
-    wingAreaM2: Math.max(aero.geometry.wingAreaM2, 0.001),
-  });
-  const propThrustN = Math.max(0, demand.dragN - jetThrustN);
-  const propPowerW = (propThrustN * speedMS) / Math.max(demand.propEfficiency, 0.001);
-  const propPowerFraction = propFullPowerW > 0 ? propPowerW / propFullPowerW : 0;
-  const propCommand = Math.cbrt(Math.max(0, propPowerFraction));
-  const propCommandPct = propCommand * 100;
-  const batteryCurrentA = propFullCurrentPerMotorA * Math.pow(propCommand, 3) * motorCount;
-  const batteryPowerW = propPowerW;
-  const batteryEnduranceMin = batteryCurrentA > 0 ? (batteryCapacityAh * usableReserveFraction / batteryCurrentA) * 60 : Number.POSITIVE_INFINITY;
+
+  const demandAtMass = (massKg: number) => {
+    const demand = flightDemandAtSpeed({
+      aero,
+      aspectRatio: Math.max(aero.geometry.aspectRatio, 0.1),
+      cruisePropEfficiency,
+      loadedPeakEfficiencySpeedMS,
+      oswaldEfficiency: Math.max(aero.assumptions.oswaldEfficiency, 0.1),
+      parasiteCd: Math.max(aero.aerodynamics.parasiteDragCoefficient, 0.001),
+      rhoKgM3: aero.assumptions.rhoKgM3,
+      speedMS,
+      weightN: Math.max(massKg, 0.001) * gravity,
+      wingAreaM2: Math.max(aero.geometry.wingAreaM2, 0.001),
+    });
+    const propThrustN = Math.max(0, demand.dragN - jetThrustN);
+    const propPowerW = (propThrustN * speedMS) / Math.max(demand.propEfficiency, 0.001);
+    const propPowerFraction = propFullPowerW > 0 ? propPowerW / propFullPowerW : 0;
+    const propCommand = Math.cbrt(Math.max(0, propPowerFraction));
+    const batteryCurrentA = propFullCurrentPerMotorA * Math.pow(propCommand, 3) * motorCount;
+    return { batteryCurrentA, propCommand, propPowerFraction, propPowerW, propThrustN };
+  };
+
+  const initialDemand = demandAtMass(aircraftMassKg);
+  const flyable = initialDemand.propPowerFraction <= 1 + 1e-6;
+  if (!flyable) {
+    return {
+      batteryEnduranceMin: 0,
+      batteryPowerW: initialDemand.propPowerW,
+      commandPct: safeJetCommand * 100,
+      endMassKg: aircraftMassKg,
+      enduranceLimiter: "none",
+      enduranceMin: 0,
+      flyable: false,
+      fuelBurnKgMin,
+      fuelBurnedKg: 0,
+      fuelEnduranceMin: fuelBurnKgMin > 0 ? fuelMassKg / fuelBurnKgMin : Number.POSITIVE_INFINITY,
+      jetThrustN,
+      minimumFlyableSpeedKt,
+      propCommandPct: initialDemand.propCommand * 100,
+      propPowerW: initialDemand.propPowerW,
+      propThrustN: initialDemand.propThrustN,
+      rangeNm: 0,
+      speedKt,
+    };
+  }
+
+  const usableBatteryAh = batteryCapacityAh * usableReserveFraction;
   const fuelEnduranceMin = fuelBurnKgMin > 0 ? fuelMassKg / fuelBurnKgMin : Number.POSITIVE_INFINITY;
-  const flyable = propPowerFraction <= 1 + 1e-6;
-  const enduranceMin = flyable ? Math.min(batteryEnduranceMin, fuelEnduranceMin) : 0;
+  const stepMin = 0.25;
+  const maxSimMin = 24 * 60;
+  let elapsedMin = 0;
+  let fuelBurnedKg = 0;
+  let batteryUsedAh = 0;
+  let weightedBatteryCurrentAMin = 0;
+  let weightedPropPowerWMin = 0;
+  let weightedPropThrustNMin = 0;
+  let weightedPropCommandMin = 0;
+
+  while (elapsedMin < maxSimMin) {
+    const currentMassKg = Math.max(aircraftMassKg - fuelBurnedKg, 0.001);
+    const point = demandAtMass(currentMassKg);
+    if (point.propPowerFraction > 1 + 1e-6) break;
+
+    const remainingFuelMin = fuelBurnKgMin > 0 ? Math.max(0, fuelMassKg - fuelBurnedKg) / fuelBurnKgMin : Number.POSITIVE_INFINITY;
+    const remainingBatteryMin = point.batteryCurrentA > 0 ? Math.max(0, usableBatteryAh - batteryUsedAh) / point.batteryCurrentA * 60 : Number.POSITIVE_INFINITY;
+    const dtMin = Math.min(stepMin, remainingFuelMin, remainingBatteryMin);
+    if (!Number.isFinite(dtMin) || dtMin <= 1e-9) break;
+
+    elapsedMin += dtMin;
+    fuelBurnedKg += fuelBurnKgMin * dtMin;
+    batteryUsedAh += point.batteryCurrentA * dtMin / 60;
+    weightedBatteryCurrentAMin += point.batteryCurrentA * dtMin;
+    weightedPropPowerWMin += point.propPowerW * dtMin;
+    weightedPropThrustNMin += point.propThrustN * dtMin;
+    weightedPropCommandMin += point.propCommand * dtMin;
+
+    if (remainingFuelMin <= stepMin + 1e-9 || remainingBatteryMin <= stepMin + 1e-9) break;
+  }
+
+  const averageBatteryCurrentA = elapsedMin > 0 ? weightedBatteryCurrentAMin / elapsedMin : initialDemand.batteryCurrentA;
+  const batteryEnduranceMin = averageBatteryCurrentA > 0 ? usableBatteryAh / averageBatteryCurrentA * 60 : Number.POSITIVE_INFINITY;
+  const propPowerW = elapsedMin > 0 ? weightedPropPowerWMin / elapsedMin : initialDemand.propPowerW;
+  const propThrustN = elapsedMin > 0 ? weightedPropThrustNMin / elapsedMin : initialDemand.propThrustN;
+  const propCommandPct = (elapsedMin > 0 ? weightedPropCommandMin / elapsedMin : initialDemand.propCommand) * 100;
+  const enduranceMin = elapsedMin;
   return {
     batteryEnduranceMin,
-    batteryPowerW,
+    batteryPowerW: propPowerW,
     commandPct: safeJetCommand * 100,
-    enduranceLimiter: flyable ? enduranceLimiter(batteryEnduranceMin, fuelEnduranceMin) : "none",
+    endMassKg: Math.max(aircraftMassKg - fuelBurnedKg, 0.001),
+    enduranceLimiter: enduranceLimiter(batteryEnduranceMin, fuelEnduranceMin),
     enduranceMin,
     flyable,
     fuelBurnKgMin,
+    fuelBurnedKg,
     fuelEnduranceMin,
     jetThrustN,
     minimumFlyableSpeedKt,

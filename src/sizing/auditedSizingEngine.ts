@@ -52,7 +52,11 @@ export type SketchAeroComputation = {
     centerOfMassY: number;
     centerOfPressureY: number;
     staticMarginPct: number;
+    tailVolumeCoefficientRaw: number;
     tailVolumeCoefficient: number;
+    tailplaneDynamicPressureRatio: number;
+    tailplaneAllMovingAuthorityFactor: number;
+    tailplaneAuthorityFactor: number;
     finVolumeCoefficient: number;
     rollStabilityIndex: number;
     rollStabilityLabel: string;
@@ -130,7 +134,7 @@ export const auditedSizingAssumptions = {
   brushlessMotorDensityKgM3: 3200,
   carbonRotorDensityKgM3: 1600,
   batteryThicknessFractionOfSmallerDimension: 0.28,
-  batteryThicknessClampM: { min: 0.012, max: 0.028 },
+  batteryThicknessClampM: { min: 0.012, max: 0.25 },
   motorDepthFractionOfSmallerDimension: 0.75,
   motorDepthClampM: { min: 0.015, max: 0.12 },
   rotorBladeLengthRadiusFraction: 0.92,
@@ -145,7 +149,8 @@ export const auditedSizingAssumptions = {
     fin: 0.7,
     lex: 0.45,
   } satisfies Record<LiftingSurfaceKind, number>,
-  tailplaneDynamicPressureRatio: 3.45,
+  tailplaneDynamicPressureRatio: 2.2,
+  tailplaneAllMovingAuthorityFactor: 1.25,
   tailplaneDownwashGradient: 0,
   rhoKgM3: 1.225,
   hoverFigureOfMerit: 0.68,
@@ -154,6 +159,19 @@ export const auditedSizingAssumptions = {
   propulsiveEfficiency: 0.72,
   maxLiftCoefficient: 1.25,
 };
+
+export function tailplaneAuthorityFactor() {
+  const downwashFactor = clamp(1 - auditedSizingAssumptions.tailplaneDownwashGradient, 0.05, 1);
+  return clamp(
+    auditedSizingAssumptions.tailplaneDynamicPressureRatio * auditedSizingAssumptions.tailplaneAllMovingAuthorityFactor * downwashFactor,
+    1,
+    3.2,
+  );
+}
+
+export function effectiveTailVolumeCoefficient(rawTailVolumeCoefficient: number) {
+  return Math.max(rawTailVolumeCoefficient, 0) * tailplaneAuthorityFactor();
+}
 
 export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "mission">): SizingAnalysis {
   const gRating = normalizeSkinGRating(project.mission.gRating);
@@ -175,7 +193,8 @@ export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "m
   const tailStats = liftingStats.filter((stats) => stats.kind === "tailplane");
   const referenceStats = wingStats.length ? wingStats : liftingStats;
   const wingAreaM2 = Math.max(sum(referenceStats.map((stats) => stats.areaM2)), 0.01);
-  const meanChordM = wingAreaM2 / Math.max(sum(referenceStats.map((stats) => stats.spanM)), 0.01);
+  const referenceSpanM = Math.max(0, ...referenceStats.map((stats) => stats.spanM));
+  const meanChordM = wingAreaM2 / Math.max(referenceSpanM, 0.01);
   const tailplaneAreaM2 = sum(tailStats.map((stats) => stats.areaM2));
   const tailAerodynamicCenterY = weightedValue(
     tailStats.map((stats) => ({ value: stats.aerodynamicCenterY, weight: stats.areaM2 })),
@@ -186,7 +205,8 @@ export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "m
     0,
   );
   const tailArmM = Math.max(0, wingAerodynamicCenterY - tailAerodynamicCenterY);
-  const tailVolumeCoefficient = tailplaneAreaM2 > 0 ? (tailplaneAreaM2 * tailArmM) / Math.max(wingAreaM2 * meanChordM, 0.01) : 0;
+  const tailVolumeCoefficientRaw = tailplaneAreaM2 > 0 ? (tailplaneAreaM2 * tailArmM) / Math.max(wingAreaM2 * meanChordM, 0.01) : 0;
+  const tailVolumeCoefficient = effectiveTailVolumeCoefficient(tailVolumeCoefficientRaw);
   const aeroStats = liftingStats.map((stats, index) => liftingSurfaceAeroStats(lifting[index], stats));
   const cop = neutralPoint(aeroStats, liftingStats);
   const staticMarginPct = ((com.yM - cop.yM) / Math.max(meanChordM, 0.01)) * 100;
@@ -225,6 +245,7 @@ export function computeSizingAnalysis(project: Pick<SizingProject, "shapes" | "m
     cop,
     staticMarginPct,
     tailplaneAreaM2,
+    tailVolumeCoefficientRaw,
     tailVolumeCoefficient,
     rotorCount,
     rotorThrustCenter,
@@ -272,9 +293,10 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
   const lexAreaM2 = sum(lexStats.map((stats) => stats.areaM2));
   const tailplaneArmM = Math.max(0, wingAerodynamicCenterY - tailAerodynamicCenterY);
   const finArmM = Math.max(0, wingAerodynamicCenterY - finAerodynamicCenterY);
-  const tailVolumeCoefficient = tailplaneAreaM2 > 0
+  const tailVolumeCoefficientRaw = tailplaneAreaM2 > 0
     ? (tailplaneAreaM2 * tailplaneArmM) / Math.max(wingAreaM2 * meanChordM, 0.001)
     : 0;
+  const tailVolumeCoefficient = effectiveTailVolumeCoefficient(tailVolumeCoefficientRaw);
   const finVolumeCoefficient = finAreaM2 > 0
     ? (finAreaM2 * finArmM) / Math.max(wingAreaM2 * wingSpanM, 0.001)
     : 0;
@@ -336,6 +358,7 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
     lexVortex.active ? "LEX vortex lift is an estimate for medium/high AoA only; validate with CFD or testing before relying on stall margin." : "",
     rotorBlownWing.active ? "Rotor-blown wing lift is a first-pass powered-lift estimate; validate with CFD, wind-tunnel, or flight test before relying on stall margin." : "",
     wingevon.active ? "Wingevon stall relief assumes the all-moving tip floats with local relative airflow; validate hinge range, control authority, and low-speed dynamics." : "",
+    tailStats.length ? "Tail authority includes rotor-wake dynamic pressure and all-moving tail authority; validate the wake factor with OpenFOAM at transition and landing attitudes." : "",
   ].filter(Boolean));
 
   return {
@@ -375,7 +398,11 @@ export function computeSketchAerodynamics(project: Pick<SizingProject, "shapes" 
       centerOfMassY: analysis.com.yM,
       centerOfPressureY: analysis.cop.yM,
       staticMarginPct: analysis.staticMarginPct,
+      tailVolumeCoefficientRaw,
       tailVolumeCoefficient,
+      tailplaneDynamicPressureRatio: auditedSizingAssumptions.tailplaneDynamicPressureRatio,
+      tailplaneAllMovingAuthorityFactor: auditedSizingAssumptions.tailplaneAllMovingAuthorityFactor,
+      tailplaneAuthorityFactor: tailplaneAuthorityFactor(),
       finVolumeCoefficient,
       rollStabilityIndex,
       rollStabilityLabel,
@@ -916,8 +943,14 @@ export function batteryPlanformAreaEstimate(shape: SizeShape) {
 
 export function inferredBatteryThicknessM(shape: SizeShape) {
   const bounds = shapeBounds(shape);
+  const packageHeightM = Math.max(bounds.maxX - bounds.minX, 0);
+  const packageLengthM = Math.max(bounds.maxY - bounds.minY, 0);
+  const mirroredWidthM = Math.max(bounds.maxX * 2, 0);
+  const fallbackThicknessM =
+    Math.min(packageLengthM || mirroredWidthM, mirroredWidthM || packageLengthM) *
+    auditedSizingAssumptions.batteryThicknessFractionOfSmallerDimension;
   return clamp(
-    bounds.maxX * 2,
+    packageHeightM > 0.001 ? packageHeightM : fallbackThicknessM,
     auditedSizingAssumptions.batteryThicknessClampM.min,
     auditedSizingAssumptions.batteryThicknessClampM.max,
   );

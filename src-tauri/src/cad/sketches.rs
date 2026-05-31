@@ -30,11 +30,7 @@ impl PolygonProfile {
 }
 
 /// A planar circle profile: centre + axis (normal) + radius.
-pub fn circle_profile(
-    radius: f64,
-    axis: Vec3,
-    centre: Vec3,
-) -> Result<Vec<Edge>, KernelError> {
+pub fn circle_profile(radius: f64, axis: Vec3, centre: Vec3) -> Result<Vec<Edge>, KernelError> {
     if radius <= 0.0 {
         return Err(KernelError::InvalidArgument(
             "circle radius must be positive".into(),

@@ -1,7 +1,7 @@
 import { Battery, Plane, Ruler, Scale, Settings2, Wind, Zap } from "lucide-react";
 import { useMemo } from "react";
 import type { ReactNode } from "react";
-import { auditedSizingAssumptions, computeSizingAnalysis } from "../../sizing/auditedSizingEngine";
+import { auditedSizingAssumptions, computeSizingAnalysis, tailplaneAuthorityFactor } from "../../sizing/auditedSizingEngine";
 import { fixedAircraftFinCount, fixedAircraftMotorCount, fixedAircraftTailplaneCount, metersPerSecondPerKnot } from "../../app/constants";
 import type { SizingProject } from "../../sizing";
 import { installedEnergyForMissionWh, reserveEnergyForMissionWh } from "../../sizing/energy";
@@ -196,7 +196,8 @@ export function SizingDashboard({
               <SizingMetric label="Stall speed" value={`${msToKnots(computedDraft.stallSpeedMS).toFixed(0)} kt`} />
             </SizingDataGroup>
             <SizingDataGroup icon={<Ruler size={15} />} title="Tail Surfaces">
-              <SizingMetric label="Tail volume ratio" value={`${computedDraft.tailVolumeRatio.toFixed(2)}`} />
+              <SizingMetric label="Tail volume ratio" value={`${computedDraft.tailVolumeRatio.toFixed(2)} raw / ${computedDraft.tailVolumeEffectiveRatio.toFixed(2)} effective`} />
+              <SizingMetric label="Tail authority factor" value={`${computedDraft.tailAuthorityFactor.toFixed(2)}x`} />
               <SizingMetric label="Tail area total" value={`${computedDraft.tailAreaM2.toFixed(3)} m2`} />
               <SizingMetric label="Tail area / tailplane" value={`${computedDraft.tailAreaPerEmpennageM2.toFixed(3)} m2`} />
               <SizingMetric label="Tailplane span x chord" value={`${computedDraft.tailSpanM.toFixed(2)} m x ${computedDraft.tailChordM.toFixed(2)} m`} />
@@ -528,7 +529,9 @@ export function computeSizingDraft(project: SizingProject) {
   const idealDiskLoadingNpm2 = bestGuessDiskLoadingNpm2({ cruiseSpeedMS, enduranceMin, hoverTimeMin });
   const cruiseLiftCoefficient = clampNumber(numberOr(project.mission.cruiseLiftCoefficient, bestGuessCruiseLiftCoefficient({ cruiseSpeedMS })), 0.25, 1.4);
   const wingAirfoil = suggestWingAirfoil({ cruiseLiftCoefficient, cruiseSpeedMS });
-  const tailVolumeTarget = bestGuessTailVolumeTarget();
+  const tailVolumeTarget = Number.isFinite(project.mission.tailVolumeTarget) ? project.mission.tailVolumeTarget : bestGuessTailVolumeTarget();
+  const tailAuthorityFactor = tailplaneAuthorityFactor();
+  const rawTailVolumeTarget = tailVolumeTarget / Math.max(tailAuthorityFactor, 1);
   const rhoKgM3 = 1.225;
   const hoverFigureOfMerit = hoverFigureOfMeritForBladeCount(rotorBladeCount);
   const cruiseLiftToDrag = 8.2;
@@ -640,7 +643,7 @@ export function computeSizingDraft(project: SizingProject) {
     meanChordM,
     minTailArmM,
     noseContributionM: wingRootDepthM,
-    tailVolumeRatio: tailVolumeTarget,
+    tailVolumeRatio: rawTailVolumeTarget,
     targetTotalLengthM,
     wingAreaM2,
   });
@@ -651,6 +654,7 @@ export function computeSizingDraft(project: SizingProject) {
   const tailSpanM = tailSizing.tailSpanM;
   const tailAspectRatio = Math.pow(tailSpanM, 2) / Math.max(tailAreaPerEmpennageM2, 0.001);
   const tailVolumeRatio = (tailAreaM2 * tailArmM) / Math.max(wingAreaM2 * meanChordM, 0.001);
+  const tailVolumeEffectiveRatio = tailVolumeRatio * tailAuthorityFactor;
   const tailArmDriver = tailArmM <= minTailArmM + 0.01 ? "Minimum arm" : "Length ratio";
   const motorX = wingSpanM / 2 - rotorDiameterM / 2 - rotorInsideWingMarginM;
   const totalLengthM = wingRootDepthM + tailArmM + tailChordM;
@@ -736,6 +740,8 @@ export function computeSizingDraft(project: SizingProject) {
     tailChordM,
     tailSpanM,
     tailAspectRatio,
+    tailAuthorityFactor,
+    tailVolumeEffectiveRatio,
     tailVolumeRatio,
     thrustPerMotorN,
     thrustMarginPct,

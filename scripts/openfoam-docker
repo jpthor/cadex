@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IMAGE="${OPENFOAM_IMAGE:-microfluidica/openfoam:2512}"
+WORKDIR="${OPENFOAM_WORKDIR:-$PWD}"
+DOCKER_USER="${OPENFOAM_DOCKER_USER:-$(id -u):$(id -g)}"
+
+docker run --rm \
+  -u "$DOCKER_USER" \
+  -e HOME=/tmp \
+  -v "$WORKDIR:/work" \
+  -w /work \
+  "$IMAGE" \
+  "$@"

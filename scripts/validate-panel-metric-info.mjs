@@ -28,7 +28,7 @@ const panels = [
   },
   {
     name: "Jet",
-    files: ["../src/components/jet/JetDashboard.tsx", "../src/components/jet/IJetDashboard.tsx"],
+    files: ["../src/components/jet/JetDashboard.tsx", "../src/components/jet/EnduranceDashboard.tsx", "../src/components/jet/IJetDashboard.tsx"],
     catalog: jetMetricInfo,
     components: ["JetMetric", "JetMetricTile", "PropulsionNumberField", "JetFieldLabel"],
     dynamicLabels: [],

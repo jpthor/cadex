@@ -47,6 +47,8 @@ export function IJetDashboard({
   const propCapPct = commandCurve[commandCurve.length - 1]?.baselinePropCommandPct ?? 100;
   const jetAtPropCapPct = Math.min(100, propCapPct * splitRatio);
   const proofRows = commandCurve.filter((point) => point.masterCommandPct > 0);
+  const bestEndurancePoint = proofRows.reduce((best, point) => (point.enduranceMin > best.enduranceMin ? point : best), proofRows[0] ?? commandCurve[0]);
+  const bestRangePoint = proofRows.reduce((best, point) => (point.rangeNm > best.rangeNm ? point : best), proofRows[0] ?? commandCurve[0]);
   const bestEnduranceGain = Math.max(...proofRows.map((point) => point.enduranceGainPct ?? 0));
   const bestRangeGain = Math.max(...proofRows.map((point) => point.rangeGainPct ?? 0));
   const averageEnduranceGain = proofRows.reduce((sum, point) => sum + (point.enduranceGainPct ?? 0), 0) / Math.max(proofRows.length, 1);
@@ -61,18 +63,47 @@ export function IJetDashboard({
         <p className="propulsion-demand-explainer">
           Compares your fixed endurance split against an optimized mix. Each row must meet or beat the fixed split thrust, then the solver picks the prop/jet blend with the best endurance and range.
         </p>
-        <div className="jet-metric-grid jet-base-grid">
-          <JetMetricTile label="Endurance prop command" value={`${endurance.propCommandPct.toFixed(0)}%`} />
-          <JetMetricTile label="Endurance jet command" value={`${endurance.commandPct.toFixed(0)}%`} />
-          <JetMetricTile label="Split ratio" value={`${splitRatio.toFixed(2)} jet / prop`} />
-          <JetMetricTile label="Prop cap" value={`${propCapPct.toFixed(0)}%`} />
-          <JetMetricTile label="Battery cap" value={`${packCurrentLimitA.toFixed(0)} A`} />
-          <JetMetricTile label="Motor current limit" value={`${(selectedMotor.maxCurrentA * comparison.engineCount).toFixed(0)} A total`} />
-          <JetMetricTile label="Cap mode" value={propCapPct < 99.5 ? "battery limited" : "not active"} />
-          <JetMetricTile label="Jet at prop cap" value={`${jetAtPropCapPct.toFixed(0)}%`} />
-          <JetMetricTile label="Best endurance gain" value={`+${bestEnduranceGain.toFixed(1)}%`} />
-          <JetMetricTile label="Best range gain" value={`+${bestRangeGain.toFixed(1)}%`} />
-          <JetMetricTile label="Average endurance gain" value={formatGain(averageEnduranceGain)} />
+        <div className="ijet-best-summary">
+          <div className="ijet-best-summary-header">
+            <span>Aspect</span>
+            <span>Best range</span>
+            <span>Best endurance</span>
+          </div>
+          <IJetBestSummaryRow
+            aspect="Mix"
+            endurance={formatMixPoint(bestEndurancePoint)}
+            range={formatMixPoint(bestRangePoint)}
+          />
+          <IJetBestSummaryRow
+            aspect="Result"
+            endurance={`${Math.round(bestEndurancePoint.enduranceMin)} min`}
+            range={`${Math.round(bestRangePoint.rangeNm)} nm`}
+          />
+          <IJetBestSummaryRow
+            aspect="Speed"
+            endurance={`${Math.round(bestEndurancePoint.speedKt)} kt`}
+            range={`${Math.round(bestRangePoint.speedKt)} kt`}
+          />
+          <IJetBestSummaryRow
+            aspect="Gain"
+            endurance={formatGain(bestEndurancePoint.enduranceGainPct)}
+            range={formatGain(bestRangePoint.rangeGainPct)}
+          />
+          <IJetBestSummaryRow
+            aspect="Baseline split"
+            endurance={`${endurance.propCommandPct.toFixed(0)}% prop / ${endurance.commandPct.toFixed(0)}% jet`}
+            range={`${splitRatio.toFixed(2)} jet / prop`}
+          />
+          <IJetBestSummaryRow
+            aspect="Caps"
+            endurance={`${propCapPct.toFixed(0)}% prop cap / ${jetAtPropCapPct.toFixed(0)}% jet at cap`}
+            range={`${packCurrentLimitA.toFixed(0)} A battery / ${(selectedMotor.maxCurrentA * comparison.engineCount).toFixed(0)} A motor`}
+          />
+          <IJetBestSummaryRow
+            aspect="Mode"
+            endurance={propCapPct < 99.5 ? "battery limited" : "not active"}
+            range={`${formatGain(averageEnduranceGain)} avg endurance`}
+          />
         </div>
       </section>
 
@@ -125,9 +156,28 @@ export function IJetDashboard({
   );
 }
 
+function IJetBestSummaryRow({ aspect, endurance, range }: { aspect: string; endurance: string; range: string }) {
+  return (
+    <div className="ijet-best-summary-row">
+      <span>{aspect}</span>
+      <strong>{range}</strong>
+      <strong>{endurance}</strong>
+    </div>
+  );
+}
+
 function formatGain(gainPct: number | null) {
   if (gainPct === null || !Number.isFinite(gainPct)) return "-";
   return `${gainPct >= 0 ? "+" : ""}${gainPct.toFixed(1)}%`;
+}
+
+function roundToFive(value: number) {
+  return Math.round(value / 5) * 5;
+}
+
+function formatMixPoint(point: IJetCommandMixPoint | undefined) {
+  if (!point) return "-";
+  return `${roundToFive(point.masterCommandPct)}% master, ${roundToFive(point.propCommandPct)}% prop / ${roundToFive(point.jetCommandPct)}% jet`;
 }
 
 function formatEnduranceGain(point: IJetCommandMixPoint) {

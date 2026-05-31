@@ -1,5 +1,5 @@
 import type { PartType, SizeShape, SizingAnalysis } from "../sizing";
-import { liftingSurfaceStats, shapeBounds } from "../sizing/auditedSizingEngine";
+import { effectiveTailVolumeCoefficient, liftingSurfaceStats, shapeBounds, tailplaneAuthorityFactor } from "../sizing/auditedSizingEngine";
 import { mirrorAxisTouchToleranceM } from "./constants";
 import { chordExtentsAtX, mirrorPointsAcrossPlane, shapeTouchesMirrorAxis, shapeTouchesMirrorPlane } from "./geometry";
 
@@ -25,7 +25,8 @@ export function analyseAircraftSizing(
   const wingAcYM = weightedAerodynamicCenterY(wingShapes, shapes);
   const tailAcYM = weightedAerodynamicCenterY(tailShapes, shapes);
   const tailArmM = wingAcYM !== undefined && tailAcYM !== undefined ? wingAcYM - tailAcYM : 0;
-  const tailVolume = tailArmM > 0 ? (tailplaneSize.areaM2 * tailArmM) / Math.max(wingAreaM2 * meanChordM, 0.001) : 0;
+  const rawTailVolume = tailArmM > 0 ? (tailplaneSize.areaM2 * tailArmM) / Math.max(wingAreaM2 * meanChordM, 0.001) : 0;
+  const tailVolume = effectiveTailVolumeCoefficient(rawTailVolume);
   const diagnostics: AircraftDiagnostic[] = [];
 
   diagnostics.push({
@@ -66,16 +67,16 @@ export function analyseAircraftSizing(
 
   diagnostics.push({
     level: !tailplaneSize.count ? "bad" : tailVolume < 0.35 ? "warn" : tailVolume > 0.9 ? "warn" : "ok",
-    label: "Tail volume",
-    value: tailplaneSize.count ? tailVolume.toFixed(2) : "missing",
+    label: "Effective tail volume",
+    value: tailplaneSize.count ? `${tailVolume.toFixed(2)} (${rawTailVolume.toFixed(2)} raw)` : "missing",
     message:
       !tailplaneSize.count
         ? "No tailplane is marked, so pitch stability cannot be judged properly."
         : tailVolume < 0.35
           ? "Low tail volume. Increase tail area, tail span, or tail arm."
-          : tailVolume > 0.9
-            ? "High tail volume. Stable, but possibly oversized for a cruise aircraft."
-            : "Tail volume is in a useful first-pass range.",
+        : tailVolume > 0.9
+            ? "High effective tail volume. Stable, but possibly oversized once rotor wake and all-moving authority are included."
+            : `Tail volume includes a ${tailplaneAuthorityFactor().toFixed(2)}x rotor-wake/all-moving authority factor.`,
   });
 
   diagnostics.push({

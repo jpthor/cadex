@@ -32,6 +32,27 @@ struct MachUpXRequest {
     sizing: Value,
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenFoamRequest {
+    project_name: String,
+    sizing: Value,
+    mesh: Option<bool>,
+    solve: Option<bool>,
+    lex_sweep: Option<bool>,
+    prop_swirl_sweep: Option<bool>,
+    wingevon_alpha: Option<bool>,
+    cruise: Option<bool>,
+    reuse_geometry: Option<bool>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ParaViewRequest {
+    project_name: String,
+    sizing: Value,
+}
+
 #[tauri::command]
 fn create_project() -> CadProject {
     CadProject {
@@ -96,8 +117,11 @@ fn export_model(
                 cad::io::write_stl(&state, &kernel_handles, &stl_path, 0.0005)
                     .map_err(|e| e.to_string())?;
             } else {
-                fs::write(&stl_path, legacy::project_to_stl_legacy(&request.project.objects))
-                    .map_err(|error| error.to_string())?;
+                fs::write(
+                    &stl_path,
+                    legacy::project_to_stl_legacy(&request.project.objects),
+                )
+                .map_err(|error| error.to_string())?;
             }
             Ok(ExportResult {
                 path: stl_path.display().to_string(),
@@ -180,8 +204,7 @@ fn import_model(
             Ok(project)
         }
         "step" => {
-            let handles =
-                cad::io::read_step(&state, &path).map_err(|error| error.to_string())?;
+            let handles = cad::io::read_step(&state, &path).map_err(|error| error.to_string())?;
             let mut project = request.project;
             for handle in handles {
                 let mesh = cad::tessellate::tessellate(&state, &handle, None)
@@ -314,10 +337,7 @@ fn analyze_sizing_openvsp(
 }
 
 #[tauri::command]
-fn analyze_sizing_machupx(
-    app: tauri::AppHandle,
-    request: MachUpXRequest,
-) -> Result<Value, String> {
+fn analyze_sizing_machupx(app: tauri::AppHandle, request: MachUpXRequest) -> Result<Value, String> {
     let export_dir = default_export_dir(&app)?.join("machupx");
     fs::create_dir_all(&export_dir).map_err(|error| error.to_string())?;
     let stem = legacy::sanitize_filename(&request.project_name);
@@ -357,8 +377,128 @@ fn analyze_sizing_machupx(
         }));
     }
 
-    serde_json::from_str(&stdout)
-        .map_err(|error| format!("MachUpX returned invalid JSON: {error}. stdout: {stdout}. stderr: {stderr}"))
+    serde_json::from_str(&stdout).map_err(|error| {
+        format!("MachUpX returned invalid JSON: {error}. stdout: {stdout}. stderr: {stderr}")
+    })
+}
+
+#[tauri::command]
+fn analyze_sizing_openfoam(
+    app: tauri::AppHandle,
+    request: OpenFoamRequest,
+) -> Result<Value, String> {
+    let export_dir = default_export_dir(&app)?.join("openfoam");
+    fs::create_dir_all(&export_dir).map_err(|error| error.to_string())?;
+    let stem = legacy::sanitize_filename(&request.project_name);
+    let input_path = export_dir.join(format!("{stem}_cadex_input.json"));
+    let input = serde_json::json!({
+        "name": request.project_name,
+        "sizing": request.sizing,
+    });
+    fs::write(
+        &input_path,
+        serde_json::to_string_pretty(&input).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let script_path = std::env::current_dir()
+        .map_err(|error| error.to_string())?
+        .join("scripts")
+        .join("analyze-openfoam.mjs");
+    let mut command = Command::new("node");
+    command
+        .arg(script_path)
+        .arg(&input_path)
+        .arg(&export_dir)
+        .arg("--json-only");
+    if request.mesh.unwrap_or(false) {
+        command.arg("--mesh");
+    }
+    if request.solve.unwrap_or(false) {
+        command.arg("--solve");
+    }
+    if request.lex_sweep.unwrap_or(false) {
+        command.arg("--lex-sweep");
+    }
+    if request.prop_swirl_sweep.unwrap_or(false) {
+        command.arg("--prop-swirl-sweep");
+    }
+    if request.wingevon_alpha.unwrap_or(false) {
+        command.arg("--wingevon-alpha25");
+    }
+    if request.cruise.unwrap_or(false) {
+        command.arg("--cruise");
+    }
+    if request.reuse_geometry.unwrap_or(false) {
+        command.arg("--reuse-geometry");
+    }
+    let output = command
+        .output()
+        .map_err(|error| format!("OpenFOAM analysis could not start: {error}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    if !output.status.success() {
+        return Ok(serde_json::json!({
+            "ok": false,
+            "solver": "OpenFOAM",
+            "message": "OpenFOAM analysis failed.",
+            "stdout": stdout,
+            "stderr": stderr,
+        }));
+    }
+
+    serde_json::from_str(&stdout).map_err(|error| {
+        format!("OpenFOAM returned invalid JSON: {error}. stdout: {stdout}. stderr: {stderr}")
+    })
+}
+
+#[tauri::command]
+fn render_sizing_paraview(
+    app: tauri::AppHandle,
+    request: ParaViewRequest,
+) -> Result<Value, String> {
+    let export_dir = default_export_dir(&app)?.join("paraview");
+    fs::create_dir_all(&export_dir).map_err(|error| error.to_string())?;
+    let stem = legacy::sanitize_filename(&request.project_name);
+    let input_path = export_dir.join(format!("{stem}_cadex_input.json"));
+    let input = serde_json::json!({
+        "name": request.project_name,
+        "sizing": request.sizing,
+    });
+    fs::write(
+        &input_path,
+        serde_json::to_string_pretty(&input).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let script_path = std::env::current_dir()
+        .map_err(|error| error.to_string())?
+        .join("scripts")
+        .join("render-paraview.mjs");
+    let output = Command::new("node")
+        .arg(script_path)
+        .arg(&input_path)
+        .arg(&export_dir)
+        .arg("--json-only")
+        .output()
+        .map_err(|error| format!("ParaView render could not start: {error}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    if !output.status.success() {
+        return Ok(serde_json::json!({
+            "ok": false,
+            "solver": "ParaView",
+            "message": "ParaView render failed.",
+            "stdout": stdout,
+            "stderr": stderr,
+        }));
+    }
+
+    serde_json::from_str(&stdout).map_err(|error| {
+        format!("ParaView returned invalid JSON: {error}. stdout: {stdout}. stderr: {stderr}")
+    })
 }
 
 fn main() {
@@ -374,6 +514,8 @@ fn main() {
             import_model,
             analyze_sizing_openvsp,
             analyze_sizing_machupx,
+            analyze_sizing_openfoam,
+            render_sizing_paraview,
             send_openai_tool_message
         ])
         .run(tauri::generate_context!())
@@ -475,7 +617,8 @@ mod tests {
     fn openvsp_script_uses_correct_groups() {
         let mut project = empty_project();
         project.objects.push(CadObject::Wing(wing_for_test()));
-        let script = project_to_openvsp_script(&project.objects, &PathBuf::from("/tmp/cadex-test.step"));
+        let script =
+            project_to_openvsp_script(&project.objects, &PathBuf::from("/tmp/cadex-test.step"));
         assert!(script.contains("AddGeom(\"WING\")"));
         assert!(script.contains("Sym_Planar_Flag"));
         assert!(script.contains("SPAN_WSECT_DRIVER"));
@@ -504,9 +647,7 @@ mod tests {
     fn parses_binary_stl_into_triangles() {
         let mut bytes = vec![0u8; 80];
         bytes.extend_from_slice(&1u32.to_le_bytes());
-        let triangle: [f32; 12] = [
-            0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0,
-        ];
+        let triangle: [f32; 12] = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
         for value in triangle {
             bytes.extend_from_slice(&value.to_le_bytes());
         }

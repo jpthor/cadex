@@ -43,6 +43,7 @@ import { IJetDashboard } from "./components/jet/IJetDashboard";
 import { ProjectMenu } from "./components/design/ProjectMenu";
 import { JetDashboard } from "./components/jet/JetDashboard";
 import { MaxDashboard } from "./components/max/MaxDashboard";
+import { OpenFoamDashboard } from "./components/openfoam/OpenFoamDashboard";
 import { TimelineItem } from "./components/design/TimelineItem";
 import { PropulsionWorkspace } from "./components/propulsion/propulsionPanels";
 import { SizingDashboard } from "./components/sizing/sizingPanels";
@@ -83,7 +84,7 @@ function formatSelectedContext(selectedGeometry: SelectedGeometry | null) {
 function loadStoredAppMode(): AppMode {
   const storedMode = localStorage.getItem(appModeStorageKey);
   if (storedMode === "design") return "final";
-  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "propulsion" || storedMode === "jet" || storedMode === "endurance" || storedMode === "ijet" || storedMode === "final" || storedMode === "max"
+  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "openfoam" || storedMode === "propulsion" || storedMode === "jet" || storedMode === "endurance" || storedMode === "ijet" || storedMode === "final" || storedMode === "max"
     ? storedMode
     : "sizing";
 }
@@ -129,6 +130,35 @@ function projectWithoutSizing(project: CadProject) {
   return rest;
 }
 
+function mergeOpenFoamState(
+  base: SizingProject["openFoam"],
+  pending: SizingProject["openFoam"],
+  latest: SizingProject["openFoam"],
+): SizingProject["openFoam"] {
+  if (!changedSinceLastSave(base, pending)) return latest;
+  if (!pending) return latest;
+  if (!latest) return pending;
+  const pendingUpdatedAt = pending.updatedAt ?? 0;
+  const latestUpdatedAt = latest.updatedAt ?? 0;
+  const pendingCaseReports = pending.caseReports ?? {};
+  const latestCaseReports = latest.caseReports ?? {};
+  const tailFromPending = Boolean(pending.tailSizingResult) && pendingUpdatedAt >= latestUpdatedAt;
+  const movementControls = pending.movementControls ?? latest.movementControls;
+  const surfaceCaptures = pending.surfaceCaptures ?? latest.surfaceCaptures;
+  const activeSurfaceCaptureId = pending.surfaceCaptures ? pending.activeSurfaceCaptureId : latest.activeSurfaceCaptureId;
+  return {
+    geometryReport: pending.geometryReport && pendingUpdatedAt >= latestUpdatedAt ? pending.geometryReport : latest.geometryReport ?? pending.geometryReport,
+    movementControls,
+    surfaceCaptures,
+    activeSurfaceCaptureId,
+    caseReports: { ...latestCaseReports, ...pendingCaseReports },
+    closedCases: Array.from(new Set([...(latest.closedCases ?? []), ...(pending.closedCases ?? [])])),
+    tailSizingJob: tailFromPending ? pending.tailSizingJob : latest.tailSizingJob ?? pending.tailSizingJob,
+    tailSizingResult: tailFromPending ? pending.tailSizingResult : latest.tailSizingResult ?? pending.tailSizingResult,
+    updatedAt: Math.max(pendingUpdatedAt, latestUpdatedAt, Date.now()),
+  };
+}
+
 function mergePendingAircraftChanges(
   base: AircraftMasterState | undefined,
   pending: AircraftMasterState,
@@ -161,6 +191,7 @@ function mergePendingAircraftChanges(
   if (changedSinceLastSave(baseSizing.activeRole, pendingSizing.activeRole)) nextSizing.activeRole = pendingSizing.activeRole;
   if (changedSinceLastSave(baseSizing.drawMode, pendingSizing.drawMode)) nextSizing.drawMode = pendingSizing.drawMode;
   if (changedSinceLastSave(baseSizing.analysis, pendingSizing.analysis)) nextSizing.analysis = pendingSizing.analysis;
+  nextSizing.openFoam = mergeOpenFoamState(baseSizing.openFoam, pendingSizing.openFoam, latest.sizing.openFoam);
 
   const nextProject = changedSinceLastSave(projectWithoutSizing(base.project), projectWithoutSizing(pending.project))
     ? { ...pending.project, name: latest.name, sizing: nextSizing }
@@ -552,6 +583,12 @@ export default function App() {
     setStatus("Sketch updated");
   }
 
+  function updateOpenFoamState(openFoam: SizingProject["openFoam"]) {
+    const next = { ...sizingProject, openFoam };
+    setSizingProject(next);
+    setProject((current) => ({ ...current, sizing: next }));
+  }
+
   async function refreshAircraftProjects() {
     try {
       setAircraftProjects(await listAircraftProjects());
@@ -748,6 +785,9 @@ export default function App() {
             </button>
             <button className={appMode === "compute" ? "active" : ""} onClick={() => setAppMode("compute")}>
               Aero
+            </button>
+            <button className={appMode === "openfoam" ? "active" : ""} onClick={() => setAppMode("openfoam")}>
+              OpenFOAM
             </button>
             <button className={appMode === "propulsion" ? "active" : ""} onClick={() => setAppMode("propulsion")}>
               Propulsion
@@ -986,6 +1026,15 @@ export default function App() {
       ) : appMode === "compute" ? (
         <>
           <ComputeDashboard project={sizingProject} projectName={activeAircraftProject?.name ?? project.name} />
+        </>
+      ) : appMode === "openfoam" ? (
+        <>
+          <OpenFoamDashboard
+            project={sizingProject}
+            projectName={activeAircraftProject?.name ?? project.name}
+            onOpenFoamStateChange={updateOpenFoamState}
+            onProjectChange={updateSizingProject}
+          />
         </>
       ) : (
         <>

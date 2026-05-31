@@ -97,10 +97,12 @@ export function PropulsionWorkspace({
       aircraftCompute,
       rotorDefinition,
       rotorCount,
+      missionReservePct: sizingProject.mission.reservePct,
+      missionTakeoffMin: sizingProject.mission.hoverTimeMin,
       targetEnduranceMin,
       targetThrustToWeight,
     }),
-    [aircraftCompute, aircraftMassKg, batteryEnergyDensityWhKg, bladeCount, rotorDefinition, rotorCount, targetEnduranceMin, targetThrustToWeight],
+    [aircraftCompute, aircraftMassKg, batteryEnergyDensityWhKg, bladeCount, rotorDefinition, rotorCount, sizingProject.mission.hoverTimeMin, sizingProject.mission.reservePct, targetEnduranceMin, targetThrustToWeight],
   );
   const rotorShapes = sizingProject.shapes.filter((shape) => shape.role === "part" && shape.partType === "rotor");
   const hasActualBattery = sizingProject.shapes.some((shape) => shape.role === "part" && shape.partType === "battery");
@@ -140,8 +142,9 @@ export function PropulsionWorkspace({
     : propSpeedMargin >= 1
       ? { text: "tight margin", tone: "caution" as Tone }
       : { text: "below stall margin", tone: "bad" as Tone };
-  const passingThrustCandidates = comboCandidates.filter((candidate) => candidate.thrustRatio >= 1);
-  const visibleCandidates = (passingThrustCandidates.length ? passingThrustCandidates : comboCandidates).slice(0, 5);
+  const passingCandidates = comboCandidates.filter((candidate) => candidate.pass);
+  const viableCandidates = comboCandidates.filter((candidate) => candidate.thrustRatio >= 1 && candidate.energyRatio >= 1 && candidate.currentRatio >= 1);
+  const visibleCandidates = (passingCandidates.length ? passingCandidates : viableCandidates.length ? viableCandidates : comboCandidates).slice(0, 5);
   const rotorCountSource = rotorShapes.length ? "Actual" : "Sizing";
   const rotorDiameterSource = rotorDefinition.diameterM > 0 ? "Actual" : "Sizing";
   const batterySource = hasActualBattery ? "Actual" : "Sizing";
@@ -228,7 +231,7 @@ export function PropulsionWorkspace({
               <em>{candidate.summary}</em>
             </button>
           ))}
-          {!passingThrustCandidates.length ? <p className="propulsion-inline-note">No listed combo meets the target takeoff thrust-to-weight yet.</p> : null}
+          {!passingCandidates.length ? <p className="propulsion-inline-note">No listed combo meets the full thrust, energy, current, and diameter targets yet.</p> : null}
         </div>
       </section>
 
@@ -624,6 +627,8 @@ function rankedPropulsionCombos({
   bladeCount,
   rotorDefinition,
   rotorCount,
+  missionReservePct,
+  missionTakeoffMin,
   targetEnduranceMin,
   targetThrustToWeight,
 }: {
@@ -633,6 +638,8 @@ function rankedPropulsionCombos({
   bladeCount: number;
   rotorDefinition: RotorDefinition;
   rotorCount: number;
+  missionReservePct: number;
+  missionTakeoffMin: number;
   targetEnduranceMin: number;
   targetThrustToWeight: number;
 }) {
@@ -659,8 +666,8 @@ function rankedPropulsionCombos({
             cruisePropEfficiency: result.cruisePropEfficiency,
             loadedRpm: result.motorLoadedRpm,
             missionEnduranceMin: targetEnduranceMin,
-            missionReservePct: 0,
-            missionTakeoffMin: 0,
+            missionReservePct,
+            missionTakeoffMin,
             pitchSpeedMS: result.pitchSpeedMS,
             propeller,
             rotorCount,

@@ -62,6 +62,41 @@ type MachUpXReport = {
 
 type MachUpXCall<T> = { ok: true; value: T } | { ok: false; message?: string };
 
+type OpenFoamReport = {
+  ok: boolean;
+  solver?: string;
+  message?: string;
+  reportPath?: string;
+  geometryDir?: string;
+  verification?: {
+    ok: boolean;
+    componentCount: number;
+    missing?: string[];
+    warnings?: string[];
+  };
+  variants?: Array<{
+    id: string;
+    label: string;
+    ok: boolean;
+    message: string;
+    caseDir: string;
+    componentCount: number;
+    components: string[];
+    reference?: {
+      speedMS: number;
+      referenceAreaM2: number;
+      spanM: number;
+      meanChordM: number;
+    };
+    result?: {
+      time: number;
+      CD: number;
+      CL: number;
+      CmPitch: number;
+    };
+  }>;
+};
+
 function computeInfoFor(label: string) {
   const normalized = label.replace(/\s+\([^)]*\)/g, "");
   return computeMetricInfo[label] ?? computeMetricInfo[normalized];
@@ -79,9 +114,11 @@ export function ComputeDashboard({ project, projectName }: { project: SizingProj
   const analysis = useMemo(() => (project.shapes.length ? computeSizingAnalysis(project) : undefined), [project]);
   const aero = useMemo(() => (project.shapes.length ? computeSketchAerodynamics(project) : undefined), [project]);
   const [machUpX, setMachUpX] = useState<MachUpXReport | undefined>();
+  const [openFoam, setOpenFoam] = useState<OpenFoamReport | undefined>();
   const hasMachUpXSurface = project.shapes.some(
     (shape) => shape.role === "liftingSurface" && isWingLikeKind(shape.liftingSurfaceKind) && shape.points.length >= 3,
   );
+  const hasOpenFoamGeometry = project.shapes.some((shape) => ["body", "liftingSurface", "part"].includes(shape.role) && shape.points.length >= 2);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,6 +151,38 @@ export function ComputeDashboard({ project, projectName }: { project: SizingProj
       window.clearTimeout(timer);
     };
   }, [hasMachUpXSurface, project, projectName]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!hasOpenFoamGeometry) {
+      setOpenFoam(undefined);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      const request = { projectName, sizing: project, mesh: false, solve: false };
+      const solverRequest = isTauriRuntime()
+        ? invoke<OpenFoamReport>("analyze_sizing_openfoam", { request })
+        : fetch("/api/openfoam", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(request),
+          }).then((response) => response.json() as Promise<OpenFoamReport>);
+
+      solverRequest
+        .then((report) => {
+          if (!cancelled) setOpenFoam(report);
+        })
+        .catch((error) => {
+          if (!cancelled) setOpenFoam({ ok: false, solver: "OpenFOAM", message: String(error) });
+        });
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [hasOpenFoamGeometry, project, projectName]);
 
   const machResult = machUpX?.ok && machUpX.result?.ok ? machUpX.result : undefined;
   const machAttempt = machUpX?.ok ? machUpX.result : undefined;
@@ -317,7 +386,16 @@ export function ComputeDashboard({ project, projectName }: { project: SizingProj
           value={formatNumber(aero.stability.rollStabilityIndex, 2, aero.validity.lift)}
         />
         <ComputeMetric label="Yaw stability" note={finVolumeVerdict?.text} noteTone={finVolumeVerdict?.tone} value={formatNumber(aero.stability.finVolumeCoefficient, 3, aero.validity.finVolume)} />
-        <ComputeMetric label="Horizontal tail volume" note={tailVolumeVerdict?.text} noteTone={tailVolumeVerdict?.tone} value={formatNumber(aero.stability.tailVolumeCoefficient, 3, aero.validity.tailVolume)} />
+        <ComputeMetric label="Raw tail volume" value={formatNumber(aero.stability.tailVolumeCoefficientRaw, 3, aero.validity.tailVolume)} />
+        <ComputeMetric label="Tail authority factor" value={aero.validity.tailVolume ? `${aero.stability.tailplaneAuthorityFactor.toFixed(2)}x` : "--"} />
+        <ComputeMetric
+          label="Horizontal tail volume"
+          note={tailVolumeVerdict?.text}
+          noteTone={tailVolumeVerdict?.tone}
+          value={formatNumber(aero.stability.tailVolumeCoefficient, 3, aero.validity.tailVolume)}
+        />
+        <ComputeMetric label="Tail wake q ratio" value={aero.validity.tailVolume ? `${aero.stability.tailplaneDynamicPressureRatio.toFixed(2)}x` : "--"} />
+        <ComputeMetric label="All-moving tail factor" value={aero.validity.tailVolume ? `${aero.stability.tailplaneAllMovingAuthorityFactor.toFixed(2)}x` : "--"} />
         <ComputeMetric label="Vertical fin volume" note={finVolumeVerdict?.text} noteTone={finVolumeVerdict?.tone} value={formatNumber(aero.stability.finVolumeCoefficient, 3, aero.validity.finVolume)} />
       </ComputeGroup>
 
@@ -376,6 +454,37 @@ export function ComputeDashboard({ project, projectName }: { project: SizingProj
               <ComputeMetric label="CL at zero alpha" value={formatOptionalNumber(machAttempt?.sample?.CL, 3)} />
             </div>
           )}
+        </section>
+      ) : null}
+
+      {hasOpenFoamGeometry ? (
+        <section className="compute-panel compute-wide compute-machupx-bottom">
+          <PanelHeading icon={<Activity size={17} />} title="OpenFOAM CFD" />
+          <div className="compute-machupx-grid">
+            <ComputeMetric
+              label="OpenFOAM status"
+              note={openFoam?.message}
+              noteTone={openFoam?.ok ? "good" : openFoam ? "bad" : "caution"}
+              value={openFoam ? (openFoam.ok ? "cases ready" : "blocked") : "preparing"}
+            />
+            <ComputeMetric
+              label="Geometry check"
+              note={openFoam?.verification?.warnings?.slice(0, 2).join(" ")}
+              noteTone={openFoam?.verification?.ok ? "good" : openFoam?.verification ? "bad" : "caution"}
+              value={openFoam?.verification ? (openFoam.verification.ok ? "passed" : "review") : "--"}
+            />
+            <ComputeMetric label="Exported components" value={openFoam?.verification ? String(openFoam.verification.componentCount) : "--"} />
+            <ComputeMetric label="Missing groups" value={openFoam?.verification?.missing?.length ? openFoam.verification.missing.join(", ") : "none"} />
+            {openFoam?.variants?.map((variant) => (
+              <ComputeMetric
+                key={variant.id}
+                label={`${variant.label} case`}
+                note={variant.caseDir}
+                noteTone={variant.ok ? "good" : "bad"}
+                value={variant.result ? `CL ${variant.result.CL.toFixed(3)} / CD ${variant.result.CD.toFixed(3)}` : `${variant.componentCount} parts`}
+              />
+            ))}
+          </div>
         </section>
       ) : null}
 

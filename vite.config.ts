@@ -54,6 +54,80 @@ function cadexKernelBridge() {
         }
       });
 
+      server.middlewares.use("/api/openfoam", async (req, res) => {
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ ok: false, message: "Use POST." }));
+          return;
+        }
+
+        try {
+          const request = JSON.parse(await readRequestBody(req));
+          const projectName = String(request.projectName ?? "CadexAircraft");
+          const exportDir = path.resolve("exports/openfoam");
+          fs.mkdirSync(exportDir, { recursive: true });
+          const inputPath = path.join(exportDir, `${projectName.replace(/[^a-zA-Z0-9_-]+/g, "_") || "cadex"}_cadex_input.json`);
+          fs.writeFileSync(inputPath, JSON.stringify({ name: projectName, sizing: request.sizing }, null, 2));
+
+          const args = ["scripts/analyze-openfoam.mjs", inputPath, exportDir, "--json-only"];
+          if (request.mesh === true) args.push("--mesh");
+          if (request.solve === true) args.push("--solve");
+          if (request.lexSweep === true) args.push("--lex-sweep");
+          if (request.propSwirlSweep === true) args.push("--prop-swirl-sweep");
+          if (request.wingevonAlpha === true) args.push("--wingevon-alpha25");
+          if (request.cruise === true) args.push("--cruise");
+          if (request.reuseGeometry === true) args.push("--reuse-geometry");
+          const run = spawnSync("node", args, { cwd: process.cwd(), encoding: "utf8", maxBuffer: 30 * 1024 * 1024 });
+
+          res.setHeader("Content-Type", "application/json");
+          if (run.status !== 0) {
+            res.statusCode = 200;
+            res.end(JSON.stringify({ ok: false, solver: "OpenFOAM", message: "OpenFOAM preparation failed.", stdout: run.stdout, stderr: run.stderr }));
+            return;
+          }
+          res.end(run.stdout);
+        } catch (error) {
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: false, solver: "OpenFOAM", message: String(error) }));
+        }
+      });
+
+      server.middlewares.use("/api/paraview", async (req, res) => {
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ ok: false, message: "Use POST." }));
+          return;
+        }
+
+        try {
+          const request = JSON.parse(await readRequestBody(req));
+          const projectName = String(request.projectName ?? "CadexAircraft");
+          const exportDir = path.resolve("exports/paraview");
+          fs.mkdirSync(exportDir, { recursive: true });
+          const inputPath = path.join(exportDir, `${projectName.replace(/[^a-zA-Z0-9_-]+/g, "_") || "cadex"}_cadex_input.json`);
+          fs.writeFileSync(inputPath, JSON.stringify({ name: projectName, sizing: request.sizing }, null, 2));
+
+          const run = spawnSync("node", ["scripts/render-paraview.mjs", inputPath, exportDir, "--json-only"], {
+            cwd: process.cwd(),
+            encoding: "utf8",
+            maxBuffer: 60 * 1024 * 1024,
+          });
+
+          res.setHeader("Content-Type", "application/json");
+          if (run.status !== 0) {
+            res.statusCode = 200;
+            res.end(JSON.stringify({ ok: false, solver: "ParaView", message: "ParaView render failed.", stdout: run.stdout, stderr: run.stderr }));
+            return;
+          }
+          res.end(run.stdout);
+        } catch (error) {
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: false, solver: "ParaView", message: String(error) }));
+        }
+      });
+
       if (bridgeProcess) return;
       bridgeProcess = spawn(
         "cargo",

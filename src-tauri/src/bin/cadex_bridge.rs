@@ -12,7 +12,7 @@ mod model;
 mod tools;
 
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -117,7 +117,9 @@ fn handle_connection(mut stream: TcpStream, state: &KernelState) -> Result<(), S
     let response = match (method, path) {
         ("GET", "/health") => Ok(json!({ "ok": true, "engine": "cadrum" })),
         ("GET", "/tools") => Ok(json!({ "tools": tools::openai_tool_array() })),
-        ("GET", "/projects") => list_aircraft_projects().map(|projects| json!({ "projects": projects })),
+        ("GET", "/projects") => {
+            list_aircraft_projects().map(|projects| json!({ "projects": projects }))
+        }
         ("POST", "/projects/create") => create_aircraft_project(body),
         ("POST", "/projects/load") => load_aircraft_project(body),
         ("POST", "/projects/save") => save_aircraft_project(body),
@@ -138,7 +140,11 @@ fn list_aircraft_projects() -> Result<Vec<ProjectEntry>, String> {
     let mut projects = Vec::new();
     for entry in fs::read_dir(&root).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
-        if !entry.file_type().map_err(|error| error.to_string())?.is_dir() {
+        if !entry
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_dir()
+        {
             continue;
         }
         let path = entry.path().join("aircraft.json");
@@ -179,21 +185,25 @@ fn list_aircraft_projects() -> Result<Vec<ProjectEntry>, String> {
 }
 
 fn create_aircraft_project(body: &str) -> Result<Value, String> {
-    let request: ProjectCreateRequest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+    let request: ProjectCreateRequest =
+        serde_json::from_str(body).map_err(|error| error.to_string())?;
     let id = unique_aircraft_id(&request.name)?;
     let name = request.name.trim();
-    let name = if name.is_empty() { "Untitled aircraft" } else { name };
+    let name = if name.is_empty() {
+        "Untitled aircraft"
+    } else {
+        name
+    };
     let state = stamp_project_state(request.state, &id, name);
     let path = aircraft_project_path(&id)?;
     write_project_file(&path, &state)?;
-    append_project_journal(&path, &state, "create")?;
-    git_add(&path);
-    git_add(&project_journal_path(&path));
+    append_project_journal(&path, None, &state, "create")?;
     Ok(json!({ "project": project_entry_from_state(&state, &path), "state": state }))
 }
 
 fn load_aircraft_project(body: &str) -> Result<Value, String> {
-    let request: ProjectLoadRequest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+    let request: ProjectLoadRequest =
+        serde_json::from_str(body).map_err(|error| error.to_string())?;
     let path = aircraft_project_path(&sanitize_id(&request.id))?;
     let text = fs::read_to_string(&path).map_err(|error| error.to_string())?;
     let state: Value = serde_json::from_str(&text).map_err(|error| error.to_string())?;
@@ -201,7 +211,8 @@ fn load_aircraft_project(body: &str) -> Result<Value, String> {
 }
 
 fn save_aircraft_project(body: &str) -> Result<Value, String> {
-    let request: ProjectSaveRequest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+    let request: ProjectSaveRequest =
+        serde_json::from_str(body).map_err(|error| error.to_string())?;
     let id = sanitize_id(&request.id);
     let path = aircraft_project_path(&id)?;
     let current = fs::read_to_string(&path)
@@ -214,7 +225,9 @@ fn save_aircraft_project(body: &str) -> Result<Value, String> {
             .and_then(|value| value.as_u64())
             .map(u128::from);
         if current_updated_at.is_some() && current_updated_at != Some(expected_updated_at) {
-            return Err("stale project copy refused; reload the latest aircraft before saving".to_string());
+            return Err(
+                "stale project copy refused; reload the latest aircraft before saving".to_string(),
+            );
         }
     }
     let name = current
@@ -226,14 +239,13 @@ fn save_aircraft_project(body: &str) -> Result<Value, String> {
         .to_string();
     let state = stamp_project_state(request.state, &id, &name);
     write_project_file(&path, &state)?;
-    append_project_journal(&path, &state, "save")?;
-    git_add(&path);
-    git_add(&project_journal_path(&path));
+    append_project_journal(&path, current.as_ref(), &state, "save")?;
     Ok(json!({ "project": project_entry_from_state(&state, &path), "state": state }))
 }
 
 fn delete_aircraft_project(body: &str) -> Result<Value, String> {
-    let request: ProjectDeleteRequest = serde_json::from_str(body).map_err(|error| error.to_string())?;
+    let request: ProjectDeleteRequest =
+        serde_json::from_str(body).map_err(|error| error.to_string())?;
     let id = sanitize_id(&request.id);
     if id.is_empty() {
         return Err("missing aircraft project id".to_string());
@@ -260,8 +272,16 @@ fn stamp_project_state(mut state: Value, id: &str, name: &str) -> Value {
 
 fn project_entry_from_state(state: &Value, path: &Path) -> ProjectEntry {
     ProjectEntry {
-        id: state.get("id").and_then(|value| value.as_str()).unwrap_or("aircraft").to_string(),
-        name: state.get("name").and_then(|value| value.as_str()).unwrap_or("Untitled aircraft").to_string(),
+        id: state
+            .get("id")
+            .and_then(|value| value.as_str())
+            .unwrap_or("aircraft")
+            .to_string(),
+        name: state
+            .get("name")
+            .and_then(|value| value.as_str())
+            .unwrap_or("Untitled aircraft")
+            .to_string(),
         path: path.display().to_string(),
         updated_at_ms: path
             .metadata()
@@ -281,26 +301,130 @@ fn write_project_file(path: &Path, state: &Value) -> Result<(), String> {
     fs::write(path, format!("{text}\n")).map_err(|error| error.to_string())
 }
 
-fn append_project_journal(path: &Path, state: &Value, event: &str) -> Result<(), String> {
+fn append_project_journal(
+    path: &Path,
+    previous: Option<&Value>,
+    state: &Value,
+    event: &str,
+) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     let journal_path = project_journal_path(path);
-    let entry = json!({
-        "event": event,
-        "id": state.get("id").and_then(|value| value.as_str()).unwrap_or("aircraft"),
-        "name": state.get("name").and_then(|value| value.as_str()).unwrap_or("Untitled aircraft"),
-        "savedAt": chrono_like_timestamp_ms(),
-        "state": state,
-    });
+    if previous.is_none() {
+        return write_project_journal_baseline(&journal_path, state);
+    }
+    if !journal_has_delta_baseline(&journal_path)? {
+        write_project_journal_baseline(&journal_path, previous.unwrap_or(state))?;
+    }
+    let entry = if let Some(previous) = previous {
+        json!({
+            "event": event,
+            "journalVersion": 2,
+            "id": state.get("id").and_then(|value| value.as_str()).unwrap_or("aircraft"),
+            "name": state.get("name").and_then(|value| value.as_str()).unwrap_or("Untitled aircraft"),
+            "savedAt": chrono_like_timestamp_ms(),
+            "baseUpdatedAt": previous.get("updatedAt").and_then(|value| value.as_u64()),
+            "updatedAt": state.get("updatedAt").and_then(|value| value.as_u64()),
+            "delta": json_delta(previous, state),
+        })
+    } else {
+        baseline_project_journal_entry(state)
+    };
     let line = serde_json::to_string(&entry).map_err(|error| error.to_string())?;
-    use std::io::Write;
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&journal_path)
         .map_err(|error| error.to_string())?;
     writeln!(file, "{line}").map_err(|error| error.to_string())
+}
+
+fn journal_has_delta_baseline(path: &Path) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    let file = fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut reader = BufReader::new(file);
+    let mut first_line = String::new();
+    reader
+        .read_line(&mut first_line)
+        .map_err(|error| error.to_string())?;
+    let first_entry = serde_json::from_str::<Value>(&first_line).ok();
+    Ok(first_entry
+        .as_ref()
+        .and_then(|entry| entry.get("journalVersion"))
+        .and_then(|value| value.as_u64())
+        == Some(2)
+        && first_entry
+            .as_ref()
+            .and_then(|entry| entry.get("event"))
+            .and_then(|value| value.as_str())
+            == Some("baseline"))
+}
+
+fn write_project_journal_baseline(path: &Path, state: &Value) -> Result<(), String> {
+    let entry = baseline_project_journal_entry(state);
+    let line = serde_json::to_string(&entry).map_err(|error| error.to_string())?;
+    fs::write(path, format!("{line}\n")).map_err(|error| error.to_string())
+}
+
+fn baseline_project_journal_entry(state: &Value) -> Value {
+    json!({
+        "event": "baseline",
+        "journalVersion": 2,
+        "id": state.get("id").and_then(|value| value.as_str()).unwrap_or("aircraft"),
+        "name": state.get("name").and_then(|value| value.as_str()).unwrap_or("Untitled aircraft"),
+        "savedAt": chrono_like_timestamp_ms(),
+        "updatedAt": state.get("updatedAt").and_then(|value| value.as_u64()),
+        "state": state,
+    })
+}
+
+fn json_delta(previous: &Value, next: &Value) -> Vec<Value> {
+    let mut operations = Vec::new();
+    push_json_delta("", previous, next, &mut operations);
+    operations
+}
+
+fn push_json_delta(path: &str, previous: &Value, next: &Value, operations: &mut Vec<Value>) {
+    if previous == next {
+        return;
+    }
+    match (previous, next) {
+        (Value::Object(previous_object), Value::Object(next_object)) => {
+            for key in previous_object.keys() {
+                if !next_object.contains_key(key) {
+                    operations
+                        .push(json!({ "op": "remove", "path": json_pointer_child(path, key) }));
+                }
+            }
+            for (key, next_value) in next_object {
+                let child_path = json_pointer_child(path, key);
+                if let Some(previous_value) = previous_object.get(key) {
+                    push_json_delta(&child_path, previous_value, next_value, operations);
+                } else {
+                    operations
+                        .push(json!({ "op": "add", "path": child_path, "value": next_value }));
+                }
+            }
+        }
+        (Value::Array(_), Value::Array(_)) => {
+            operations.push(json!({ "op": "replace", "path": path, "value": next }));
+        }
+        _ => {
+            operations.push(json!({ "op": "replace", "path": path, "value": next }));
+        }
+    }
+}
+
+fn json_pointer_child(parent: &str, key: &str) -> String {
+    let escaped = key.replace('~', "~0").replace('/', "~1");
+    if parent.is_empty() {
+        format!("/{escaped}")
+    } else {
+        format!("{parent}/{escaped}")
+    }
 }
 
 fn project_journal_path(path: &Path) -> PathBuf {
@@ -320,9 +444,17 @@ fn aircraft_project_path(id: &str) -> Result<PathBuf, String> {
 fn unique_aircraft_id(name: &str) -> Result<String, String> {
     let root = aircraft_root()?;
     let base = sanitize_id(name);
-    let base = if base.is_empty() { "aircraft".to_string() } else { base };
+    let base = if base.is_empty() {
+        "aircraft".to_string()
+    } else {
+        base
+    };
     for index in 0..1000 {
-        let candidate = if index == 0 { base.clone() } else { format!("{base}-{index}") };
+        let candidate = if index == 0 {
+            base.clone()
+        } else {
+            format!("{base}-{index}")
+        };
         if !root.join(&candidate).exists() {
             return Ok(candidate);
         }

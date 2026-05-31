@@ -15,7 +15,10 @@ fn box_primitive_tessellates_into_triangles() {
     let state = ks();
     let handle = primitives::create_box(&state, [1.0, 1.0, 1.0], None).unwrap();
     let mesh = tessellate::tessellate(&state, &handle, Some(0.5)).unwrap();
-    assert!(mesh.triangle_count >= 12, "cube should have at least 12 triangles");
+    assert!(
+        mesh.triangle_count >= 12,
+        "cube should have at least 12 triangles"
+    );
     assert_eq!(mesh.positions.len(), mesh.triangle_count * 9);
     assert_eq!(mesh.normals.len(), mesh.triangle_count * 9);
 }
@@ -46,7 +49,10 @@ fn sphere_primitive_has_unit_normals() {
         mesh.normals[2] as f64,
     );
     let len = (n0.0 * n0.0 + n0.1 * n0.1 + n0.2 * n0.2).sqrt();
-    assert!((len - 1.0).abs() < 1e-3, "sphere triangle normal should be ~unit length, got {len}");
+    assert!(
+        (len - 1.0).abs() < 1e-3,
+        "sphere triangle normal should be ~unit length, got {len}"
+    );
 }
 
 #[test]
@@ -67,24 +73,25 @@ fn boolean_union_reduces_to_one_solid() {
     let result = booleans::union(&state, &a, &[b.clone()]).unwrap();
     assert_eq!(result, a, "boolean union should keep the target handle");
     // Tool handle should be removed.
-    assert!(state.clone_solid(&b).is_err(), "boolean tool handle should be removed");
+    assert!(
+        state.clone_solid(&b).is_err(),
+        "boolean tool handle should be removed"
+    );
 }
 
 #[test]
 fn boolean_subtract_drills_hole() {
     let state = ks();
     let block = primitives::create_box(&state, [1.0, 1.0, 1.0], None).unwrap();
-    let drill = primitives::create_cylinder(
-        &state,
-        0.2,
-        [0.0, 0.0, 1.0],
-        2.0,
-        Some([0.5, 0.5, -0.5]),
-    )
-    .unwrap();
+    let drill =
+        primitives::create_cylinder(&state, 0.2, [0.0, 0.0, 1.0], 2.0, Some([0.5, 0.5, -0.5]))
+            .unwrap();
     booleans::subtract(&state, &block, &[drill]).unwrap();
     let mesh = tessellate::tessellate(&state, &block, Some(0.05)).unwrap();
-    assert!(mesh.triangle_count > 24, "drilled block should have more triangles than a plain box");
+    assert!(
+        mesh.triangle_count > 24,
+        "drilled block should have more triangles than a plain box"
+    );
 }
 
 #[test]
@@ -98,7 +105,10 @@ fn extrude_polygon_builds_a_solid() {
     ];
     let handle = features::extrude_polygon(&state, &square, [0.0, 0.0, 0.5]).unwrap();
     let mesh = tessellate::tessellate(&state, &handle, Some(0.05)).unwrap();
-    assert!(mesh.triangle_count >= 12, "extruded square should mesh to ≥12 triangles");
+    assert!(
+        mesh.triangle_count >= 12,
+        "extruded square should mesh to ≥12 triangles"
+    );
 }
 
 #[test]

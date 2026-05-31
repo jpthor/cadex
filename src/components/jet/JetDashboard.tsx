@@ -54,6 +54,11 @@ export function JetDashboard({
   const jetPackageMassKg = comparison.engineMassKg + comparison.fuelMassKg;
   const hybridImpossible = comparison.feasibility.hybridThrustDeficitN > 0;
   const baseCruiseGains = comparison.selectedCommand.gainsVsBaseCruise;
+  const takeoffTwBoost = comparison.takeoffState.hybridThrustToWeight - comparison.takeoffState.propOnlyThrustToWeight;
+  const takeoffTwBoostPct = comparison.takeoffState.propOnlyThrustToWeight > 0
+    ? (takeoffTwBoost / comparison.takeoffState.propOnlyThrustToWeight) * 100
+    : 0;
+  const hybridTakeoffThrustN = comparison.takeoffState.hybridThrustToWeight * comparison.takeoffState.massKg * 9.80665;
   function updateMission(patch: Partial<SizingProject["mission"]>) {
     onSizingProjectChange({ ...sizingProject, mission: { ...sizingProject.mission, ...patch }, analysis: undefined });
   }
@@ -136,20 +141,34 @@ export function JetDashboard({
             </span>
           </div>
         ) : null}
-        <div className="jet-metric-grid jet-hybrid-grid">
-          <JetMetricTile label="Pinned command" value={`${comparison.selectedCommand.condition.commandPct.toFixed(0)}%`} />
-          <JetMetricTile label="Total mass" value={`${comparison.aircraftMassKg.toFixed(2)} kg`} />
-          <JetMetricTile label="Added jet mass" value={`+${jetPackageMassKg.toFixed(2)} kg`} />
-          <JetMetricTile label="Takeoff T/W" value={comparison.takeoffState.hybridThrustToWeight.toFixed(2)} />
-          <JetMetricTile label="Speed" value={`${comparison.selectedCommand.condition.speedKt.toFixed(1)} kt`} />
-          <JetMetricTile label="Power draw" value={`${formatPower(comparison.selectedCommand.condition.batteryPowerW)} / ${comparison.selectedCommand.condition.batteryCurrentA.toFixed(0)} A`} />
-          <JetMetricTile label="Fuel burn" value={`${comparison.selectedCommand.condition.fuelBurnKgMin.toFixed(2)} kg/min`} />
-          <JetMetricTile label="Endurance" value={`${comparison.selectedCommand.condition.enduranceMin.toFixed(1)} min`} />
-          <JetMetricTile label="Limiter" value={limiterLabel(comparison.selectedCommand.condition.enduranceLimiter)} />
-          <JetMetricTile label="Range" value={`${comparison.selectedCommand.condition.rangeNm.toFixed(1)} nm`} />
-          <JetMetricTile label="Vs best-cruise speed" value={formatGain(baseCruiseGains.speedKt, "kt")} />
-          <JetMetricTile label="Vs best-cruise endurance" value={formatGain(baseCruiseGains.enduranceMin, "min")} />
-          <JetMetricTile label="Vs best-cruise range" value={formatGain(baseCruiseGains.rangeNm, "nm")} />
+        <div className="jet-hybrid-rows">
+          <div className="jet-hybrid-row">
+            <h3>Takeoff</h3>
+            <div className="jet-metric-grid jet-hybrid-grid">
+              <JetMetricTile label="Command" value="100%" />
+              <JetMetricTile label="Total mass" value={`${comparison.aircraftMassKg.toFixed(2)} kg`} />
+              <JetMetricTile label="Added jet mass" value={`+${jetPackageMassKg.toFixed(2)} kg`} />
+              <JetMetricTile label="Base T/W" value={comparison.takeoffState.propOnlyThrustToWeight.toFixed(2)} />
+              <JetMetricTile label="Total thrust" value={`${hybridTakeoffThrustN.toFixed(0)} N`} />
+              <JetMetricTile label="Takeoff T/W" value={comparison.takeoffState.hybridThrustToWeight.toFixed(2)} />
+              <JetMetricTile label="T/W boost" value={formatSignedPair(takeoffTwBoost, takeoffTwBoostPct)} />
+              <JetMetricTile label="Target T/W" value={comparison.feasibility.targetThrustToWeight.toFixed(2)} />
+            </div>
+          </div>
+          <div className="jet-hybrid-row">
+            <h3>Cruise</h3>
+            <div className="jet-metric-grid jet-hybrid-grid">
+              <JetMetricTile label="Cruise command" value={`${comparison.selectedCommand.condition.commandPct.toFixed(0)}%`} />
+              <JetMetricTile label="Speed" value={`${comparison.selectedCommand.condition.speedKt.toFixed(1)} kt`} />
+              <JetMetricTile label="Power draw" value={`${formatPower(comparison.selectedCommand.condition.batteryPowerW)} / ${comparison.selectedCommand.condition.batteryCurrentA.toFixed(0)} A`} />
+              <JetMetricTile label="Fuel burn" value={`${comparison.selectedCommand.condition.fuelBurnKgMin.toFixed(2)} kg/min`} />
+              <JetMetricTile label="Endurance" value={`${comparison.selectedCommand.condition.enduranceMin.toFixed(1)} min`} />
+              <JetMetricTile label="Limiter" value={limiterLabel(comparison.selectedCommand.condition.enduranceLimiter)} />
+              <JetMetricTile label="Range" value={`${comparison.selectedCommand.condition.rangeNm.toFixed(1)} nm`} />
+              <JetMetricTile label="Vs best-cruise speed" value={formatGain(baseCruiseGains.speedKt, "kt")} />
+              <JetMetricTile label="Vs best-cruise range" value={formatGain(baseCruiseGains.rangeNm, "nm")} />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -505,6 +524,13 @@ function formatGain(gain: { delta: number; pct: number | null }, unit: string) {
   const sign = gain.delta >= 0 ? "+" : "";
   const pct = gain.pct === null || !Number.isFinite(gain.pct) ? "" : ` / ${sign}${gain.pct.toFixed(1)}%`;
   return `${sign}${gain.delta.toFixed(1)} ${unit}${pct}`;
+}
+
+function formatSignedPair(value: number, pct: number) {
+  if (!Number.isFinite(value) || !Number.isFinite(pct)) return "-";
+  const valueSign = value >= 0 ? "+" : "";
+  const pctSign = pct >= 0 ? "+" : "";
+  return `${valueSign}${value.toFixed(2)} / ${pctSign}${pct.toFixed(0)}%`;
 }
 
 function limiterLabel(limiter: JetCondition["enduranceLimiter"]) {

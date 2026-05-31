@@ -32,11 +32,7 @@ impl KernelState {
         Ok(handle)
     }
 
-    pub fn replace(
-        &self,
-        handle: &KernelHandle,
-        solid: Solid,
-    ) -> Result<(), KernelError> {
+    pub fn replace(&self, handle: &KernelHandle, solid: Solid) -> Result<(), KernelError> {
         let mut map = self.inner.lock().map_err(|_| KernelError::Poisoned)?;
         if !map.contains_key(handle) {
             return Err(KernelError::UnknownHandle(handle.clone()));

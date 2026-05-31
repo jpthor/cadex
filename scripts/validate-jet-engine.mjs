@@ -16,10 +16,41 @@ for (const engine of turbineEngineOptions) {
   assert.ok(last.fuelKgPerMin >= first.fuelKgPerMin, `${engine.model} fuel flow rises with command`);
 }
 
+const sizingBase = defaultSizingProject();
 const sizingProject = {
-  ...defaultSizingProject(),
+  ...sizingBase,
+  shapes: [
+    {
+      id: "validation-wing",
+      role: "liftingSurface",
+      label: "Validation wing",
+      drawMode: "line",
+      liftingSurfaceKind: "wing",
+      airfoil: "Clark Y",
+      points: [
+        { xM: 0, yM: -0.2 },
+        { xM: 3, yM: -0.2 },
+        { xM: 3, yM: -0.9 },
+        { xM: 0, yM: -0.9 },
+      ],
+    },
+    {
+      id: "validation-mass",
+      role: "part",
+      label: "Validation mass",
+      drawMode: "line",
+      partType: "payload",
+      massKg: 28.63,
+      points: [
+        { xM: 0, yM: -0.1 },
+        { xM: 0.1, yM: -0.1 },
+        { xM: 0.1, yM: -0.2 },
+        { xM: 0, yM: -0.2 },
+      ],
+    },
+  ],
   mission: {
-    ...defaultSizingProject().mission,
+    ...sizingBase.mission,
     cruiseSpeedMS: 17,
     turbineEngineId: "swiwin-sw60b",
     turbineFuelMin: 20,
@@ -86,6 +117,15 @@ assert.ok(comparison.iJetSweep.every((point) => point.fuelCommandPct >= 0 && poi
 for (const point of comparison.iJetSweep.filter((entry) => entry.balanceStatus === "matched")) {
   assert.ok(Math.abs(point.batteryEnduranceMin - point.fuelEnduranceMin) <= 0.05, "matched iJet points deplete battery and fuel together");
 }
+assert.equal(comparison.enduranceAssistSweep.length, 21, "Endurance sweep covers idle to full jet command");
+const enduranceBurnPoint = comparison.enduranceAssistSweep.find((point) => point.flyable && point.enduranceMin > 0 && point.fuelBurnKgMin > 0);
+assert.ok(enduranceBurnPoint, "Endurance sweep includes a flyable fuel-burning point");
+assert.ok(enduranceBurnPoint.fuelBurnedKg > 0, "Endurance solver burns fuel during the flight");
+assert.ok(enduranceBurnPoint.endMassKg < comparison.aircraftMassKg, "Endurance solver reduces aircraft mass as fuel burns off");
+assert.ok(
+  enduranceBurnPoint.fuelBurnedKg <= comparison.fullFuelMassKg * (1 - missionReservePct / 100) + 0.001,
+  "Endurance solver does not consume fuel reserve",
+);
 assert.ok(comparison.landing.massKg < comparison.aircraftMassKg, "landing mass is lower after fuel burn");
 assert.ok(comparison.dryMassKg > 1, "dry mass does not collapse below the selected fuel mass");
 assert.equal(comparison.landing.fuelPct, missionReservePct, "landing keeps mission fuel reserve");

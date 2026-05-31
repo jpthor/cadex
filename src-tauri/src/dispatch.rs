@@ -8,9 +8,7 @@ use uuid::Uuid;
 use crate::cad::types::Vec3;
 use crate::cad::{features, io as kio, primitives, transforms, KernelState};
 use crate::legacy;
-use crate::model::{
-    CadObject, CadProject, ReferenceGeometry, SolidObject, TimelineEvent, Wing,
-};
+use crate::model::{CadObject, CadProject, ReferenceGeometry, SolidObject, TimelineEvent, Wing};
 use crate::tools::{lookup, Implementation};
 
 /// Result of executing a single tool call.
@@ -90,87 +88,160 @@ pub fn run_tool(
 // Solid primitives
 // ----------------------------------------------------------------------------
 
-fn create_box_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn create_box_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let size = require_vec3(args, "size_m")?;
     let center = optional_vec3(args, "center_m");
     let handle = primitives::create_box(state, size, center).map_err(|e| e.to_string())?;
     let name = string_or(args, "name", "Box");
-    finish_solid(state, &mut project, &handle, &name, &format!(
-        "create_box {:.3}×{:.3}×{:.3} m", size[0], size[1], size[2]
-    ))
+    finish_solid(
+        state,
+        &mut project,
+        &handle,
+        &name,
+        &format!("create_box {:.3}×{:.3}×{:.3} m", size[0], size[1], size[2]),
+    )
 }
 
-fn create_cylinder_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn create_cylinder_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let radius = require_f64(args, "radius_m")?;
     let height = require_f64(args, "height_m")?;
     let axis = optional_vec3(args, "axis").unwrap_or([0.0, 0.0, 1.0]);
     let center = optional_vec3(args, "center_m");
-    let handle = primitives::create_cylinder(state, radius, axis, height, center).map_err(|e| e.to_string())?;
+    let handle = primitives::create_cylinder(state, radius, axis, height, center)
+        .map_err(|e| e.to_string())?;
     let name = string_or(args, "name", "Cylinder");
-    finish_solid(state, &mut project, &handle, &name, &format!(
-        "create_cylinder r={radius:.3} h={height:.3}"
-    ))
+    finish_solid(
+        state,
+        &mut project,
+        &handle,
+        &name,
+        &format!("create_cylinder r={radius:.3} h={height:.3}"),
+    )
 }
 
-fn create_sphere_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn create_sphere_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let radius = require_f64(args, "radius_m")?;
     let center = optional_vec3(args, "center_m");
     let handle = primitives::create_sphere(state, radius, center).map_err(|e| e.to_string())?;
     let name = string_or(args, "name", "Sphere");
-    finish_solid(state, &mut project, &handle, &name, &format!("create_sphere r={radius:.3}"))
+    finish_solid(
+        state,
+        &mut project,
+        &handle,
+        &name,
+        &format!("create_sphere r={radius:.3}"),
+    )
 }
 
-fn create_cone_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn create_cone_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let base = require_f64(args, "base_radius_m")?;
     let top = require_f64(args, "top_radius_m")?;
     let height = require_f64(args, "height_m")?;
     let axis = optional_vec3(args, "axis").unwrap_or([0.0, 0.0, 1.0]);
     let center = optional_vec3(args, "center_m");
-    let handle = primitives::create_cone(state, base, top, axis, height, center).map_err(|e| e.to_string())?;
+    let handle = primitives::create_cone(state, base, top, axis, height, center)
+        .map_err(|e| e.to_string())?;
     let name = string_or(args, "name", "Cone");
-    finish_solid(state, &mut project, &handle, &name, &format!(
-        "create_cone base={base:.3} top={top:.3} h={height:.3}"
-    ))
+    finish_solid(
+        state,
+        &mut project,
+        &handle,
+        &name,
+        &format!("create_cone base={base:.3} top={top:.3} h={height:.3}"),
+    )
 }
 
-fn create_torus_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn create_torus_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let major = require_f64(args, "major_radius_m")?;
     let minor = require_f64(args, "minor_radius_m")?;
     let axis = optional_vec3(args, "axis").unwrap_or([0.0, 0.0, 1.0]);
     let center = optional_vec3(args, "center_m");
-    let handle = primitives::create_torus(state, major, minor, axis, center).map_err(|e| e.to_string())?;
+    let handle =
+        primitives::create_torus(state, major, minor, axis, center).map_err(|e| e.to_string())?;
     let name = string_or(args, "name", "Torus");
-    finish_solid(state, &mut project, &handle, &name, &format!(
-        "create_torus R={major:.3} r={minor:.3}"
-    ))
+    finish_solid(
+        state,
+        &mut project,
+        &handle,
+        &name,
+        &format!("create_torus R={major:.3} r={minor:.3}"),
+    )
 }
 
 // ----------------------------------------------------------------------------
 // Features
 // ----------------------------------------------------------------------------
 
-fn extrude_polygon_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn extrude_polygon_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let points = require_vec3_array(args, "profile_points")?;
     let direction = require_vec3(args, "direction_m")?;
     let handle = features::extrude_polygon(state, &points, direction).map_err(|e| e.to_string())?;
     let name = string_or(args, "name", "Extrude");
-    finish_solid(state, &mut project, &handle, &name, &format!(
-        "extrude_polygon points={} dir=[{:.3},{:.3},{:.3}]",
-        points.len(), direction[0], direction[1], direction[2]
-    ))
+    finish_solid(
+        state,
+        &mut project,
+        &handle,
+        &name,
+        &format!(
+            "extrude_polygon points={} dir=[{:.3},{:.3},{:.3}]",
+            points.len(),
+            direction[0],
+            direction[1],
+            direction[2]
+        ),
+    )
 }
 
-fn extrude_circle_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn extrude_circle_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let radius = require_f64(args, "radius_m")?;
     let center = require_vec3(args, "center_m")?;
     let axis = require_vec3(args, "axis")?;
     let direction = require_vec3(args, "direction_m")?;
-    let handle = features::extrude_circle(state, radius, center, axis, direction).map_err(|e| e.to_string())?;
+    let handle = features::extrude_circle(state, radius, center, axis, direction)
+        .map_err(|e| e.to_string())?;
     let name = string_or(args, "name", "Extrude (circle)");
-    finish_solid(state, &mut project, &handle, &name, &format!("extrude_circle r={radius:.3}"))
+    finish_solid(
+        state,
+        &mut project,
+        &handle,
+        &name,
+        &format!("extrude_circle r={radius:.3}"),
+    )
 }
 
-fn loft_polygons_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn loft_polygons_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let raw = args
         .get("sections")
         .and_then(|v| v.as_array())
@@ -182,22 +253,44 @@ fn loft_polygons_call(state: &KernelState, mut project: CadProject, args: &Value
     }
     let handle = features::loft_polygons(state, &sections).map_err(|e| e.to_string())?;
     let name = string_or(args, "name", "Loft");
-    finish_solid(state, &mut project, &handle, &name, &format!("loft_polygons sections={}", sections.len()))
+    finish_solid(
+        state,
+        &mut project,
+        &handle,
+        &name,
+        &format!("loft_polygons sections={}", sections.len()),
+    )
 }
 
-fn sweep_polygon_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn sweep_polygon_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let profile = require_vec3_array(args, "profile_points")?;
     let spine = require_vec3_array(args, "spine_points")?;
     let up = optional_vec3(args, "up_axis");
     let handle = features::sweep_polygon(state, &profile, &spine, up).map_err(|e| e.to_string())?;
     let name = string_or(args, "name", "Sweep");
-    finish_solid(state, &mut project, &handle, &name, &format!(
-        "sweep_polygon profile={} spine={}", profile.len(), spine.len()
-    ))
+    finish_solid(
+        state,
+        &mut project,
+        &handle,
+        &name,
+        &format!(
+            "sweep_polygon profile={} spine={}",
+            profile.len(),
+            spine.len()
+        ),
+    )
 }
 
 #[derive(Clone, Copy)]
-enum BooleanOp { Union, Subtract, Intersect }
+enum BooleanOp {
+    Union,
+    Subtract,
+    Intersect,
+}
 
 fn boolean_call(
     state: &KernelState,
@@ -210,10 +303,7 @@ fn boolean_call(
         .get("tool_ids")
         .and_then(|v| v.as_array())
         .ok_or("tool_ids is required")?;
-    let tool_object_ids: Vec<&str> = tool_ids
-        .iter()
-        .filter_map(|v| v.as_str())
-        .collect();
+    let tool_object_ids: Vec<&str> = tool_ids.iter().filter_map(|v| v.as_str()).collect();
     let target_handle = handle_for_object(&project, target_id)
         .ok_or_else(|| format!("target '{target_id}' is not a kernel solid"))?
         .to_string();
@@ -227,11 +317,15 @@ fn boolean_call(
     let result_handle = match op {
         BooleanOp::Union => crate::cad::booleans::union(state, &target_handle, &tool_handles),
         BooleanOp::Subtract => crate::cad::booleans::subtract(state, &target_handle, &tool_handles),
-        BooleanOp::Intersect => crate::cad::booleans::intersect(state, &target_handle, &tool_handles),
+        BooleanOp::Intersect => {
+            crate::cad::booleans::intersect(state, &target_handle, &tool_handles)
+        }
     }
     .map_err(|e| e.to_string())?;
 
-    project.objects.retain(|o| !tool_object_ids.iter().any(|tid| *tid == o.id()));
+    project
+        .objects
+        .retain(|o| !tool_object_ids.iter().any(|tid| *tid == o.id()));
 
     let mesh = crate::cad::tessellate::tessellate(state, &result_handle, None)
         .map_err(|e| e.to_string())?;
@@ -258,10 +352,17 @@ fn boolean_call(
         label: target_label.to_string(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: detail })
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
-fn fillet_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn fillet_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let target_id = require_str(args, "target_id")?;
     let radius = require_f64(args, "radius_m")?;
     let handle = handle_for_object(&project, target_id)
@@ -275,10 +376,17 @@ fn fillet_call(state: &KernelState, mut project: CadProject, args: &Value) -> Re
         label: "Fillet edges".into(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: detail })
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
-fn chamfer_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn chamfer_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let target_id = require_str(args, "target_id")?;
     let distance = require_f64(args, "distance_m")?;
     let handle = handle_for_object(&project, target_id)
@@ -292,13 +400,23 @@ fn chamfer_call(state: &KernelState, mut project: CadProject, args: &Value) -> R
         label: "Chamfer edges".into(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: detail })
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
-fn shell_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn shell_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let target_id = require_str(args, "target_id")?;
     let thickness = require_f64(args, "thickness_m")?;
-    let open_all = args.get("open_all_faces").and_then(|v| v.as_bool()).unwrap_or(false);
+    let open_all = args
+        .get("open_all_faces")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let handle = handle_for_object(&project, target_id)
         .ok_or_else(|| format!("target '{target_id}' is not a kernel solid"))?
         .to_string();
@@ -310,14 +428,21 @@ fn shell_call(state: &KernelState, mut project: CadProject, args: &Value) -> Res
         label: "Shell".into(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: detail })
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
 // ----------------------------------------------------------------------------
 // Transforms
 // ----------------------------------------------------------------------------
 
-fn translate_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn translate_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let target_id = require_str(args, "target_id")?;
     let delta = require_vec3(args, "delta_m")?;
     let handle = handle_for_object(&project, target_id)
@@ -325,12 +450,26 @@ fn translate_call(state: &KernelState, mut project: CadProject, args: &Value) ->
         .to_string();
     transforms::translate(state, &handle, delta).map_err(|e| e.to_string())?;
     refresh_solid_mesh(state, &mut project, target_id, &handle, "translate_solid")?;
-    let detail = format!("translate_solid {target_id} delta=[{:.3},{:.3},{:.3}]", delta[0], delta[1], delta[2]);
-    project.timeline.push(TimelineEvent { id: Uuid::new_v4().to_string(), label: "Translate".into(), detail: detail.clone() });
-    Ok(ToolOutcome { project, message: detail })
+    let detail = format!(
+        "translate_solid {target_id} delta=[{:.3},{:.3},{:.3}]",
+        delta[0], delta[1], delta[2]
+    );
+    project.timeline.push(TimelineEvent {
+        id: Uuid::new_v4().to_string(),
+        label: "Translate".into(),
+        detail: detail.clone(),
+    });
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
-fn rotate_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn rotate_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let target_id = require_str(args, "target_id")?;
     let axis = require_vec3(args, "axis")?;
     let angle_deg = require_f64(args, "angle_deg")?;
@@ -340,11 +479,22 @@ fn rotate_call(state: &KernelState, mut project: CadProject, args: &Value) -> Re
     transforms::rotate(state, &handle, axis, angle_deg.to_radians()).map_err(|e| e.to_string())?;
     refresh_solid_mesh(state, &mut project, target_id, &handle, "rotate_solid")?;
     let detail = format!("rotate_solid {target_id} angle={angle_deg:.1}°");
-    project.timeline.push(TimelineEvent { id: Uuid::new_v4().to_string(), label: "Rotate".into(), detail: detail.clone() });
-    Ok(ToolOutcome { project, message: detail })
+    project.timeline.push(TimelineEvent {
+        id: Uuid::new_v4().to_string(),
+        label: "Rotate".into(),
+        detail: detail.clone(),
+    });
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
-fn scale_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn scale_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let target_id = require_str(args, "target_id")?;
     let factor = require_f64(args, "factor")?;
     let pivot = optional_vec3(args, "pivot_m").unwrap_or([0.0, 0.0, 0.0]);
@@ -354,11 +504,22 @@ fn scale_call(state: &KernelState, mut project: CadProject, args: &Value) -> Res
     transforms::scale(state, &handle, pivot, factor).map_err(|e| e.to_string())?;
     refresh_solid_mesh(state, &mut project, target_id, &handle, "scale_solid")?;
     let detail = format!("scale_solid {target_id} factor={factor:.3}");
-    project.timeline.push(TimelineEvent { id: Uuid::new_v4().to_string(), label: "Scale".into(), detail: detail.clone() });
-    Ok(ToolOutcome { project, message: detail })
+    project.timeline.push(TimelineEvent {
+        id: Uuid::new_v4().to_string(),
+        label: "Scale".into(),
+        detail: detail.clone(),
+    });
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
-fn mirror_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn mirror_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let target_id = require_str(args, "target_id")?;
     let normal = require_vec3(args, "plane_normal")?;
     let origin = optional_vec3(args, "plane_origin_m").unwrap_or([0.0, 0.0, 0.0]);
@@ -368,17 +529,30 @@ fn mirror_call(state: &KernelState, mut project: CadProject, args: &Value) -> Re
     transforms::mirror(state, &handle, origin, normal).map_err(|e| e.to_string())?;
     refresh_solid_mesh(state, &mut project, target_id, &handle, "mirror_solid")?;
     let detail = format!("mirror_solid {target_id}");
-    project.timeline.push(TimelineEvent { id: Uuid::new_v4().to_string(), label: "Mirror".into(), detail: detail.clone() });
-    Ok(ToolOutcome { project, message: detail })
+    project.timeline.push(TimelineEvent {
+        id: Uuid::new_v4().to_string(),
+        label: "Mirror".into(),
+        detail: detail.clone(),
+    });
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
-fn copy_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn copy_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let target_id = require_str(args, "target_id")?;
     let delta = optional_vec3(args, "delta_m");
     let source_handle = handle_for_object(&project, target_id)
         .ok_or_else(|| format!("target '{target_id}' is not a kernel solid"))?
         .to_string();
-    let cloned = state.clone_solid(&source_handle).map_err(|e| e.to_string())?;
+    let cloned = state
+        .clone_solid(&source_handle)
+        .map_err(|e| e.to_string())?;
     let new_handle = state.insert(cloned).map_err(|e| e.to_string())?;
     if let Some(d) = delta {
         transforms::translate(state, &new_handle, d).map_err(|e| e.to_string())?;
@@ -390,20 +564,33 @@ fn copy_call(state: &KernelState, mut project: CadProject, args: &Value) -> Resu
         .map(|o| o.name().to_string())
         .unwrap_or_else(|| "Solid".into());
     let new_name = format!("{} copy", source_name);
-    finish_solid(state, &mut project, &new_handle, &new_name, &format!("copy_solid from {target_id}"))
+    finish_solid(
+        state,
+        &mut project,
+        &new_handle,
+        &new_name,
+        &format!("copy_solid from {target_id}"),
+    )
 }
 
 // ----------------------------------------------------------------------------
 // Reference / inspect / project housekeeping
 // ----------------------------------------------------------------------------
 
-fn reference_call(mut project: CadProject, args: &Value, selected: Option<&Value>) -> Result<ToolOutcome, String> {
+fn reference_call(
+    mut project: CadProject,
+    args: &Value,
+    selected: Option<&Value>,
+) -> Result<ToolOutcome, String> {
     let kind = args
         .get("reference_kind")
         .and_then(|v| v.as_str())
         .ok_or("reference_kind is required")?
         .to_string();
-    if !matches!(kind.as_str(), "plane" | "point" | "line" | "face" | "surface") {
+    if !matches!(
+        kind.as_str(),
+        "plane" | "point" | "line" | "face" | "surface"
+    ) {
         return Err("reference_kind is invalid".into());
     }
     let selected_origin = selected
@@ -415,13 +602,15 @@ fn reference_call(mut project: CadProject, args: &Value, selected: Option<&Value
     let origin = optional_vec3(args, "origin")
         .or(selected_origin)
         .unwrap_or([0.0, 0.0, 0.0]);
-    let normal = optional_vec3(args, "normal").or(selected_normal).or_else(|| {
-        if matches!(kind.as_str(), "plane" | "face" | "surface") {
-            Some([0.0, 1.0, 0.0])
-        } else {
-            None
-        }
-    });
+    let normal = optional_vec3(args, "normal")
+        .or(selected_normal)
+        .or_else(|| {
+            if matches!(kind.as_str(), "plane" | "face" | "surface") {
+                Some([0.0, 1.0, 0.0])
+            } else {
+                None
+            }
+        });
     let end = optional_vec3(args, "end");
     let size = args.get("size_m").and_then(|v| v.as_f64()).or(Some(0.18));
     let reference = ReferenceGeometry {
@@ -444,13 +633,19 @@ fn reference_call(mut project: CadProject, args: &Value, selected: Option<&Value
         label: "Reference geometry".into(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: detail })
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
 fn inspect_call(project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
     let id = args.get("id").and_then(|v| v.as_str());
     let summary = describe_geometry(&project, id);
-    Ok(ToolOutcome { project, message: summary })
+    Ok(ToolOutcome {
+        project,
+        message: summary,
+    })
 }
 
 fn list_objects_call(project: CadProject) -> Result<ToolOutcome, String> {
@@ -464,12 +659,24 @@ fn list_objects_call(project: CadProject) -> Result<ToolOutcome, String> {
     } else {
         lines.join(" | ")
     };
-    Ok(ToolOutcome { project, message: summary })
+    Ok(ToolOutcome {
+        project,
+        message: summary,
+    })
 }
 
-fn delete_object_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
+fn delete_object_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
     let id = require_str(args, "id")?;
-    let kept: Vec<CadObject> = project.objects.iter().filter(|o| o.id() != id).cloned().collect();
+    let kept: Vec<CadObject> = project
+        .objects
+        .iter()
+        .filter(|o| o.id() != id)
+        .cloned()
+        .collect();
     let removed = project.objects.len() - kept.len();
     if removed == 0 {
         return Err(format!("no object with id '{id}'"));
@@ -490,7 +697,10 @@ fn delete_object_call(state: &KernelState, mut project: CadProject, args: &Value
         label: "Delete".into(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: detail })
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
 fn rename_object_call(mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
@@ -505,11 +715,20 @@ fn rename_object_call(mut project: CadProject, args: &Value) -> Result<ToolOutco
         label: "Rename".into(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: detail })
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
-fn export_step_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
-    let path = args.get("path").and_then(|v| v.as_str())
+fn export_step_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or("export_step.path is required (the desktop UI normally provides one)")?;
     let handles: Vec<String> = project
         .objects
@@ -526,13 +745,25 @@ fn export_step_call(state: &KernelState, mut project: CadProject, args: &Value) 
         label: "STEP export".into(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: detail })
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
-fn export_stl_call(state: &KernelState, mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
-    let path = args.get("path").and_then(|v| v.as_str())
+fn export_stl_call(
+    state: &KernelState,
+    mut project: CadProject,
+    args: &Value,
+) -> Result<ToolOutcome, String> {
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
         .ok_or("export_stl.path is required")?;
-    let deflection = args.get("deflection_m").and_then(|v| v.as_f64()).unwrap_or(0.0005);
+    let deflection = args
+        .get("deflection_m")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0005);
     let handles: Vec<String> = project
         .objects
         .iter()
@@ -541,14 +772,18 @@ fn export_stl_call(state: &KernelState, mut project: CadProject, args: &Value) -
     if handles.is_empty() {
         return Err("no kernel solids to export".into());
     }
-    kio::write_stl(state, &handles, std::path::Path::new(path), deflection).map_err(|e| e.to_string())?;
+    kio::write_stl(state, &handles, std::path::Path::new(path), deflection)
+        .map_err(|e| e.to_string())?;
     let detail = format!("STL exported via cadrum to {path}");
     project.timeline.push(TimelineEvent {
         id: Uuid::new_v4().to_string(),
         label: "STL export".into(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: detail })
+    Ok(ToolOutcome {
+        project,
+        message: detail,
+    })
 }
 
 // ----------------------------------------------------------------------------
@@ -567,7 +802,10 @@ fn create_wing_call(mut project: CadProject, args: &Value) -> Result<ToolOutcome
         label: "AI generated wing".into(),
         detail: detail.clone(),
     });
-    Ok(ToolOutcome { project, message: format!("Created wing ({detail}).") })
+    Ok(ToolOutcome {
+        project,
+        message: format!("Created wing ({detail})."),
+    })
 }
 
 fn update_wing_call(mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
@@ -579,7 +817,10 @@ fn update_wing_call(mut project: CadProject, args: &Value) -> Result<ToolOutcome
         label: "Updated wing".into(),
         detail: summary.clone(),
     });
-    Ok(ToolOutcome { project, message: format!("Updated wing: {summary}.") })
+    Ok(ToolOutcome {
+        project,
+        message: format!("Updated wing: {summary}."),
+    })
 }
 
 fn set_airfoil_call(mut project: CadProject, args: &Value) -> Result<ToolOutcome, String> {
@@ -594,7 +835,10 @@ fn set_airfoil_call(mut project: CadProject, args: &Value) -> Result<ToolOutcome
         label: "Set airfoil".into(),
         detail: airfoil.clone(),
     });
-    Ok(ToolOutcome { project, message: format!("Set airfoil to {airfoil}.") })
+    Ok(ToolOutcome {
+        project,
+        message: format!("Set airfoil to {airfoil}."),
+    })
 }
 
 pub fn find_wing_index(project: &CadProject, id: Option<&str>) -> Option<usize> {
@@ -609,7 +853,11 @@ pub fn find_wing_index(project: &CadProject, id: Option<&str>) -> Option<usize> 
             }
         }
     }
-    if id.is_none() { last } else { None }
+    if id.is_none() {
+        last
+    } else {
+        None
+    }
 }
 
 pub fn apply_wing_updates(project: &mut CadProject, index: usize, args: &Value) -> String {
@@ -649,7 +897,11 @@ pub fn apply_wing_updates(project: &mut CadProject, index: usize, args: &Value) 
         wing.symmetry = value;
         changes.push(format!("symmetry={value}"));
     }
-    if changes.is_empty() { "no changes".into() } else { changes.join(", ") }
+    if changes.is_empty() {
+        "no changes".into()
+    } else {
+        changes.join(", ")
+    }
 }
 
 pub fn describe_geometry(project: &CadProject, id: Option<&str>) -> String {
@@ -676,7 +928,10 @@ fn describe_object(object: &CadObject) -> String {
     match object {
         CadObject::Wing(w) => describe_wing(w),
         CadObject::Mesh(m) => format!("{}: imported mesh ({} triangles)", m.name, m.triangle_count),
-        CadObject::Solid(s) => format!("{}: cadrum solid ({} triangles, source {})", s.name, s.triangle_count, s.source),
+        CadObject::Solid(s) => format!(
+            "{}: cadrum solid ({} triangles, source {})",
+            s.name, s.triangle_count, s.source
+        ),
         CadObject::Reference(r) => format!("{}: {} reference", r.name, r.reference_kind),
     }
 }
@@ -762,7 +1017,11 @@ fn refresh_solid_mesh(
 }
 
 fn handle_for_object<'a>(project: &'a CadProject, id: &str) -> Option<&'a str> {
-    project.objects.iter().find(|o| o.id() == id).and_then(|o| o.kernel_handle())
+    project
+        .objects
+        .iter()
+        .find(|o| o.id() == id)
+        .and_then(|o| o.kernel_handle())
 }
 
 fn require_f64(value: &Value, key: &str) -> Result<f64, String> {
@@ -793,7 +1052,9 @@ fn require_vec3_array(value: &Value, key: &str) -> Result<Vec<Vec3>, String> {
 }
 
 fn parse_vec3_array(raw: &Value) -> Result<Vec<Vec3>, String> {
-    let arr = raw.as_array().ok_or("expected an array of [x,y,z] points")?;
+    let arr = raw
+        .as_array()
+        .ok_or("expected an array of [x,y,z] points")?;
     let mut out = Vec::with_capacity(arr.len());
     for entry in arr {
         out.push(parse_vec3_value(entry).ok_or("expected [x,y,z]")?);

@@ -195,8 +195,8 @@ pub fn parse_binary_stl(bytes: &[u8]) -> Result<(Vec<f32>, Vec<f32>), String> {
 }
 
 pub fn parse_ascii_stl(bytes: &[u8]) -> Result<(Vec<f32>, Vec<f32>), String> {
-    let text = std::str::from_utf8(bytes)
-        .map_err(|_| "ASCII STL must be valid UTF-8".to_string())?;
+    let text =
+        std::str::from_utf8(bytes).map_err(|_| "ASCII STL must be valid UTF-8".to_string())?;
     let mut positions: Vec<f32> = Vec::new();
     let mut normals: Vec<f32> = Vec::new();
     let mut current_normal = [0.0f32; 3];
@@ -281,7 +281,12 @@ pub fn naca_4_point(airfoil: &str, u: f64, chord: f64, upper: bool) -> (f64, f64
         (0.02, 0.4, 0.12)
     };
 
-    let x = if upper { 1.0 - u * 2.0 } else { (u - 0.5) * 2.0 }.clamp(0.0, 1.0);
+    let x = if upper {
+        1.0 - u * 2.0
+    } else {
+        (u - 0.5) * 2.0
+    }
+    .clamp(0.0, 1.0);
     let yt = 5.0
         * thickness
         * (0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x.powi(2) + 0.2843 * x.powi(3)
@@ -365,7 +370,9 @@ pub fn project_to_openvsp_script(objects: &[CadObject], step_path: &PathBuf) -> 
                 ));
             }
             CadObject::Mesh(_) => {
-                script.push_str("    // Imported mesh objects are skipped for OpenVSP STEP export.\n");
+                script.push_str(
+                    "    // Imported mesh objects are skipped for OpenVSP STEP export.\n",
+                );
             }
             CadObject::Solid(_) => {
                 script.push_str("    // Cadrum solids are exported through the cadrum STEP path, not OpenVSP.\n");
@@ -420,15 +427,32 @@ pub fn wing_from_tool_args(value: &serde_json::Value) -> Result<Wing, String> {
         tip_chord_m: value
             .get("tip_chord_m")
             .and_then(|number| number.as_f64())
-            .unwrap_or_else(|| value.get("root_chord_m").and_then(|number| number.as_f64()).unwrap_or(0.2)),
-        sweep_deg: value.get("sweep_deg").and_then(|n| n.as_f64()).unwrap_or(0.0),
-        dihedral_deg: value.get("dihedral_deg").and_then(|n| n.as_f64()).unwrap_or(0.0),
-        twist_deg: value.get("twist_deg").and_then(|n| n.as_f64()).unwrap_or(0.0),
+            .unwrap_or_else(|| {
+                value
+                    .get("root_chord_m")
+                    .and_then(|number| number.as_f64())
+                    .unwrap_or(0.2)
+            }),
+        sweep_deg: value
+            .get("sweep_deg")
+            .and_then(|n| n.as_f64())
+            .unwrap_or(0.0),
+        dihedral_deg: value
+            .get("dihedral_deg")
+            .and_then(|n| n.as_f64())
+            .unwrap_or(0.0),
+        twist_deg: value
+            .get("twist_deg")
+            .and_then(|n| n.as_f64())
+            .unwrap_or(0.0),
         airfoil: value
             .get("airfoil")
             .and_then(|name| name.as_str())
             .unwrap_or("NACA 2412")
             .to_string(),
-        symmetry: value.get("symmetry").and_then(|f| f.as_bool()).unwrap_or(true),
+        symmetry: value
+            .get("symmetry")
+            .and_then(|f| f.as_bool())
+            .unwrap_or(true),
     })
 }

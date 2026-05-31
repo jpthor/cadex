@@ -75,7 +75,13 @@ pub fn analyze_sizing(
     let lifting_surfaces = sizing_lifting_surfaces(&request.sizing);
     let pods = sizing_pods(&request.sizing);
     let props = sizing_props(&request.sizing);
-    let script = sizing_to_openvsp_script(&lifting_surfaces, &pods, &props, &request.sizing, &vsp3_path);
+    let script = sizing_to_openvsp_script(
+        &lifting_surfaces,
+        &pods,
+        &props,
+        &request.sizing,
+        &vsp3_path,
+    );
     fs::write(&script_path, script).map_err(|error| error.to_string())?;
 
     if lifting_surfaces.is_empty() {
@@ -178,7 +184,10 @@ fn sizing_surface_from_shape(shape: &Value) -> Option<SizingSurface> {
             .and_then(|value| value.as_f64())
             .unwrap_or(0.0)
             .abs();
-        let y = point.get("yM").and_then(|value| value.as_f64()).unwrap_or(0.0);
+        let y = point
+            .get("yM")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(0.0);
         max_x = max_x.max(x);
         min_y = min_y.min(y);
         max_y = max_y.max(y);
@@ -229,8 +238,16 @@ fn sizing_pod_from_shape(shape: &Value) -> Option<SizingPod> {
                     center_x_m: center[0],
                     center_y_m: center[1],
                     center_z_m: center[2],
-                    length_m: cad.get("lengthM").and_then(|value| value.as_f64()).unwrap_or(0.01).max(0.01),
-                    radius_m: cad.get("radiusM").and_then(|value| value.as_f64()).unwrap_or(0.005).max(0.005),
+                    length_m: cad
+                        .get("lengthM")
+                        .and_then(|value| value.as_f64())
+                        .unwrap_or(0.01)
+                        .max(0.01),
+                    radius_m: cad
+                        .get("radiusM")
+                        .and_then(|value| value.as_f64())
+                        .unwrap_or(0.005)
+                        .max(0.005),
                     rotation_z_deg: axis[1].atan2(axis[0]).to_degrees(),
                 });
             }
@@ -241,8 +258,16 @@ fn sizing_pod_from_shape(shape: &Value) -> Option<SizingPod> {
                     center_x_m: center[0],
                     center_y_m: center[1],
                     center_z_m: center[2],
-                    length_m: cad.get("lengthM").and_then(|value| value.as_f64()).unwrap_or(0.01).max(0.01),
-                    radius_m: cad.get("radiusM").and_then(|value| value.as_f64()).unwrap_or(0.005).max(0.005),
+                    length_m: cad
+                        .get("lengthM")
+                        .and_then(|value| value.as_f64())
+                        .unwrap_or(0.01)
+                        .max(0.01),
+                    radius_m: cad
+                        .get("radiusM")
+                        .and_then(|value| value.as_f64())
+                        .unwrap_or(0.005)
+                        .max(0.005),
                     rotation_z_deg: 0.0,
                 });
             }
@@ -257,7 +282,11 @@ fn sizing_pod_from_shape(shape: &Value) -> Option<SizingPod> {
     Some(SizingPod {
         name: shape_name(shape, if role == "body" { "Body" } else { "Part" }),
         center_x_m: (bounds.min_y + bounds.max_y) / 2.0,
-        center_y_m: if role == "body" { 0.0 } else { (bounds.min_x + bounds.max_x) / 2.0 },
+        center_y_m: if role == "body" {
+            0.0
+        } else {
+            (bounds.min_x + bounds.max_x) / 2.0
+        },
         center_z_m: 0.0,
         length_m,
         radius_m,
@@ -275,14 +304,22 @@ fn sizing_prop_from_shape(shape: &Value) -> Option<SizingProp> {
         if cad.get("kind").and_then(|value| value.as_str()) == Some("rotor") {
             let center = vec3(cad.get("centerM")?)?;
             let axis = vec3(cad.get("axisM")?)?;
-            let radius = cad.get("radiusM").and_then(|value| value.as_f64()).unwrap_or(0.01).max(0.01);
+            let radius = cad
+                .get("radiusM")
+                .and_then(|value| value.as_f64())
+                .unwrap_or(0.01)
+                .max(0.01);
             return Some(SizingProp {
                 name: shape_name(shape, "Rotor"),
                 center_x_m: center[0],
                 center_y_m: center[1],
                 center_z_m: center[2],
                 diameter_m: radius * 2.0,
-                blade_count: cad.get("bladeCount").and_then(|value| value.as_i64()).unwrap_or(2).max(1),
+                blade_count: cad
+                    .get("bladeCount")
+                    .and_then(|value| value.as_i64())
+                    .unwrap_or(2)
+                    .max(1),
                 rotation_z_deg: axis[1].atan2(axis[0]).to_degrees(),
             });
         }
@@ -299,7 +336,11 @@ fn sizing_prop_from_shape(shape: &Value) -> Option<SizingProp> {
         center_y_m: start[0],
         center_z_m: 0.0,
         diameter_m: radius * 2.0,
-        blade_count: shape.get("rotorBladeCount").and_then(|value| value.as_i64()).unwrap_or(2).max(1),
+        blade_count: shape
+            .get("rotorBladeCount")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(2)
+            .max(1),
         rotation_z_deg: dy.atan2(dx).to_degrees(),
     })
 }
@@ -487,8 +528,14 @@ fn point_bounds(points: &[Value]) -> Option<Bounds> {
 
 fn point(value: &Value) -> Option<[f64; 2]> {
     Some([
-        value.get("xM").and_then(|value| value.as_f64()).unwrap_or(0.0),
-        value.get("yM").and_then(|value| value.as_f64()).unwrap_or(0.0),
+        value
+            .get("xM")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(0.0),
+        value
+            .get("yM")
+            .and_then(|value| value.as_f64())
+            .unwrap_or(0.0),
     ])
 }
 

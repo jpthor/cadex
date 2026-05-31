@@ -17,8 +17,8 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-pub use state::KernelState;
 #[allow(unused_imports)]
 pub use state::KernelHandle;
+pub use state::KernelState;
 #[allow(unused_imports)]
 pub use types::{KernelError, MeshPayload, Vec3};

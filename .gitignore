@@ -2,5 +2,9 @@ node_modules
 dist
 src-tauri/target
 src-tauri/gen
+exports
+tmp
+rasce.beprop.2009.xls
+*.full-snapshot-backup
 *.log
 .DS_Store
