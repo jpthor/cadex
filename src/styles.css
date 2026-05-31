@@ -3144,6 +3144,197 @@ button {
   min-width: 0;
 }
 
+.flight-dashboard {
+  grid-row: 2 / 4;
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) 320px;
+  grid-template-rows: minmax(360px, 1fr) auto;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px 12px 72px;
+}
+
+.flight-view-panel,
+.flight-side-panel,
+.flight-mixer-panel {
+  min-width: 0;
+  border: 1px solid rgba(125, 160, 190, 0.18);
+  border-radius: 8px;
+  background: rgba(13, 24, 35, 0.84);
+}
+
+.flight-view-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 420px;
+  overflow: hidden;
+}
+
+.flight-view-panel .sketch-3d-preview {
+  position: relative;
+  inset: auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.flight-view-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid rgba(125, 160, 190, 0.18);
+}
+
+.flight-view-toolbar div {
+  display: grid;
+  gap: 3px;
+}
+
+.flight-view-toolbar span,
+.flight-input-slider span,
+.flight-mixer-head,
+.flight-mixer-row strong,
+.flight-empty p {
+  color: #9fb3c4;
+  font-size: 12px;
+}
+
+.flight-view-toolbar strong {
+  color: #f8fbff;
+  font-size: 15px;
+}
+
+.flight-apply-button {
+  width: auto;
+  min-width: 150px;
+  margin: 0;
+}
+
+.flight-side-panel,
+.flight-mixer-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  overflow: auto;
+}
+
+.flight-mixer-panel {
+  grid-column: 1 / -1;
+  max-height: 300px;
+}
+
+.flight-input-slider {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(74, 165, 208, 0.18);
+  border-radius: 7px;
+  background: #0c1721;
+}
+
+.flight-input-slider span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.flight-input-slider strong {
+  color: #dff4ff;
+}
+
+.flight-input-slider b {
+  color: #f8fbff;
+}
+
+.flight-input-slider input {
+  width: 100%;
+  accent-color: #38bdf8;
+}
+
+.flight-reset-button {
+  min-height: 34px;
+  border: 1px solid #36566b;
+  border-radius: 6px;
+  color: #e8f4fb;
+  background: #132635;
+  font-weight: 800;
+}
+
+.flight-readouts {
+  display: grid;
+  gap: 8px;
+}
+
+.flight-readouts .compute-metric-tile strong {
+  font-size: 18px;
+}
+
+.flight-mixer-table {
+  display: grid;
+  gap: 6px;
+}
+
+.flight-mixer-head,
+.flight-mixer-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(72px, 0.35fr)) minmax(78px, 0.35fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.flight-mixer-head {
+  padding: 0 8px;
+  font-weight: 850;
+}
+
+.flight-mixer-row {
+  padding: 8px;
+  border: 1px solid rgba(74, 165, 208, 0.18);
+  border-radius: 7px;
+  background: #0c1721;
+}
+
+.flight-surface-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #7dd3fc;
+}
+
+.flight-surface-name input,
+.flight-mix-number {
+  min-width: 0;
+  height: 32px;
+  border: 1px solid #2d4658;
+  border-radius: 6px;
+  color: #edf7ff;
+  background: #08121b;
+}
+
+.flight-surface-name input {
+  width: 100%;
+  padding: 0 8px;
+}
+
+.flight-mix-number {
+  width: 100%;
+  padding: 0 6px;
+}
+
+.flight-mixer-row strong {
+  color: #f8fbff;
+  text-align: right;
+}
+
+.flight-empty {
+  padding: 10px;
+}
+
 .compute-graphs {
   gap: 14px;
 }

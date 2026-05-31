@@ -6,6 +6,7 @@ const dependencyInfo: Record<AppMode, string> = {
   sizing: "Sizing sets mission targets and suggestions. It feeds Sketch, Propulsion, Jet, Endurance, and Final, but does not overwrite actual geometry.",
   sketch: "Sketch uses Sizing for suggestions, then becomes the actual aircraft source for Aero and Propulsion.",
   compute: "Aero reads the actual Sketch geometry and mass to compute drag, stall, stability, cruise power, CoM, and CoP.",
+  flight: "Flight reads the actual Sketch aircraft and movable surfaces, then previews mixer-driven control poses before you apply them back to Sketch.",
   openfoam: "OpenFOAM prepares CFD-ready surfaces and cases from the actual Sketch geometry, then compares clean, LEX, blown, and full-system variants.",
   paraview: "ParaView renders exported aircraft geometry and solver fields from the backend, so visual output comes from external CFD/mesh files.",
   propulsion: "Propulsion reads actual Sketch hardware and Aero demand, then compares the selected battery, motor, and prop against the mission.",

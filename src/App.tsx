@@ -38,6 +38,7 @@ import { CadCanvas } from "./components/canvas/CadCanvas";
 import { toDisplayUnit } from "./components/browser/units";
 import { ComputeDashboard } from "./components/compute/ComputeDashboard";
 import { FinalDashboard } from "./components/final/FinalDashboard";
+import { FlightDashboard } from "./components/flight/FlightDashboard";
 import { EnduranceDashboard } from "./components/jet/EnduranceDashboard";
 import { IJetDashboard } from "./components/jet/IJetDashboard";
 import { ProjectMenu } from "./components/design/ProjectMenu";
@@ -85,7 +86,7 @@ function formatSelectedContext(selectedGeometry: SelectedGeometry | null) {
 function loadStoredAppMode(): AppMode {
   const storedMode = localStorage.getItem(appModeStorageKey);
   if (storedMode === "design") return "final";
-  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "openfoam" || storedMode === "paraview" || storedMode === "propulsion" || storedMode === "jet" || storedMode === "endurance" || storedMode === "ijet" || storedMode === "final" || storedMode === "max"
+  return storedMode === "sizing" || storedMode === "sketch" || storedMode === "compute" || storedMode === "flight" || storedMode === "openfoam" || storedMode === "paraview" || storedMode === "propulsion" || storedMode === "jet" || storedMode === "endurance" || storedMode === "ijet" || storedMode === "final" || storedMode === "max"
     ? storedMode
     : "sizing";
 }
@@ -783,6 +784,9 @@ export default function App() {
             <button className={appMode === "compute" ? "active" : ""} onClick={() => setAppMode("compute")}>
               Aero
             </button>
+            <button className={appMode === "flight" ? "active" : ""} onClick={() => setAppMode("flight")}>
+              Flight
+            </button>
             <button className={appMode === "openfoam" ? "active" : ""} onClick={() => setAppMode("openfoam")}>
               OpenFOAM
             </button>
@@ -1026,6 +1030,10 @@ export default function App() {
       ) : appMode === "compute" ? (
         <>
           <ComputeDashboard project={sizingProject} projectName={activeAircraftProject?.name ?? project.name} />
+        </>
+      ) : appMode === "flight" ? (
+        <>
+          <FlightDashboard project={sizingProject} onProjectChange={updateSizingProject} />
         </>
       ) : appMode === "openfoam" ? (
         <>
