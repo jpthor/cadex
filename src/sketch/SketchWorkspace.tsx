@@ -1,4 +1,4 @@
-import { Ruler } from "lucide-react";
+import { RotateCw, Ruler } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   batteryMassEstimate,
@@ -61,7 +61,7 @@ import {
   verticalReferenceX,
 } from "./geometry";
 import { AircraftPanel } from "./panels/aircraftPanel";
-import { ShapeEditor, ShapeSelector } from "./panels/shapeEditor";
+import { MovementPanel, ShapeEditor, ShapeSelector } from "./panels/shapeEditor";
 import { Metric } from "./panels/shared";
 import type { AirfoilStation, CanvasViewMode, DimensionDraft, JoinPointSelection, PendingDimension } from "./types";
 
@@ -86,6 +86,7 @@ export function SketchWorkspace({
   const [activeAirfoilStation, setActiveAirfoilStation] = useState<AirfoilStation>("root");
   const [activeLiftingSurfaceKind, setActiveLiftingSurfaceKind] = useState<LiftingSurfaceKind>("wing");
   const [rightPaneTab, setRightPaneTab] = useState<"aircraft" | "suggested" | "shape">("aircraft");
+  const [shapePaneTab, setShapePaneTab] = useState<"geometry" | "movement">("geometry");
   const [joinSourcePoint, setJoinSourcePoint] = useState<JoinPointSelection | null>(null);
   const [dimensionDraft, setDimensionDraft] = useState<DimensionDraft>(null);
   const [dimensionToolActive, setDimensionToolActive] = useState(false);
@@ -845,7 +846,17 @@ export function SketchWorkspace({
               shapes={sizing.shapes}
               onSelect={(selectedShapeId) => update({ selectedShapeId }, false)}
             />
-            {selected ? (
+            <div className="shape-subpane-tabs" aria-label="Shape editor tabs">
+              <button className={shapePaneTab === "geometry" ? "active" : ""} onClick={() => setShapePaneTab("geometry")}>
+                <Ruler size={14} />
+                Geometry
+              </button>
+              <button className={shapePaneTab === "movement" ? "active" : ""} onClick={() => setShapePaneTab("movement")}>
+                <RotateCw size={14} />
+                Movement
+              </button>
+            </div>
+            {selected && shapePaneTab === "geometry" ? (
               <ShapeEditor
                 activeAirfoilStation={activeAirfoilStation}
                 mirrorPlanes={mirrorPlanes}
@@ -857,6 +868,8 @@ export function SketchWorkspace({
                 onChange={updateSelected}
                 onDelete={removeSelected}
               />
+            ) : selected && shapePaneTab === "movement" ? (
+              <MovementPanel shape={selected} shapes={sizing.shapes} onChange={updateSelected} />
             ) : (
               <p className="empty-text">Draw a body, lifting surface, or part to edit it.</p>
             )}

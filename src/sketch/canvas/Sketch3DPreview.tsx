@@ -25,6 +25,7 @@ type RevolvedBodyPreview = {
   id: string;
   label: string;
   mirrored?: boolean;
+  movementTransform?: PreviewMovementTransform;
   profile: SizePoint[];
   shape: SizeShape;
 };
@@ -39,6 +40,7 @@ type LiftingSurfacePreview = {
   id: string;
   label: string;
   mirrored?: boolean;
+  movementTransform?: PreviewMovementTransform;
   planform?: THREE.Vector3[];
   sections: THREE.Vector3[][];
 };
@@ -48,6 +50,7 @@ type PartBoxPreview = {
   id: string;
   label: string;
   mirrored?: boolean;
+  movementTransform?: PreviewMovementTransform;
   size: THREE.Vector3;
 };
 
@@ -58,6 +61,7 @@ type MotorCylinderPreview = {
   label: string;
   lengthM: number;
   mirrored?: boolean;
+  movementTransform?: PreviewMovementTransform;
   radiusM: number;
 };
 
@@ -67,10 +71,17 @@ type RotorPreview = {
   id: string;
   label: string;
   mirrored?: boolean;
+  movementTransform?: PreviewMovementTransform;
   radial: THREE.Vector3;
   radiusM: number;
   rootChordM: number;
   tipChordM: number;
+};
+
+type PreviewMovementTransform = {
+  angleDeg: number;
+  axisEnd: THREE.Vector3;
+  axisStart: THREE.Vector3;
 };
 
 export function Sketch3DPreview({
@@ -259,7 +270,11 @@ function revolvedBodiesForPreview(shapes: SizeShape[]): RevolvedBodyPreview[] {
     const profile = geometry.profile?.length ? geometry.profile : shape.points.map((point) => ({ ...point, xM: Math.abs(point.xM) }));
     if (profile.length < 2) return [];
     const body = { axis, geometry, id: shape.id, label: shape.label, profile, shape };
-    return shouldMirrorAcrossImplicitX(shape) ? [body, mirroredBodyPreview(body)] : [body];
+    const previews = shouldMirrorAcrossImplicitX(shape) ? [body, mirroredBodyPreview(body)] : [body];
+    return previews.map((preview) => ({
+      ...preview,
+      movementTransform: movementTransformForShape(shape, shapes, bodyPreviewCenter(preview)),
+    }));
   });
 }
 
@@ -275,7 +290,10 @@ function liftingSurfacesForPreview(shapes: SizeShape[]): LiftingSurfacePreview[]
     const originMirrors = shouldMirrorLiftingSurfaceAcrossImplicitX(shape)
       ? [preview, ...localMirrors].map(mirrorLiftingSurfacePreview)
       : [];
-    return [preview, ...localMirrors, ...originMirrors];
+    return [preview, ...localMirrors, ...originMirrors].map((surface) => ({
+      ...surface,
+      movementTransform: movementTransformForShape(shape, shapes, liftingSurfacePreviewCenter(surface)),
+    }));
   });
 }
 
@@ -293,7 +311,11 @@ function partBoxesForPreview(shapes: SizeShape[]): PartBoxPreview[] {
       label: shape.label,
       size: new THREE.Vector3(geometry.sizeM[1], geometry.sizeM[0], geometry.sizeM[2]),
     };
-    return shouldMirrorPartBoxAcrossImplicitY(shape) ? [box, mirrorPartBoxPreview(box)] : [box];
+    const previews = shouldMirrorPartBoxAcrossImplicitY(shape) ? [box, mirrorPartBoxPreview(box)] : [box];
+    return previews.map((preview) => ({
+      ...preview,
+      movementTransform: movementTransformForShape(shape, shapes, preview.center),
+    }));
   });
 }
 
@@ -327,7 +349,11 @@ function motorCylindersForPreview(shapes: SizeShape[]): MotorCylinderPreview[] {
       lengthM: geometry.lengthM,
       radiusM: geometry.radiusM,
     };
-    return shouldMirrorPartBoxAcrossImplicitY(shape) ? [motor, mirrorMotorCylinderPreview(motor)] : [motor];
+    const previews = shouldMirrorPartBoxAcrossImplicitY(shape) ? [motor, mirrorMotorCylinderPreview(motor)] : [motor];
+    return previews.map((preview) => ({
+      ...preview,
+      movementTransform: movementTransformForShape(shape, shapes, preview.center),
+    }));
   });
 }
 
@@ -358,7 +384,11 @@ function rotorsForPreview(shapes: SizeShape[]): RotorPreview[] {
       rootChordM: geometry.rootChordM,
       tipChordM: geometry.tipChordM,
     };
-    return shouldMirrorPartBoxAcrossImplicitY(shape) ? [rotor, mirrorRotorPreview(rotor)] : [rotor];
+    const previews = shouldMirrorPartBoxAcrossImplicitY(shape) ? [rotor, mirrorRotorPreview(rotor)] : [rotor];
+    return previews.map((preview) => ({
+      ...preview,
+      movementTransform: movementTransformForShape(shape, shapes, preview.center),
+    }));
   });
 }
 
@@ -371,6 +401,69 @@ function mirrorRotorPreview(rotor: RotorPreview): RotorPreview {
     mirrored: true,
     radial: new THREE.Vector3(-rotor.radial.x, rotor.radial.y, rotor.radial.z).normalize(),
   };
+}
+
+function movementTransformForShape(shape: SizeShape, shapes: SizeShape[], previewCenter: THREE.Vector3): PreviewMovementTransform | undefined {
+  const movement = shape.movement;
+  if (!movement?.enabled || !movement.hingeLineId) return undefined;
+  const referenceLine = shapes.find((candidate) => candidate.id === movement.hingeLineId && candidate.role === "referenceLine" && candidate.points.length >= 2);
+  if (!referenceLine) return undefined;
+  const axis = referenceLineAxisForPreview(referenceLine, shapes);
+  if (!axis || axis.axisEnd.distanceToSquared(axis.axisStart) <= 1e-10) return undefined;
+  const minDeg = clampNumber(movement.minDeg, -25, -90, 90);
+  const maxDeg = clampNumber(movement.maxDeg, 25, -90, 90);
+  const requestedAngle = clampNumber(movement.deflectionDeg, 0, -90, 90) - clampNumber(movement.neutralDeg, 0, -90, 90);
+  const clampedAngle = Math.min(Math.max(requestedAngle, Math.min(minDeg, maxDeg)), Math.max(minDeg, maxDeg));
+  if (Math.abs(clampedAngle) < 1e-6) return undefined;
+  const axisCenterX = (axis.axisStart.x + axis.axisEnd.x) / 2;
+  const shouldMirrorAxis = Math.abs(axisCenterX) > 0.001 && Math.abs(previewCenter.x) > 0.001 && Math.sign(axisCenterX) !== Math.sign(previewCenter.x);
+  if (!shouldMirrorAxis) return { ...axis, angleDeg: clampedAngle };
+  return {
+    angleDeg: -clampedAngle,
+    axisEnd: new THREE.Vector3(-axis.axisEnd.x, axis.axisEnd.y, axis.axisEnd.z),
+    axisStart: new THREE.Vector3(-axis.axisStart.x, axis.axisStart.y, axis.axisStart.z),
+  };
+}
+
+function referenceLineAxisForPreview(shape: SizeShape, shapes: SizeShape[]): Omit<PreviewMovementTransform, "angleDeg"> | undefined {
+  const [start, end] = shape.points;
+  if (!start || !end) return undefined;
+  if (shape.sketchViewMode === "side") {
+    const stationX = sideViewStationX(shape, shapes) ?? 0;
+    const zOffset = effectiveZOffsetM(shape, shapes);
+    return {
+      axisEnd: new THREE.Vector3(stationX, end.yM, end.xM + zOffset),
+      axisStart: new THREE.Vector3(stationX, start.yM, start.xM + zOffset),
+    };
+  }
+  const points = topViewReferenceLine3DPoints(shape, shapes);
+  if (points.length < 2) return undefined;
+  return {
+    axisEnd: new THREE.Vector3(points[1].xM, points[1].yM, points[1].zM),
+    axisStart: new THREE.Vector3(points[0].xM, points[0].yM, points[0].zM),
+  };
+}
+
+function liftingSurfacePreviewCenter(surface: LiftingSurfacePreview) {
+  const points = surface.planform?.length ? surface.planform : surface.sections.flat();
+  return vectorCenter(points);
+}
+
+function bodyPreviewCenter(body: RevolvedBodyPreview) {
+  return new THREE.Vector3(
+    (body.axis.start.xM + body.axis.end.xM) / 2,
+    (body.axis.start.yM + body.axis.end.yM) / 2,
+    body.geometry.centerM[2] ?? 0,
+  );
+}
+
+function vectorCenter(points: THREE.Vector3[]) {
+  if (!points.length) return new THREE.Vector3();
+  return points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
+}
+
+function clampNumber(value: unknown, fallback: number, min: number, max: number) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(Math.max(value, min), max) : fallback;
 }
 
 function shouldMirrorLiftingSurfaceAcrossImplicitX(shape: SizeShape) {
@@ -465,6 +558,19 @@ function airfoilPoint3D(xM: number, leadingY: number, chordOffsetM: number, heig
   return new THREE.Vector3(xM, yM, zM);
 }
 
+function applyMovementTransformToGroup(group: THREE.Group, transform?: PreviewMovementTransform) {
+  if (!transform) return group;
+  const axis = transform.axisEnd.clone().sub(transform.axisStart);
+  if (axis.lengthSq() <= 1e-10) return group;
+  axis.normalize();
+  const movementMatrix = new THREE.Matrix4()
+    .makeTranslation(transform.axisStart.x, transform.axisStart.y, transform.axisStart.z)
+    .multiply(new THREE.Matrix4().makeRotationAxis(axis, THREE.MathUtils.degToRad(transform.angleDeg)))
+    .multiply(new THREE.Matrix4().makeTranslation(-transform.axisStart.x, -transform.axisStart.y, -transform.axisStart.z));
+  group.applyMatrix4(movementMatrix);
+  return group;
+}
+
 function createLiftingSurfaceGroup(surface: LiftingSurfacePreview, selected: boolean) {
   const group = new THREE.Group();
   if (surface.planform?.length) return createFlatLiftingSurfaceGroup(surface, selected);
@@ -509,7 +615,7 @@ function createLiftingSurfaceGroup(surface: LiftingSurfacePreview, selected: boo
   const center = [...root, ...tip].reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / (root.length + tip.length));
   label.position.copy(center).add(new THREE.Vector3(0, 0, 0.02));
   group.add(label);
-  return group;
+  return applyMovementTransformToGroup(group, surface.movementTransform);
 }
 
 function createFlatLiftingSurfaceGroup(surface: LiftingSurfacePreview, selected: boolean) {
@@ -544,7 +650,7 @@ function createFlatLiftingSurfaceGroup(surface: LiftingSurfacePreview, selected:
   const center = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
   label.position.copy(center).add(new THREE.Vector3(0, 0, 0.02));
   group.add(label);
-  return group;
+  return applyMovementTransformToGroup(group, surface.movementTransform);
 }
 
 function createAirfoilCapMesh(section: THREE.Vector3[], color: string, opacity: number) {
@@ -600,7 +706,7 @@ function createPartBoxGroup(part: PartBoxPreview, selected: boolean) {
   const label = createTextSprite(part.label, "#fecdd3", 0.024);
   label.position.copy(part.center).add(new THREE.Vector3(0, 0, part.size.z / 2 + 0.018));
   group.add(label);
-  return group;
+  return applyMovementTransformToGroup(group, part.movementTransform);
 }
 
 function createMotorCylinderGroup(motor: MotorCylinderPreview, selected: boolean) {
@@ -644,7 +750,7 @@ function createMotorCylinderGroup(motor: MotorCylinderPreview, selected: boolean
   const label = createTextSprite(motor.label, "#fecdd3", 0.024);
   label.position.copy(motor.center).add(new THREE.Vector3(0, 0, motor.radiusM + 0.018));
   group.add(label);
-  return group;
+  return applyMovementTransformToGroup(group, motor.movementTransform);
 }
 
 function createRotorGroup(rotor: RotorPreview, selected: boolean) {
@@ -700,7 +806,7 @@ function createRotorGroup(rotor: RotorPreview, selected: boolean) {
   const label = createTextSprite(rotor.label, "#f3e8ff", 0.024);
   label.position.copy(rotor.center).add(vertical.clone().multiplyScalar(rotor.radiusM + 0.024));
   group.add(label);
-  return group;
+  return applyMovementTransformToGroup(group, rotor.movementTransform);
 }
 
 function circlePointsInRotorPlane(center: THREE.Vector3, radial: THREE.Vector3, vertical: THREE.Vector3, radiusM: number, samples: number) {
@@ -778,6 +884,7 @@ type SideSketchPreview = {
   id: string;
   label: string;
   mirrored?: boolean;
+  movementTransform?: PreviewMovementTransform;
   points: THREE.Vector3[];
   revolveAxis?: {
     end: THREE.Vector3;
@@ -810,14 +917,17 @@ function sideSketchesForPreview(shapes: SizeShape[]): SideSketchPreview[] {
       revolveAxis,
       role: shape.role,
     };
-    const localMirrors = touchedMirrorPlane && shape.role === "liftingSurface"
-      ? [mirrorSideSketchAcrossMirrorPlane(preview, touchedMirrorPlane, stationX, effectiveZOffsetM(touchedMirrorPlane, shapes))]
-      : shouldMirrorSideSketchAcrossCenterline(shape)
-        ? [mirrorSideSketchAcrossCenterline(preview)]
-        : [];
+	    const localMirrors = touchedMirrorPlane && shape.role === "liftingSurface"
+	      ? [mirrorSideSketchAcrossMirrorPlane(preview, touchedMirrorPlane, stationX, effectiveZOffsetM(touchedMirrorPlane, shapes))]
+	      : shouldMirrorSideSketchAcrossCenterline(shape)
+	        ? [mirrorSideSketchAcrossCenterline(preview)]
+	        : [];
     const previews = [preview, ...localMirrors];
-    if (Math.abs(stationX) <= 0.001) return previews;
-    return [...previews, ...previews.map(mirrorSideSketchPreview)];
+    const allPreviews = Math.abs(stationX) <= 0.001 ? previews : [...previews, ...previews.map(mirrorSideSketchPreview)];
+    return allPreviews.map((entry) => ({
+      ...entry,
+      movementTransform: movementTransformForShape(shape, shapes, vectorCenter(entry.points)),
+    }));
   });
 }
 
@@ -992,12 +1102,12 @@ function createSideSketchGroup(sketch: SideSketchPreview, selected: boolean) {
       ));
     }
   }
-  const label = createTextSprite(sketch.label, "#e0f2fe", 0.024);
-  const center = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
-  label.position.copy(center).add(new THREE.Vector3(0, 0, 0.03));
-  group.add(label);
-  return group;
-}
+	  const label = createTextSprite(sketch.label, "#e0f2fe", 0.024);
+	  const center = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
+	  label.position.copy(center).add(new THREE.Vector3(0, 0, 0.03));
+	  group.add(label);
+	  return applyMovementTransformToGroup(group, sketch.movementTransform);
+	}
 
 function createSideRevolvedSketchGroup(sketch: SideSketchPreview, color: string, selected: boolean) {
   if (!sketch.revolveAxis) return null;
@@ -1068,12 +1178,12 @@ function createSideRevolvedSketchGroup(sketch: SideSketchPreview, color: string,
   axisLine.computeLineDistances();
   group.add(axisLine);
 
-  const label = createTextSprite(sketch.label, "#e0f2fe", 0.024);
-  const center = sketch.points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / sketch.points.length);
-  label.position.copy(center).add(new THREE.Vector3(0, 0, 0.03));
-  group.add(label);
-  return group;
-}
+	  const label = createTextSprite(sketch.label, "#e0f2fe", 0.024);
+	  const center = sketch.points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / sketch.points.length);
+	  label.position.copy(center).add(new THREE.Vector3(0, 0, 0.03));
+	  group.add(label);
+	  return applyMovementTransformToGroup(group, sketch.movementTransform);
+	}
 
 function createRevolvedBodyGroup(body: RevolvedBodyPreview, selected: boolean) {
   const group = new THREE.Group();
@@ -1144,8 +1254,8 @@ function createRevolvedBodyGroup(body: RevolvedBodyPreview, selected: boolean) {
   axisLine.computeLineDistances();
   group.add(axisLine);
 
-  return group;
-}
+	  return applyMovementTransformToGroup(group, body.movementTransform);
+	}
 
 function shouldMirrorAcrossImplicitX(shape: SizeShape) {
   if (!shape.points.length) return false;

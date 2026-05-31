@@ -183,10 +183,10 @@ export function SketchCanvas({
   const [renderViewMode, setRenderViewMode] = useState<CanvasViewMode>("top");
   const [isViewTransitioning, setIsViewTransitioning] = useState(false);
   const [cameraCommandSerial, setCameraCommandSerial] = useState(0);
-  const [freeOrbitActive, setFreeOrbitActive] = useState(false);
+  const [freeOrbitActive, setFreeOrbitActive] = useState(() => has3DPreview(shapes));
   const [canvasCursorPoint, setCanvasCursorPoint] = useState<SizePoint | null>(null);
   const [referenceMenuOpen, setReferenceMenuOpen] = useState(false);
-  const [showGuides, setShowGuides] = useState(true);
+  const [showGuides, setShowGuides] = useState(false);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const ignoreNextCanvasClick = useRef(false);
   const pointPlacedOnPress = useRef(false);
@@ -514,10 +514,7 @@ export function SketchCanvas({
     };
   }
 
-  const hasRevolvedBodyPreview = shapes.some((shape) => {
-    const geometry = shape.cadGeometry;
-    return shape.role === "body" && geometry?.kind === "revolvedBody";
-  });
+  const hasRevolvedBodyPreview = has3DPreview(shapes);
   const sketch3DInteractive = hasRevolvedBodyPreview && freeOrbitActive && !drawActive && !dimensionToolActive && !dragTarget;
   const hide2DSketchOverlay = sketch3DInteractive;
 
@@ -971,6 +968,13 @@ function LiveDraftDimensions({
       ))}
     </g>
   );
+}
+
+function has3DPreview(shapes: SizeShape[]) {
+  return shapes.some((shape) => {
+    const geometry = shape.cadGeometry;
+    return shape.role === "body" && geometry?.kind === "revolvedBody";
+  });
 }
 
 function liveDimensionLabels(role: SizeShapeRole, partType: PartType | undefined, points: SizePoint[], previewPoint: SizePoint | null) {

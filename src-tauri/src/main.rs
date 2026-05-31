@@ -51,6 +51,7 @@ struct OpenFoamRequest {
 struct ParaViewRequest {
     project_name: String,
     sizing: Value,
+    render_options: Option<Value>,
 }
 
 #[tauri::command]
@@ -465,6 +466,7 @@ fn render_sizing_paraview(
     let input = serde_json::json!({
         "name": request.project_name,
         "sizing": request.sizing,
+        "renderOptions": request.render_options,
     });
     fs::write(
         &input_path,

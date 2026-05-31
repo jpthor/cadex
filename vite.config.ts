@@ -93,6 +93,35 @@ function cadexKernelBridge() {
         }
       });
 
+      server.middlewares.use("/api/export-file", async (req, res) => {
+        if (req.method !== "GET" || !req.url) {
+          res.statusCode = 405;
+          res.end("Use GET.");
+          return;
+        }
+
+        try {
+          const url = new URL(req.url, "http://127.0.0.1");
+          const requestedPath = path.resolve(url.searchParams.get("path") ?? "");
+          const exportsRoot = path.resolve("exports");
+          if (!requestedPath.startsWith(`${exportsRoot}${path.sep}`) || !fs.existsSync(requestedPath)) {
+            res.statusCode = 404;
+            res.end("Not found.");
+            return;
+          }
+          if (path.extname(requestedPath).toLowerCase() !== ".png") {
+            res.statusCode = 415;
+            res.end("Only PNG previews are supported.");
+            return;
+          }
+          res.setHeader("Content-Type", "image/png");
+          fs.createReadStream(requestedPath).pipe(res);
+        } catch (error) {
+          res.statusCode = 500;
+          res.end(String(error));
+        }
+      });
+
       server.middlewares.use("/api/paraview", async (req, res) => {
         if (req.method !== "POST") {
           res.statusCode = 405;
@@ -106,7 +135,7 @@ function cadexKernelBridge() {
           const exportDir = path.resolve("exports/paraview");
           fs.mkdirSync(exportDir, { recursive: true });
           const inputPath = path.join(exportDir, `${projectName.replace(/[^a-zA-Z0-9_-]+/g, "_") || "cadex"}_cadex_input.json`);
-          fs.writeFileSync(inputPath, JSON.stringify({ name: projectName, sizing: request.sizing }, null, 2));
+          fs.writeFileSync(inputPath, JSON.stringify({ name: projectName, sizing: request.sizing, renderOptions: request.renderOptions }, null, 2));
 
           const run = spawnSync("node", ["scripts/render-paraview.mjs", inputPath, exportDir, "--json-only"], {
             cwd: process.cwd(),

@@ -554,6 +554,7 @@ export function OpenFoamDashboard({
                 movementControls={movementControls}
                 onActiveSurfaceCaptureIdChange={setActiveSurfaceCaptureId}
                 onMovementControlsChange={setMovementControls}
+                onSurfaceStateCommit={persistOpenFoamSnapshot}
                 onSurfaceCapturesChange={setSurfaceCaptures}
                 report={latestGeometryReport}
                 surfaceCaptures={surfaceCaptures}
@@ -1257,7 +1258,7 @@ function WingevonFlowScene({ fallbackPreview, isEstimated, variant }: { fallback
       const rect = renderer.domElement.getBoundingClientRect();
       const radius = Math.max(Math.min(rect.width, rect.height) * 0.5, 1);
       const x = (event.clientX - rect.left - rect.width * 0.5) / radius;
-      const y = (rect.height * 0.5 - (event.clientY - rect.top)) / radius;
+      const y = (event.clientY - rect.top - rect.height * 0.5) / radius;
       const lengthSq = x * x + y * y;
       if (lengthSq <= 1) return new THREE.Vector3(x, y, Math.sqrt(1 - lengthSq)).normalize();
       return new THREE.Vector3(x, y, 0).normalize();
@@ -2571,6 +2572,7 @@ function OpenFoamPrepareMovementWorkspace({
   movementControls,
   onActiveSurfaceCaptureIdChange,
   onMovementControlsChange,
+  onSurfaceStateCommit,
   onSurfaceCapturesChange,
   report,
   surfaceCaptures,
@@ -2580,6 +2582,7 @@ function OpenFoamPrepareMovementWorkspace({
   movementControls: OpenFoamMovementControl[];
   onActiveSurfaceCaptureIdChange: (captureId: string | undefined) => void;
   onMovementControlsChange: (next: OpenFoamMovementControl[]) => void;
+  onSurfaceStateCommit: (next: Partial<OpenFoamDashboardState>) => void;
   onSurfaceCapturesChange: (next: OpenFoamSurfaceCapture[]) => void;
   report: OpenFoamReport;
   surfaceCaptures: OpenFoamSurfaceCapture[];
@@ -2636,17 +2639,36 @@ function OpenFoamPrepareMovementWorkspace({
       componentCount: report.preview?.components.length,
       movementControls: cloneMovementControls(movementControls.filter((control) => control.enabled)),
     };
-    onSurfaceCapturesChange([...surfaceCaptures, capture]);
+    const nextSurfaceCaptures = [...surfaceCaptures, capture];
+    onSurfaceCapturesChange(nextSurfaceCaptures);
     onActiveSurfaceCaptureIdChange(capture.id);
+    onSurfaceStateCommit({
+      activeSurfaceCaptureId: capture.id,
+      movementControls,
+      surfaceCaptures: nextSurfaceCaptures,
+    });
     setCaptureTitle("");
   };
   const useSurfaceCapture = (capture: OpenFoamSurfaceCapture) => {
-    onMovementControlsChange(cloneMovementControls(capture.movementControls));
+    const nextMovementControls = cloneMovementControls(capture.movementControls);
+    onMovementControlsChange(nextMovementControls);
     onActiveSurfaceCaptureIdChange(capture.id);
+    onSurfaceStateCommit({
+      activeSurfaceCaptureId: capture.id,
+      movementControls: nextMovementControls,
+      surfaceCaptures,
+    });
   };
   const deleteSurfaceCapture = (captureId: string) => {
-    onSurfaceCapturesChange(surfaceCaptures.filter((capture) => capture.id !== captureId));
+    const nextSurfaceCaptures = surfaceCaptures.filter((capture) => capture.id !== captureId);
+    const nextActiveSurfaceCaptureId = activeSurfaceCaptureId === captureId ? undefined : activeSurfaceCaptureId;
+    onSurfaceCapturesChange(nextSurfaceCaptures);
     if (activeSurfaceCaptureId === captureId) onActiveSurfaceCaptureIdChange(undefined);
+    onSurfaceStateCommit({
+      activeSurfaceCaptureId: nextActiveSurfaceCaptureId,
+      movementControls,
+      surfaceCaptures: nextSurfaceCaptures,
+    });
   };
 
   return (

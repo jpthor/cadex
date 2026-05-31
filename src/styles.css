@@ -1257,6 +1257,35 @@ button {
   background: #17364c;
 }
 
+.shape-subpane-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid rgba(74, 165, 208, 0.22);
+  border-radius: 7px;
+  background: rgba(8, 16, 24, 0.58);
+}
+
+.shape-subpane-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #9fb3c4;
+  background: transparent;
+  font-weight: 800;
+}
+
+.shape-subpane-tabs button.active {
+  color: #f8fbff;
+  border-color: rgba(125, 211, 252, 0.72);
+  background: rgba(23, 54, 76, 0.82);
+}
+
 .engine-compute-panel {
   gap: 10px;
 }
@@ -1451,6 +1480,61 @@ button {
   color: #fecaca;
   border-color: #6b3030;
   background: #351818;
+}
+
+.movement-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #2d4658;
+  border-radius: 6px;
+  color: #d8e7f3;
+  background: #0d1822;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.movement-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: #38bdf8;
+}
+
+.movement-field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.movement-hinge-note {
+  padding: 8px 10px;
+  border: 1px solid rgba(125, 160, 190, 0.18);
+  border-radius: 7px;
+  color: #b9c9d7;
+  background: rgba(8, 16, 24, 0.42);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.movement-hinge-note.ok {
+  color: #bbf7d0;
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.movement-hinge-note.warn {
+  color: #fde68a;
+  border-color: rgba(250, 204, 21, 0.32);
+}
+
+.movement-clear-button {
+  min-height: 34px;
+  border: 1px solid #36566b;
+  border-radius: 6px;
+  color: #d8e7f3;
+  background: rgba(14, 28, 41, 0.72);
+  font-weight: 800;
 }
 
 .delete-aircraft-confirm {
@@ -6388,6 +6472,29 @@ button {
   font-weight: 750;
 }
 
+.paraview-controls {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(130, 165, 190, 0.16);
+  border-radius: 6px;
+  background: rgba(8, 20, 31, 0.86);
+}
+
+.paraview-control-group {
+  display: grid;
+  gap: 7px;
+}
+
+.paraview-control-group > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #a8bbca;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .paraview-render-frame {
   display: grid;
   place-items: center;
@@ -6421,6 +6528,55 @@ button {
   color: #a8bbca;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.paraview-empty.compact {
+  min-height: 180px;
+}
+
+.paraview-example-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.paraview-example-tabs button {
+  min-height: 31px;
+  padding: 0 10px;
+  border: 1px solid rgba(130, 165, 190, 0.24);
+  border-radius: 6px;
+  background: rgba(10, 24, 35, 0.92);
+  color: #c8d8e2;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.paraview-example-tabs button.active {
+  border-color: rgba(99, 179, 237, 0.7);
+  background: rgba(38, 88, 124, 0.78);
+  color: #f4fbff;
+}
+
+.paraview-example-frame {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid rgba(130, 165, 190, 0.18);
+  border-radius: 6px;
+  background: #050d14;
+}
+
+.paraview-example-frame img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.paraview-example-source {
+  color: #91a8b7;
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .openfoam-preview-canvas {

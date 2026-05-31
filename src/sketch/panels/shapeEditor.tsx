@@ -8,7 +8,7 @@ import type {
   BodyMaterial,
   LiftingSurfaceKind,
   SizeShape,
-  SizingProject,
+  SizeShapeMovement,
 } from "../../sizing";
 import { airfoilOptions, defaultAirfoilForLiftingSurface } from "../constants";
 import type { AirfoilStation } from "../types";
@@ -36,8 +36,8 @@ import {
 } from "../../sizing/auditedSizingEngine";
 import { partTouchesMirrorAxis } from "../diagnostics";
 import { referenceRoles } from "../constants";
-import { cadGeometryForShape, implicitMirrorShapeId, motorDepthM, verticalReferenceX } from "../geometry";
-import { NumberField, SketchPanelTitle } from "./shared";
+import { cadGeometryForShape, implicitMirrorShapeId, motorDepthM, shapeTouchesMirrorPlane, verticalReferenceX } from "../geometry";
+import { NumberField } from "./shared";
 export function ShapeSelector({
   selectedShapeId,
   shapes,
@@ -370,6 +370,128 @@ export function ShapeEditor({
   );
 }
 
+export function MovementPanel({
+  shape,
+  shapes,
+  onChange,
+}: {
+  shape?: SizeShape;
+  shapes: SizeShape[];
+  onChange: (patch: Partial<SizeShape>) => void;
+}) {
+  const referenceLines = shapes.filter((candidate) => candidate.role === "referenceLine" && candidate.points.length >= 2);
+  if (!shape) {
+    return <p className="empty-text">Select a shape to set movement.</p>;
+  }
+  if (referenceRoles.includes(shape.role)) {
+    return <p className="empty-text">Select the moving aircraft part, then choose a reference line as its hinge.</p>;
+  }
+
+  const movement = shape.movement ?? defaultShapeMovement(referenceLines[0]?.id);
+  const selectedLine = referenceLines.find((candidate) => candidate.id === movement.hingeLineId);
+  const touchesSelectedLine = selectedLine ? shapeTouchesMirrorPlane(shape, selectedLine) : false;
+
+  function patchMovement(patch: Partial<SizeShapeMovement>) {
+    onChange({ movement: { ...movement, ...patch } });
+  }
+
+  return (
+    <div className="component-editor movement-editor">
+      <div className="shape-readout movement-status-card">
+        <strong>{shape.label}</strong>
+        <span>{movement.enabled ? "Movement enabled" : "Movement disabled"}</span>
+        <span>{selectedLine ? `Hinge: ${selectedLine.label}` : "Draw a reference line first"}</span>
+      </div>
+
+      <label className="movement-toggle">
+        <input
+          type="checkbox"
+          checked={movement.enabled}
+          onChange={(event) => patchMovement({ enabled: event.target.checked })}
+        />
+        <span>Enable movement</span>
+      </label>
+
+      <label className="sizing-field">
+        <span>Hinge reference line</span>
+        <select
+          disabled={!referenceLines.length}
+          value={movement.hingeLineId ?? ""}
+          onChange={(event) => patchMovement({ hingeLineId: event.target.value || undefined, enabled: true })}
+        >
+          {!referenceLines.length ? <option value="">No reference lines drawn</option> : null}
+          {referenceLines.map((line) => (
+            <option key={line.id} value={line.id}>
+              {line.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {selectedLine ? (
+        <div className={`movement-hinge-note ${touchesSelectedLine ? "ok" : "warn"}`}>
+          {touchesSelectedLine
+            ? "The selected reference line touches this part."
+            : "This line does not touch the selected part yet. Use a line that crosses or touches the hinge."}
+        </div>
+      ) : (
+        <div className="movement-hinge-note warn">Create a reference line with + Line, then select it here.</div>
+      )}
+
+      <div className="movement-field-grid">
+        <NumberField
+          label="Min"
+          suffix="deg"
+          value={movement.minDeg}
+          step={1}
+          onChange={(minDeg) => patchMovement({ minDeg })}
+        />
+        <NumberField
+          label="Max"
+          suffix="deg"
+          value={movement.maxDeg}
+          step={1}
+          onChange={(maxDeg) => patchMovement({ maxDeg })}
+        />
+      </div>
+      <div className="movement-field-grid">
+        <NumberField
+          label="Neutral"
+          suffix="deg"
+          value={movement.neutralDeg}
+          step={1}
+          onChange={(neutralDeg) => patchMovement({ neutralDeg })}
+        />
+        <NumberField
+          label="Deflection"
+          suffix="deg"
+          value={movement.deflectionDeg}
+          step={1}
+          onChange={(deflectionDeg) => patchMovement({ deflectionDeg })}
+        />
+      </div>
+
+      <div className="shape-readout shape-metric-card">
+        <strong>Export pose</strong>
+        <span>
+          <span>Current angle</span>
+          <b>{(movement.deflectionDeg - movement.neutralDeg).toFixed(1)} deg</b>
+        </span>
+        <span>
+          <span>Limits</span>
+          <b>
+            {movement.minDeg.toFixed(0)} to {movement.maxDeg.toFixed(0)} deg
+          </b>
+        </span>
+      </div>
+
+      <button className="movement-clear-button" onClick={() => onChange({ movement: undefined })}>
+        Clear movement
+      </button>
+    </div>
+  );
+}
+
 function ReadoutCard({
   notes = [],
   rows,
@@ -491,6 +613,17 @@ function currentRowsForSuggestedLabels(
   }
 
   return suggestedRows.map((row) => ({ label: row.label, value: valueFor(row.label) }));
+}
+
+function defaultShapeMovement(hingeLineId?: string): SizeShapeMovement {
+  return {
+    enabled: false,
+    hingeLineId,
+    minDeg: -25,
+    maxDeg: 25,
+    neutralDeg: 0,
+    deflectionDeg: 0,
+  };
 }
 
 function formatMm(valueM: number) {

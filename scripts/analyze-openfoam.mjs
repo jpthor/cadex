@@ -87,7 +87,7 @@ function exportGeometry(project, dir, options = {}) {
   const components = [];
   for (const shape of project.shapes) {
     if (shape.role === "referenceLine" || shape.role === "mirrorPlane") continue;
-    const meshes = meshShape(shape, project.shapes, options);
+    const meshes = applyShapeMovement(shape, project.shapes, meshShape(shape, project.shapes, options));
     for (const mesh of meshes) {
       if (!mesh.triangles.length) continue;
       const fileName = `${sanitize(mesh.name)}.stl`;
@@ -152,6 +152,71 @@ function meshShape(shape, shapes = [], options = {}) {
   if (geom?.kind === "rotor") return mirrorIfNeeded(shape, [meshRotorDisk(shape, geom)]);
   if (shape.role === "liftingSurface" && shape.liftingSurfaceKind === "fin") return mirrorIfNeeded(shape, [meshFin(shape)]);
   return [];
+}
+
+function applyShapeMovement(shape, shapes, meshes) {
+  const movement = shape.movement;
+  if (!movement?.enabled || !movement.hingeLineId || !meshes.length) return meshes;
+  const hingeLine = shapes.find((candidate) => candidate.id === movement.hingeLineId && candidate.role === "referenceLine" && candidate.points?.length >= 2);
+  if (!hingeLine) return meshes;
+  const axis = referenceLineAxis3D(hingeLine, shapes);
+  if (!axis) return meshes;
+  const minDeg = clampNumber(movement.minDeg, -25, -90, 90);
+  const maxDeg = clampNumber(movement.maxDeg, 25, -90, 90);
+  const requestedDeflectionDeg = clampNumber(movement.deflectionDeg, 0, -90, 90) - clampNumber(movement.neutralDeg, 0, -90, 90);
+  const deflectionDeg = Math.min(Math.max(requestedDeflectionDeg, Math.min(minDeg, maxDeg)), Math.max(minDeg, maxDeg));
+  if (Math.abs(deflectionDeg) < 1e-6) return meshes;
+  return meshes.map((mesh) => {
+    const meshAxis = mirroredAxisForMesh(axis, mesh);
+    const meshDeflectionDeg = meshAxis.mirrored ? deflectionDeg : -deflectionDeg;
+    return {
+      ...mesh,
+      triangles: mesh.triangles.map((tri) => tri.map((point) => rotatePointAroundAxis(point, meshAxis.start, meshAxis.end, meshDeflectionDeg))),
+    };
+  });
+}
+
+function referenceLineAxis3D(line, shapes) {
+  const [start, end] = line.points ?? [];
+  if (!start || !end) return undefined;
+  if (line.sketchViewMode === "side") {
+    const stationY = sideViewStationY(line, shapes);
+    const zOffset = effectiveZOffsetM(line, shapes);
+    return {
+      start: [start.yM, stationY, start.xM + zOffset],
+      end: [end.yM, stationY, end.xM + zOffset],
+    };
+  }
+  const z = effectiveZOffsetM(line, shapes);
+  return {
+    start: [start.yM, start.xM, z],
+    end: [end.yM, end.xM, z],
+  };
+}
+
+function mirroredAxisForMesh(axis, mesh) {
+  if (!mesh.triangles.length) return axis;
+  const centerY = centroidFor(mesh.triangles)[1];
+  const axisY = (axis.start[1] + axis.end[1]) / 2;
+  if (Math.abs(axisY) <= 1e-6 || Math.abs(centerY) <= 1e-6 || Math.sign(centerY) === Math.sign(axisY)) return { ...axis, mirrored: false };
+  return {
+    mirrored: true,
+    start: [axis.start[0], -axis.start[1], axis.start[2]],
+    end: [axis.end[0], -axis.end[1], axis.end[2]],
+  };
+}
+
+function rotatePointAroundAxis(point, axisStart, axisEnd, degrees) {
+  const angle = degrees * Math.PI / 180;
+  const axis = normalize(sub(axisEnd, axisStart));
+  const relative = sub(point, axisStart);
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+  const rotated = add(
+    add(scale(relative, cosA), scale(cross(axis, relative), sinA)),
+    scale(axis, dot(axis, relative) * (1 - cosA)),
+  );
+  return add(axisStart, rotated).map(round);
 }
 
 function meshLiftingSurface(shape, geom, shapes, options = {}) {
@@ -1960,6 +2025,9 @@ function scale(a, s) {
 }
 function cross(a, b) {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+function dot(a, b) {
+  return sum(a.map((v, i) => v * b[i]));
 }
 function mag(a) {
   return Math.sqrt(sum(a.map((v) => v * v)));

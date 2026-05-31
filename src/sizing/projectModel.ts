@@ -102,6 +102,16 @@ export type SizeShape = {
   zOffsetM?: number;
   dihedralBreakStationId?: string;
   dihedralLiftM?: number;
+  movement?: SizeShapeMovement;
+};
+
+export type SizeShapeMovement = {
+  enabled: boolean;
+  hingeLineId?: string;
+  minDeg: number;
+  maxDeg: number;
+  neutralDeg: number;
+  deflectionDeg: number;
 };
 
 export type SizingMission = {
@@ -473,6 +483,19 @@ function normalizeShape(shape: SizeShape): SizeShape {
     zOffsetM: optionalNumber(shape.zOffsetM),
     dihedralBreakStationId: normalizeShapeId(shape.dihedralBreakStationId),
     dihedralLiftM: optionalNumber(shape.dihedralLiftM),
+    movement: role === "referenceLine" || role === "mirrorPlane" ? undefined : normalizeShapeMovement(shape.movement),
+  };
+}
+
+function normalizeShapeMovement(value: unknown): SizeShapeMovement | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    enabled: value.enabled !== false,
+    hingeLineId: normalizeShapeId(value.hingeLineId),
+    minDeg: clampNumber(value.minDeg, -25, -90, 90),
+    maxDeg: clampNumber(value.maxDeg, 25, -90, 90),
+    neutralDeg: clampNumber(value.neutralDeg, 0, -90, 90),
+    deflectionDeg: clampNumber(value.deflectionDeg, 0, -90, 90),
   };
 }
 
